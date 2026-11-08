@@ -131,12 +131,12 @@ const API = {
 
   documents: {
     list(targetType, targetId) {
-      const query = new URLSearchParams(targetType === 'asset' ? { assetId: targetId } : { entityId: targetId });
+      const query = new URLSearchParams(targetType === 'asset' ? { assetId: targetId } : targetType === 'obligation' ? { obligationId: targetId } : { entityId: targetId });
       return API.get(`/documents?${query}`);
     },
     async upload(targetType, targetId, file) {
       const form = new FormData();
-      form.append(targetType === 'asset' ? 'assetId' : 'entityId', targetId);
+      form.append(targetType === 'asset' ? 'assetId' : targetType === 'obligation' ? 'obligationId' : 'entityId', targetId);
       form.append('file', file);
       const response = await fetch('/api/documents', { method: 'POST', credentials: 'same-origin', body: form });
       const data = await response.json();
@@ -152,5 +152,22 @@ const API = {
       return API.get(`/notes?${query}`);
     },
     create(data) { return API.post('/notes', data); }
+  },
+
+  obligations: {
+    list(filters = {}) {
+      const query = new URLSearchParams(Object.entries(filters).filter(([, value]) => value !== '' && value != null));
+      const serialized = query.toString();
+      return API.get(`/obligations${serialized ? `?${serialized}` : ''}`);
+    },
+    get(id) { return API.get(`/obligations/${encodeURIComponent(id)}`); },
+    create(data) { return API.post('/obligations', data); },
+    update(id, data) { return API.put(`/obligations/${encodeURIComponent(id)}`, data); },
+    delete(id) { return API.delete(`/obligations/${encodeURIComponent(id)}`); },
+    alerts() { return API.get('/obligations/alerts'); },
+    confirm(id, occurrenceId) { return API.post(`/obligations/${encodeURIComponent(id)}/occurrences/${encodeURIComponent(occurrenceId)}/confirm`, {}); },
+    cancelOccurrence(id, occurrenceId) { return API.post(`/obligations/${encodeURIComponent(id)}/occurrences/${encodeURIComponent(occurrenceId)}/cancel`, {}); },
+    updateOccurrence(id, occurrenceId, data) { return API.put(`/obligations/${encodeURIComponent(id)}/occurrences/${encodeURIComponent(occurrenceId)}`, data); },
+    pay(id, occurrenceId, data) { return API.post(`/obligations/${encodeURIComponent(id)}/occurrences/${encodeURIComponent(occurrenceId)}/payments`, data); }
   }
 };

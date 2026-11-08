@@ -85,11 +85,13 @@ async function inspectFile(file) {
 function targetFor(db, userId, body) {
   const assetId = typeof body.assetId === 'string' && body.assetId ? body.assetId : null;
   const entityId = typeof body.entityId === 'string' && body.entityId ? body.entityId : null;
-  if (Boolean(assetId) === Boolean(entityId)) return null;
+  const obligationId = typeof body.obligationId === 'string' && body.obligationId ? body.obligationId : null;
+  if ([assetId, entityId, obligationId].filter(Boolean).length !== 1) return null;
   if (assetId) {
-    return db.findById('assets', assetId, userId) ? { assetId, entityId: null } : null;
+    return db.findById('assets', assetId, userId) ? { assetId, entityId: null, obligationId: null } : null;
   }
-  return db.findById('legalOwners', entityId, userId) ? { assetId: null, entityId } : null;
+  if (entityId) return db.findById('legalOwners', entityId, userId) ? { assetId: null, entityId, obligationId: null } : null;
+  return db.findById('obligations', obligationId, userId) ? { assetId: null, entityId: null, obligationId } : null;
 }
 
 function publicMetadata(document) {
@@ -110,9 +112,9 @@ function uploadMiddleware(req, res, next) {
 
 router.get('/', (req, res) => {
   const target = targetFor(req.app.locals.db, req.session.userId, req.query);
-  if (!target) return res.status(400).json({ error: 'Indica un bien o una persona u organización válida' });
+  if (!target) return res.status(400).json({ error: 'Indica un bien, una persona u organización o una obligación válida' });
   const documents = req.app.locals.db.findAll('documents', req.session.userId)
-    .filter(item => item.assetId === target.assetId && item.entityId === target.entityId)
+    .filter(item => item.assetId === target.assetId && item.entityId === target.entityId && (item.obligationId || null) === target.obligationId)
     .sort((a, b) => b.uploadedAt.localeCompare(a.uploadedAt));
   res.json(documents.map(publicMetadata));
 });
@@ -131,9 +133,9 @@ router.post('/', uploadMiddleware, async (req, res) => {
   };
   if (!file) return res.status(400).json({ error: 'Selecciona un archivo' });
   const target = targetFor(db, userId, req.body || {});
-  if (!target) {
+   if (!target) {
     discardUpload();
-    return res.status(400).json({ error: 'Indica un bien o una persona u organización válida' });
+     return res.status(400).json({ error: 'Indica un bien, una persona u organización o una obligación válida' });
   }
 
   try {

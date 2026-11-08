@@ -1,4 +1,4 @@
-const CACHE_NAME = 'selimsystem-v16';
+const CACHE_NAME = 'selimsystem-v17';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
@@ -23,6 +23,7 @@ const STATIC_ASSETS = [
   '/js/pages/categories.js',
   '/js/pages/assets.js',
   '/js/pages/entities.js',
+  '/js/pages/obligations.js',
   '/js/pages/profile.js',
   '/manifest.json',
   '/icons/icon-192.png',

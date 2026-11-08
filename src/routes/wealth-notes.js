@@ -17,6 +17,9 @@ function targetFor(db, userId, body) {
   if (body.targetType === 'entity' && typeof body.targetId === 'string' && db.findById('legalOwners', body.targetId, userId)) {
     return { targetType: 'entity', targetId: body.targetId };
   }
+  if (body.targetType === 'obligation' && typeof body.targetId === 'string' && db.findById('obligations', body.targetId, userId)) {
+    return { targetType: 'obligation', targetId: body.targetId };
+  }
   return null;
 }
 

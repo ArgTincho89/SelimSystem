@@ -21,6 +21,7 @@ const AssetsPage = {
     content.replaceChildren();
     const header = create('div', { className: 'page-header' }, [
       create('h2', { className: 'page-title', textContent: 'Bienes' }),
+      create('button', { className: 'btn btn-secondary btn-sm', textContent: 'Obligaciones', onClick: () => Router.navigate('/obligations') }),
       create('button', { className: 'btn btn-primary btn-sm', textContent: '+ Nuevo bien', onClick: () => this.showAssetModal() })
     ]);
     content.appendChild(header);

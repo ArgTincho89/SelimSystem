@@ -74,6 +74,10 @@ const App = {
       if (!this.user) return Router.navigate('/login');
       EntitiesPage.render();
     });
+    Router.register('/obligations', () => {
+      if (!this.user) return Router.navigate('/login');
+      ObligationsPage.render();
+    });
     Router.register('/profile', () => {
       if (!this.user) return Router.navigate('/login');
       ProfilePage.render();
@@ -121,6 +125,12 @@ const App = {
           <path d="M3 10h18M5 10V5h14v5M5 10v9h14v-9M9 14h6"/>
         </svg>
         <span>Bienes</span>
+      </button>
+      <button class="navbar-item" data-route="/obligations">
+        <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="4" width="18" height="17" rx="2"/><path d="M16 2v4M8 2v4M3 10h18M8 14h3M8 17h7"/>
+        </svg>
+        <span>Obligaciones</span>
       </button>
       <button class="navbar-item" data-route="/entities">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">

@@ -21,6 +21,7 @@ const assetRoutes = require('./routes/assets');
 const ownerRoutes = require('./routes/owners');
 const documentRoutes = require('./routes/documents').router;
 const wealthNoteRoutes = require('./routes/wealth-notes').router;
+const obligationRoutes = require('./routes/obligations');
 
 const app = express();
 
@@ -62,6 +63,7 @@ app.use('/api/assets', assetRoutes);
 app.use('/api/owners', ownerRoutes);
 app.use('/api/documents', documentRoutes);
 app.use('/api/notes', wealthNoteRoutes);
+app.use('/api/obligations', obligationRoutes);
 
 app.get('/health', (req, res) => res.status(200).json({ status: 'ok' }));
 

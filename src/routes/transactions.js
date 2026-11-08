@@ -109,7 +109,6 @@ router.get('/:id', (req, res) => {
   if (!transaction) {
     return res.status(404).json({ error: 'Transacción no encontrada' });
   }
-
   const account = ledger.accountForMovement(db, userId, transaction);
   res.json(account ? { ...transaction, accountId: transaction.accountId || account.id, currencyCode: transaction.currencyCode || account.currency, accountName: account.nombre } : transaction);
 });
@@ -221,6 +220,7 @@ router.put('/:id', (req, res) => {
   if (!transaction) {
     return res.status(404).json({ error: 'Transacción no encontrada' });
   }
+  if (transaction.obligationOccurrenceId) return res.status(409).json({ error: 'Los pagos vinculados a obligaciones son inmutables; registra un movimiento compensatorio si hace falta' });
 
   const updates = {};
   const accountId = req.body.accountId !== undefined ? req.body.accountId : transaction.accountId;
@@ -385,6 +385,7 @@ router.delete('/:id', (req, res) => {
   if (!transaction) {
     return res.status(404).json({ error: 'Transacción no encontrada' });
   }
+  if (transaction.obligationOccurrenceId) return res.status(409).json({ error: 'Los pagos vinculados a obligaciones no se pueden eliminar' });
 
   const linkedNormalization = db.findAll('transfers', userId).some(transfer => [...(transfer.normalizationAllocations || []), ...(transfer.pendingAllocations || [])].some(item => item.sourceType === 'income' && item.sourceId === transaction.id));
   const linkedRefund = db.findAll('transactions', userId).some(item => item.tipo === 'refund' && item.refundSourceId === transaction.id);
