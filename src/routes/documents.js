@@ -86,12 +86,14 @@ function targetFor(db, userId, body) {
   const assetId = typeof body.assetId === 'string' && body.assetId ? body.assetId : null;
   const entityId = typeof body.entityId === 'string' && body.entityId ? body.entityId : null;
   const obligationId = typeof body.obligationId === 'string' && body.obligationId ? body.obligationId : null;
-  if ([assetId, entityId, obligationId].filter(Boolean).length !== 1) return null;
+  const contractId = typeof body.contractId === 'string' && body.contractId ? body.contractId : null;
+  if ([assetId, entityId, obligationId, contractId].filter(Boolean).length !== 1) return null;
   if (assetId) {
-    return db.findById('assets', assetId, userId) ? { assetId, entityId: null, obligationId: null } : null;
+    return db.findById('assets', assetId, userId) ? { assetId, entityId: null, obligationId: null, contractId: null } : null;
   }
-  if (entityId) return db.findById('legalOwners', entityId, userId) ? { assetId: null, entityId, obligationId: null } : null;
-  return db.findById('obligations', obligationId, userId) ? { assetId: null, entityId: null, obligationId } : null;
+  if (entityId) return db.findById('legalOwners', entityId, userId) ? { assetId: null, entityId, obligationId: null, contractId: null } : null;
+  if (obligationId) return db.findById('obligations', obligationId, userId) ? { assetId: null, entityId: null, obligationId, contractId: null } : null;
+  return db.findById('rentalContracts', contractId, userId) ? { assetId: null, entityId: null, obligationId: null, contractId } : null;
 }
 
 function publicMetadata(document) {
@@ -112,9 +114,9 @@ function uploadMiddleware(req, res, next) {
 
 router.get('/', (req, res) => {
   const target = targetFor(req.app.locals.db, req.session.userId, req.query);
-  if (!target) return res.status(400).json({ error: 'Indica un bien, una persona u organización o una obligación válida' });
+  if (!target) return res.status(400).json({ error: 'Indica un bien, una persona u organización, una obligación o un contrato válido' });
   const documents = req.app.locals.db.findAll('documents', req.session.userId)
-    .filter(item => item.assetId === target.assetId && item.entityId === target.entityId && (item.obligationId || null) === target.obligationId)
+    .filter(item => item.assetId === target.assetId && item.entityId === target.entityId && (item.obligationId || null) === target.obligationId && (item.contractId || null) === target.contractId)
     .sort((a, b) => b.uploadedAt.localeCompare(a.uploadedAt));
   res.json(documents.map(publicMetadata));
 });
@@ -135,7 +137,7 @@ router.post('/', uploadMiddleware, async (req, res) => {
   const target = targetFor(db, userId, req.body || {});
    if (!target) {
     discardUpload();
-     return res.status(400).json({ error: 'Indica un bien, una persona u organización o una obligación válida' });
+      return res.status(400).json({ error: 'Indica un bien, una persona u organización, una obligación o un contrato válido' });
   }
 
   try {

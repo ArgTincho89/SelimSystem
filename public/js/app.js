@@ -24,9 +24,9 @@ const App = {
   async refreshAlertIndicator() {
     if (!this.user) return;
     try {
-      const alerts = await API.accounts.alerts();
+      const [accountAlerts, rentAlerts] = await Promise.all([API.accounts.alerts(), API.rentals.alerts()]);
       const item = document.querySelector('#navbar [data-route="/settings"]');
-      if (item) item.classList.toggle('has-alert', alerts.length > 0);
+      if (item) item.classList.toggle('has-alert', accountAlerts.length + rentAlerts.length > 0);
     } catch {
       // The alert indicator is non-critical.
     }

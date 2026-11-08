@@ -20,6 +20,15 @@ function targetFor(db, userId, body) {
   if (body.targetType === 'obligation' && typeof body.targetId === 'string' && db.findById('obligations', body.targetId, userId)) {
     return { targetType: 'obligation', targetId: body.targetId };
   }
+  if (body.targetType === 'contract' && typeof body.targetId === 'string' && db.findById('rentalContracts', body.targetId, userId)) {
+    return { targetType: 'contract', targetId: body.targetId };
+  }
+  if (body.targetType === 'rentOccurrence' && typeof body.targetId === 'string' && db.findById('rentOccurrences', body.targetId, userId)) {
+    return { targetType: 'rentOccurrence', targetId: body.targetId };
+  }
+  if (body.targetType === 'rentCollection' && typeof body.targetId === 'string' && db.findById('rentCollections', body.targetId, userId)) {
+    return { targetType: 'rentCollection', targetId: body.targetId };
+  }
   return null;
 }
 

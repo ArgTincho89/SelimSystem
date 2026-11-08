@@ -131,12 +131,14 @@ const API = {
 
   documents: {
     list(targetType, targetId) {
-      const query = new URLSearchParams(targetType === 'asset' ? { assetId: targetId } : targetType === 'obligation' ? { obligationId: targetId } : { entityId: targetId });
+      const field = ({ asset: 'assetId', obligation: 'obligationId', contract: 'contractId' })[targetType] || 'entityId';
+      const query = new URLSearchParams({ [field]: targetId });
       return API.get(`/documents?${query}`);
     },
     async upload(targetType, targetId, file) {
       const form = new FormData();
-      form.append(targetType === 'asset' ? 'assetId' : targetType === 'obligation' ? 'obligationId' : 'entityId', targetId);
+        const field = ({ asset: 'assetId', obligation: 'obligationId', contract: 'contractId' })[targetType] || 'entityId';
+        form.append(field, targetId);
       form.append('file', file);
       const response = await fetch('/api/documents', { method: 'POST', credentials: 'same-origin', body: form });
       const data = await response.json();
@@ -169,5 +171,22 @@ const API = {
     cancelOccurrence(id, occurrenceId) { return API.post(`/obligations/${encodeURIComponent(id)}/occurrences/${encodeURIComponent(occurrenceId)}/cancel`, {}); },
     updateOccurrence(id, occurrenceId, data) { return API.put(`/obligations/${encodeURIComponent(id)}/occurrences/${encodeURIComponent(occurrenceId)}`, data); },
     pay(id, occurrenceId, data) { return API.post(`/obligations/${encodeURIComponent(id)}/occurrences/${encodeURIComponent(occurrenceId)}/payments`, data); }
+  },
+
+  rentals: {
+    list(filters = {}) {
+      const query = new URLSearchParams(Object.entries(filters).filter(([, value]) => value !== '' && value != null));
+      const serialized = query.toString();
+      return API.get(`/rentals${serialized ? `?${serialized}` : ''}`);
+    },
+    get(id) { return API.get(`/rentals/${encodeURIComponent(id)}`); },
+    create(data) { return API.post('/rentals', data); },
+    update(id, data) { return API.put(`/rentals/${encodeURIComponent(id)}`, data); },
+    addCondition(id, data) { return API.post(`/rentals/${encodeURIComponent(id)}/conditions`, data); },
+    cancelOccurrence(id, occurrenceId) { return API.post(`/rentals/${encodeURIComponent(id)}/occurrences/${encodeURIComponent(occurrenceId)}/cancel`, {}); },
+    alerts() { return API.get('/rentals/alerts'); },
+    collections(contractId) { return API.get(`/rentals/collections/list${contractId ? `?contractId=${encodeURIComponent(contractId)}` : ''}`); },
+    collect(data) { return API.post('/rentals/collections', data); },
+    allocate(collectionId, data) { return API.post(`/rentals/collections/${encodeURIComponent(collectionId)}/allocations`, data); }
   }
 };
