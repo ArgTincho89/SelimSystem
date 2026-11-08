@@ -120,6 +120,7 @@ router.put('/:id', (req, res) => {
       occurrenceChanges.categoryId = updated.categoryId;
       occurrenceChanges.accountId = updated.accountId;
       occurrenceChanges.paymentMethod = updated.paymentMethod;
+      occurrenceChanges.paymentMethodId = updated.paymentMethodId || null;
       db.update('obligationOccurrences', item.id, occurrenceChanges, userId);
     });
   }
@@ -211,7 +212,8 @@ router.post('/:id/occurrences/:occurrenceId/payments', (req, res) => {
       categoryId: category.id, fecha: paymentDate, recurrente: false, frecuencia: null, fechaFin: null,
       clasificacion: 'variable', obligationId: obligation.id, obligationOccurrenceId: occurrence.id,
       obligationIdempotencyKey: keyHash, obligationPaymentFingerprint: fingerprint,
-      paymentMethod: occurrence.paymentMethod || obligation.paymentMethod || '', paymentId
+       paymentMethod: occurrence.paymentMethod || obligation.paymentMethod || '',
+       paymentMethodId: occurrence.paymentMethodId || obligation.paymentMethodId || null, paymentId
     }, userId);
   } catch {
     db.clearCache();

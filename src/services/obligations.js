@@ -70,7 +70,7 @@ function generateOccurrences(db, userId, obligation, fromDate, toDate) {
             obligationId: obligation.id, date, status: 'expected', currencyCode: effective.currencyCode,
             dueAmountMinor: minor, estimatedAmount: effective.estimatedAmount, title: effective.title,
             categoryId: effective.categoryId || null, accountId: effective.accountId || null,
-            paymentMethod: effective.paymentMethod || '', notes: '', generationKey: `${obligation.id}:${date}`
+      paymentMethod: effective.paymentMethod || '', paymentMethodId: effective.paymentMethodId || null, notes: '', generationKey: `${obligation.id}:${date}`
           }, userId);
           generated.push(record);
           count += 1;
@@ -83,7 +83,7 @@ function generateOccurrences(db, userId, obligation, fromDate, toDate) {
             obligationId: obligation.id, date, status: 'expected', currencyCode: definition.currencyCode,
             dueAmountMinor: minor, estimatedAmount: definition.estimatedAmount, title: definition.title,
             categoryId: definition.categoryId || null, accountId: definition.accountId || null,
-            paymentMethod: definition.paymentMethod || '', notes: '', generationKey: `${obligation.id}:${date}`
+            paymentMethod: definition.paymentMethod || '', paymentMethodId: definition.paymentMethodId || null, notes: '', generationKey: `${obligation.id}:${date}`
           }, userId));
           count += 1;
         }
@@ -110,9 +110,9 @@ function occurrencesFor(db, userId, obligation, options = {}) {
 
 function validateLinks(db, userId, value, existing = null) {
   const result = { ...existing, ...value };
-  for (const field of ['assetId', 'providerEntityId', 'responsibleEntityId', 'accountId', 'categoryId']) {
+  for (const field of ['assetId', 'providerEntityId', 'responsibleEntityId', 'accountId', 'categoryId', 'paymentMethodId']) {
     if (result[field] === undefined || result[field] === null || result[field] === '') { result[field] = null; continue; }
-    const collection = field === 'assetId' ? 'assets' : field.endsWith('EntityId') ? 'legalOwners' : field === 'accountId' ? 'accounts' : 'categories';
+    const collection = field === 'assetId' ? 'assets' : field.endsWith('EntityId') ? 'legalOwners' : field === 'accountId' ? 'accounts' : field === 'categoryId' ? 'categories' : 'paymentMethods';
     const record = db.findById(collection, result[field], userId);
     if (!record) return { error: `${field} no es válido` };
     if (field === 'providerEntityId' && !(record.roles || ['owner']).includes('provider')) return { error: 'La entidad vinculada debe tener el rol de proveedor' };
@@ -123,7 +123,7 @@ function validateLinks(db, userId, value, existing = null) {
 }
 
 function validateDefinition(db, userId, body, existing = null) {
-  const fields = ['title', 'type', 'assetId', 'providerEntityId', 'responsibleEntityId', 'accountId', 'categoryId', 'currencyCode', 'estimatedAmount', 'paymentMethod', 'startDate', 'recurrenceFrequency', 'endDate', 'reminderLeadDays', 'notes'];
+  const fields = ['title', 'type', 'assetId', 'providerEntityId', 'responsibleEntityId', 'accountId', 'categoryId', 'paymentMethodId', 'currencyCode', 'estimatedAmount', 'paymentMethod', 'startDate', 'recurrenceFrequency', 'endDate', 'reminderLeadDays', 'notes'];
   const value = {};
   fields.forEach(field => { if (body[field] !== undefined) value[field] = body[field]; });
   const merged = { ...existing, ...value };

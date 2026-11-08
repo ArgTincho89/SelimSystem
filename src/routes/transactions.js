@@ -3,6 +3,7 @@ const { requireAuth } = require('../middleware/auth');
 const { generateRecurringInstances, getMonthTransactions } = require('../utils/recurring');
 const { roundCents, sumCents } = require('../utils/income');
 const ledger = require('../services/account-ledger');
+const finance = require('../services/finance');
 
 const router = express.Router();
 
@@ -184,6 +185,9 @@ router.post('/', (req, res) => {
   if (refundSourceId && (tipo !== 'refund' || db.findById('transactions', refundSourceId, userId)?.tipo !== 'expense')) {
     return res.status(400).json({ error: 'El gasto de origen del reembolso no es válido' });
   }
+  const paymentMethodId = req.body.paymentMethodId || null;
+  if (paymentMethodId && !db.findById('paymentMethods', paymentMethodId, userId)) return res.status(400).json({ error: 'El medio de pago no es válido' });
+  if (req.body.paymentMethod !== undefined && (typeof req.body.paymentMethod !== 'string' || req.body.paymentMethod.length > 120)) return res.status(400).json({ error: 'El medio de pago no es válido' });
 
   const transaction = db.create('transactions', {
     userId,
@@ -195,6 +199,8 @@ router.post('/', (req, res) => {
     titulo: finalTitulo,
     categoryId: categoryId || null,
     refundSourceId,
+    paymentMethodId,
+    paymentMethod: req.body.paymentMethod || '',
     fecha: fecha || ledger.localDateForUser(db, userId),
     recurrente: recurrente || false,
     frecuencia: recurrente ? (frecuencia || 'monthly') : null,
@@ -224,6 +230,13 @@ router.put('/:id', (req, res) => {
   if (transaction.rentCollectionId) return res.status(409).json({ error: 'Los cobros de alquiler vinculados a períodos son inmutables; registra un movimiento compensatorio si hace falta' });
 
   const updates = {};
+  const paymentMethodId = req.body.paymentMethodId !== undefined ? (req.body.paymentMethodId || null) : transaction.paymentMethodId || null;
+  if (paymentMethodId && !db.findById('paymentMethods', paymentMethodId, userId)) return res.status(400).json({ error: 'El medio de pago no es válido' });
+  if (req.body.paymentMethod !== undefined) {
+    if (typeof req.body.paymentMethod !== 'string' || req.body.paymentMethod.length > 120) return res.status(400).json({ error: 'El medio de pago no es válido' });
+    updates.paymentMethod = req.body.paymentMethod;
+  }
+  if (req.body.paymentMethodId !== undefined) updates.paymentMethodId = paymentMethodId;
   const accountId = req.body.accountId !== undefined ? req.body.accountId : transaction.accountId;
   if (accountId !== undefined) {
     const account = db.findById('accounts', accountId, userId);
@@ -346,6 +359,18 @@ router.put('/:id', (req, res) => {
     }
   }
 
+  const hasFinancialAssociations = db.findAll('movementAllocations', userId).some(item => item.transactionId === transaction.id)
+    || db.findAll('recoverableExpenseClaims', userId).some(item => item.transactionId === transaction.id)
+    || Boolean(transaction.recoverableClaimId)
+    || db.findAll('recoveries', userId).some(item => item.transactionId === transaction.id);
+  const finalAccount = db.findById('accounts', updates.accountId || transaction.accountId, userId);
+  const finalAmountMinor = updates.amountMinor === undefined ? finance.transactionMinor(transaction, db, userId) : updates.amountMinor;
+  const financialIdentityChanged = finalTipo !== transaction.tipo
+    || finalAmountMinor !== finance.transactionMinor(transaction, db, userId)
+    || (updates.accountId !== undefined && updates.accountId !== transaction.accountId)
+    || (finalAccount && finalAccount.currency !== finance.transactionCurrency(transaction, db, userId));
+  if (hasFinancialAssociations && financialIdentityChanged) return res.status(409).json({ error: 'Este movimiento tiene asignaciones o historial de reintegros; no se puede cambiar su importe, tipo, cuenta o moneda' });
+
   const linkedNormalization = db.findAll('transfers', userId).some(transfer => [...(transfer.normalizationAllocations || []), ...(transfer.pendingAllocations || [])].some(item => item.sourceType === 'income' && item.sourceId === transaction.id));
   if (transaction.tipo === 'income' && linkedNormalization && (updates.monto !== undefined || updates.accountId !== undefined || finalTipo !== 'income')) {
     return res.status(409).json({ error: 'Este ingreso sostiene conversiones vinculadas; revierte primero las conversiones' });
@@ -386,12 +411,18 @@ router.delete('/:id', (req, res) => {
   if (!transaction) {
     return res.status(404).json({ error: 'Transacción no encontrada' });
   }
+
   if (transaction.obligationOccurrenceId) return res.status(409).json({ error: 'Los pagos vinculados a obligaciones no se pueden eliminar' });
   if (transaction.rentCollectionId) return res.status(409).json({ error: 'Los cobros de alquiler vinculados a períodos no se pueden eliminar' });
 
   const linkedNormalization = db.findAll('transfers', userId).some(transfer => [...(transfer.normalizationAllocations || []), ...(transfer.pendingAllocations || [])].some(item => item.sourceType === 'income' && item.sourceId === transaction.id));
   const linkedRefund = db.findAll('transactions', userId).some(item => item.tipo === 'refund' && item.refundSourceId === transaction.id);
   if (linkedNormalization || linkedRefund) return res.status(409).json({ error: 'Este movimiento tiene referencias activas; resuélvelas antes de eliminarlo' });
+  const hasFinancialAssociations = db.findAll('movementAllocations', userId).some(item => item.transactionId === transaction.id)
+    || db.findAll('recoverableExpenseClaims', userId).some(item => item.transactionId === transaction.id)
+    || transaction.recoverableClaimId
+    || db.findAll('recoveries', userId).some(item => item.transactionId === transaction.id);
+  if (hasFinancialAssociations) return res.status(409).json({ error: 'Este movimiento tiene asignaciones o historial de reintegros; no se puede eliminar' });
 
   db.remove('transactions', id, userId);
   ledger.refreshAlerts(db, userId);

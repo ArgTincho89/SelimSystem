@@ -1,7 +1,9 @@
 const TransactionForm = {
   async show(onSave, transaction = null, options = {}) {
-    const [categories, accounts, transactions] = await Promise.all([
-      API.categories.list(), API.accounts.list(), API.transactions.list()
+    const [categories, accounts, transactions, assets, obligations, rentals, paymentMethods, associationData] = await Promise.all([
+      API.categories.list(), API.accounts.list(), API.transactions.list(), API.assets.list(),
+      API.obligations.list(), API.rentals.list(), API.finance.paymentMethods(),
+      transaction && !transaction.isRecurringInstance ? API.finance.associations(transaction.id).catch(() => null) : Promise.resolve(null)
     ]);
     const isEdit = !!transaction;
     let selectedType = transaction?.tipo || 'expense';
@@ -46,6 +48,96 @@ const TransactionForm = {
     accountGroup.appendChild(accountSelect);
     accountGroup.appendChild(create('p', { className: 'account-status-note', textContent: 'El importe se interpreta en la moneda de la cuenta. Cambiar de cuenta no convierte el importe.' }));
     form.appendChild(accountGroup);
+
+    const paymentMethodGroup = create('div', { className: 'form-group' });
+    const paymentMethodSelect = create('select', { className: 'form-control' });
+    paymentMethodSelect.id = 'transaction-payment-method';
+    paymentMethodSelect.appendChild(create('option', { value: '', textContent: 'Sin medio reutilizable' }));
+    paymentMethods.forEach(method => paymentMethodSelect.appendChild(create('option', { value: method.id, textContent: `${method.name}${method.lastFour ? ` ···· ${method.lastFour}` : ''}` })));
+    paymentMethodSelect.value = transaction?.paymentMethodId || '';
+    const paymentMethodLabel = create('input', { className: 'form-control', type: 'text', maxlength: '120', placeholder: 'Medio de pago (texto libre)', value: transaction?.paymentMethod || '' });
+    paymentMethodLabel.id = 'transaction-payment-method-label';
+    on(paymentMethodSelect, 'change', () => {
+      const selected = paymentMethods.find(item => item.id === paymentMethodSelect.value);
+      if (selected) paymentMethodLabel.value = selected.name;
+    });
+    const createMethodButton = create('button', { className: 'btn btn-ghost btn-sm', type: 'button', textContent: 'Crear medio reutilizable' });
+    on(createMethodButton, 'click', async () => {
+      const name = prompt('Nombre del medio de pago');
+      if (!name?.trim()) return;
+      try {
+        const created = await API.finance.createPaymentMethod({ name: name.trim(), type: 'other' });
+        paymentMethods.push(created);
+        paymentMethodSelect.appendChild(create('option', { value: created.id, textContent: created.name }));
+        paymentMethodSelect.value = created.id;
+        paymentMethodLabel.value = created.name;
+      } catch (error) { showToast(error.message, 'error'); }
+    });
+    const editMethodButton = create('button', { className: 'btn btn-ghost btn-sm', type: 'button', textContent: 'Renombrar medio' });
+    on(editMethodButton, 'click', async () => {
+      const selected = paymentMethods.find(item => item.id === paymentMethodSelect.value);
+      if (!selected) return showToast('Selecciona un medio reutilizable', 'error');
+      const name = prompt('Nombre del medio de pago', selected.name);
+      if (!name?.trim()) return;
+      try {
+        const updated = await API.finance.updatePaymentMethod(selected.id, { name: name.trim(), type: selected.type, accountId: selected.accountId, notes: selected.notes, lastFour: selected.lastFour });
+        selected.name = updated.name;
+        [...paymentMethodSelect.options].find(option => option.value === selected.id).textContent = `${updated.name}${updated.lastFour ? ` ···· ${updated.lastFour}` : ''}`;
+        paymentMethodLabel.value = updated.name;
+      } catch (error) { showToast(error.message, 'error'); }
+    });
+    const deleteMethodButton = create('button', { className: 'btn btn-ghost btn-sm', type: 'button', textContent: 'Eliminar medio' });
+    on(deleteMethodButton, 'click', async () => {
+      const selected = paymentMethods.find(item => item.id === paymentMethodSelect.value);
+      if (!selected || !confirm(`¿Eliminar el medio “${selected.name}”?`)) return;
+      try {
+        await API.finance.deletePaymentMethod(selected.id);
+        paymentMethods.splice(paymentMethods.indexOf(selected), 1);
+        [...paymentMethodSelect.options].find(option => option.value === selected.id)?.remove();
+        paymentMethodSelect.value = '';
+        paymentMethodLabel.value = '';
+      } catch (error) { showToast(error.message, 'error'); }
+    });
+    paymentMethodGroup.append(create('label', { textContent: 'Medio de pago reutilizable', for: paymentMethodSelect.id }), paymentMethodSelect, create('label', { textContent: 'Etiqueta heredada opcional', for: paymentMethodLabel.id }), paymentMethodLabel, createMethodButton, editMethodButton, deleteMethodButton);
+    form.appendChild(paymentMethodGroup);
+
+    const allocationSection = create('section', { className: 'form-group', style: { borderTop: '1px solid var(--border-color)', paddingTop: '10px' } });
+    allocationSection.appendChild(create('strong', { textContent: 'Atribución del movimiento' }));
+    allocationSection.appendChild(create('small', { textContent: 'Las asignaciones describen el destino del importe; no crean movimientos ni alteran los totales.' }));
+    const allocationRows = create('div', { style: { display: 'grid', gap: '6px', marginTop: '8px' } });
+    const allocationTargets = [['', 'Sin atribución']];
+    assets.forEach(item => allocationTargets.push([`asset:${item.id}`, `Bien · ${item.name}`]));
+    obligations.forEach(item => {
+      allocationTargets.push([`obligation:${item.id}`, `Obligación · ${item.title}`]);
+      (item.occurrences || []).forEach(occurrence => allocationTargets.push([`obligationOccurrence:${item.id}:${occurrence.id}`, `Vencimiento · ${item.title} · ${occurrence.date}`]));
+    });
+    rentals.forEach(item => {
+      allocationTargets.push([`contract:${item.id}`, `Contrato · ${item.asset?.name || 'Inmueble'} · ${item.tenants?.map(tenant => tenant.name).join(', ') || ''}`]);
+      (item.occurrences || []).forEach(occurrence => allocationTargets.push([`rentOccurrence:${item.id}:${occurrence.id}`, `Período de alquiler · ${item.asset?.name || 'Inmueble'} · ${occurrence.date}`]));
+    });
+    const addAllocationRow = (record = {}) => {
+      const row = create('div', { style: { display: 'grid', gridTemplateColumns: 'minmax(150px, 1fr) minmax(90px, 140px) auto', gap: '6px' } });
+      const target = create('select', { className: 'form-control' });
+      allocationTargets.forEach(([value, label]) => target.appendChild(create('option', { value, textContent: label })));
+      const selected = record.occurrenceId ? `obligationOccurrence:${record.obligationId}:${record.occurrenceId}`
+        : record.rentOccurrenceId ? `rentOccurrence:${record.contractId}:${record.rentOccurrenceId}`
+          : record.obligationId ? `obligation:${record.obligationId}`
+            : record.contractId ? `contract:${record.contractId}` : record.assetId ? `asset:${record.assetId}` : '';
+      target.value = selected;
+      const amount = create('input', { className: 'form-control', type: 'number', min: '0.01', step: '0.01', placeholder: 'Importe', value: record.amount != null ? String(record.amount) : '' });
+      const remove = create('button', { className: 'btn btn-ghost btn-sm', type: 'button', textContent: 'Quitar', onClick: () => row.remove() });
+      row.append(target, amount, remove);
+      row._allocationFields = { target, amount };
+      allocationRows.appendChild(row);
+    };
+    (associationData?.allocations || []).forEach(addAllocationRow);
+    const addAllocation = create('button', { className: 'btn btn-ghost btn-sm', type: 'button', textContent: '+ Añadir atribución', onClick: () => addAllocationRow() });
+    const allocationCompleteLabel = create('label', { className: 'checkbox-label' });
+    const allocationComplete = create('input', { type: 'checkbox', className: 'form-checkbox', checked: (associationData?.allocations || []).some(item => item.complete) });
+    allocationCompleteLabel.append(allocationComplete, document.createTextNode(' Asignación completa (debe cubrir el total)'));
+    allocationSection.append(allocationRows, addAllocation, allocationCompleteLabel);
+    if (transaction?.isRecurringInstance) allocationSection.style.display = 'none';
+    form.appendChild(allocationSection);
 
     const categoryGroup = create('div', { className: 'form-group' });
     const categoryLabel = create('label', { textContent: 'Categoría' });
@@ -388,6 +480,8 @@ const TransactionForm = {
       }
       if (selectedType === 'refund') data.refundSourceId = refundSourceSelect.value || null;
       data.accountId = accountSelect.value;
+      data.paymentMethodId = paymentMethodSelect.value || null;
+      data.paymentMethod = paymentMethodLabel.value.trim();
 
       if (selectedType === 'expense' && recurringEnabled) {
         data.recurrente = true;
@@ -403,6 +497,7 @@ const TransactionForm = {
       }
 
       try {
+        let savedTransactionId;
         if (isEdit) {
           if (transaction.isRecurringInstance && occurrenceScope?.value === 'occurrence') {
             await API.transactions.updateOccurrence(transaction.originalId, transaction.fecha, data);
@@ -413,8 +508,24 @@ const TransactionForm = {
             }
             await API.transactions.update(transaction.originalId || transaction.id, data);
           }
+          savedTransactionId = transaction.originalId || transaction.id;
         } else {
-          await API.transactions.create(data);
+          const created = await API.transactions.create(data);
+          savedTransactionId = created.id;
+        }
+        if (!transaction?.isRecurringInstance) {
+          const allocations = [...allocationRows.querySelectorAll(':scope > div')].map(row => {
+            const { target, amount } = row._allocationFields;
+            if (!target.value || amount.value === '') return null;
+            const [kind, id, occurrenceId] = target.value.split(':');
+            const value = Number(amount.value);
+            if (kind === 'asset') return { assetId: id, amount: value };
+            if (kind === 'obligation') return { obligationId: id, amount: value };
+            if (kind === 'contract') return { contractId: id, amount: value };
+            if (kind === 'obligationOccurrence') return { obligationId: id, occurrenceId, amount: value };
+            return { contractId: id, rentOccurrenceId: occurrenceId, amount: value };
+          }).filter(Boolean);
+          await API.finance.setAllocations(savedTransactionId, { allocations, complete: allocationComplete.checked });
         }
         if (onSave) await onSave();
         Modal.hide();

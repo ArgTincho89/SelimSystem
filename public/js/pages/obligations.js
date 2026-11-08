@@ -4,6 +4,7 @@ const ObligationsPage = {
   owners: [],
   categories: [],
   accounts: [],
+  paymentMethods: [],
   alerts: [],
 
   async render(filters = {}) {
@@ -12,8 +13,8 @@ const ObligationsPage = {
     content.style.paddingBottom = '';
     content.innerHTML = '<div class="loading">Cargando obligaciones...</div>';
     try {
-      const [items, assets, owners, categories, accounts, alerts] = await Promise.all([
-        API.obligations.list(filters), API.assets.list(), API.owners.list(), API.categories.list(), API.accounts.list(), API.obligations.alerts()
+      const [items, assets, owners, categories, accounts, alerts, paymentMethods] = await Promise.all([
+        API.obligations.list(filters), API.assets.list(), API.owners.list(), API.categories.list(), API.accounts.list(), API.obligations.alerts(), API.finance.paymentMethods()
       ]);
       this.items = items;
       this.assets = assets;
@@ -21,6 +22,7 @@ const ObligationsPage = {
       this.categories = categories;
       this.accounts = accounts.filter(account => account.activo);
       this.alerts = alerts;
+      this.paymentMethods = paymentMethods;
       this.renderContent(content, filters);
     } catch (error) {
       content.replaceChildren(create('div', { className: 'empty-state', textContent: `No se pudieron cargar las obligaciones: ${error.message}` }));
@@ -102,6 +104,19 @@ const ObligationsPage = {
       create('button', { className: 'btn btn-ghost btn-sm', textContent: 'Cancelar obligación', onClick: () => this.runAction(() => API.obligations.delete(item.id)) })
     ]);
     card.appendChild(controls);
+    const allocationPanel = create('details', { style: { marginTop: '4px' } }, [create('summary', { textContent: 'Movimientos atribuidos' })]);
+    const allocationRows = create('div', { style: { display: 'grid', gap: '6px', marginTop: '6px' } });
+    API.finance.allocations({ obligationId: item.id }).then(allocations => {
+      if (!allocations.length) allocationRows.appendChild(create('small', { textContent: 'No hay atribuciones adicionales.' }));
+      allocations.forEach(allocation => {
+        const row = create('div', { className: 'card', style: { padding: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' } });
+        row.appendChild(create('span', { textContent: `${allocation.transaction.titulo} · ${allocation.transaction.fecha} · ${allocation.amount} ${allocation.currencyCode}` }));
+        row.appendChild(create('button', { className: 'btn btn-ghost btn-sm', type: 'button', textContent: 'Editar atribuciones', disabled: Boolean(allocation.transaction.obligationOccurrenceId), onClick: () => TransactionForm.show(() => this.render(), allocation.transaction) }));
+        allocationRows.appendChild(row);
+      });
+    }).catch(error => allocationRows.appendChild(create('small', { textContent: `No se pudieron cargar las atribuciones: ${error.message}` })));
+    allocationPanel.appendChild(allocationRows);
+    card.appendChild(allocationPanel);
     return card;
   },
 
@@ -125,7 +140,13 @@ const ObligationsPage = {
     const currency = this.select([...new Set([...currencies, ...this.accounts.map(item => item.currency)])].map(code => [code, code]), existing?.currencyCode || 'EUR');
     this.fieldWrap(form, 'Moneda', currency);
     const amount = this.field(form, 'Importe estimado', { type: 'number', min: '0.01', step: '0.01', required: true, value: existing?.estimatedAmount ?? '' });
-    const paymentMethod = this.field(form, 'Medio de pago', { value: existing?.paymentMethod || '' });
+    const paymentMethod = this.field(form, 'Medio de pago (texto libre)', { value: existing?.paymentMethod || '' });
+    const paymentMethodId = this.select([['', 'Sin medio reutilizable'], ...this.paymentMethods.map(item => [item.id, `${item.name}${item.lastFour ? ` ···· ${item.lastFour}` : ''}`])], existing?.paymentMethodId || '');
+    this.fieldWrap(form, 'Medio de pago reutilizable', paymentMethodId);
+    paymentMethodId.addEventListener('change', () => {
+      const selected = this.paymentMethods.find(item => item.id === paymentMethodId.value);
+      if (selected) paymentMethod.value = selected.name;
+    });
     const date = this.field(form, 'Primer vencimiento', { type: 'date', required: true, value: existing?.startDate || new Date().toISOString().slice(0, 10) });
     const endDate = this.field(form, 'Último vencimiento (opcional)', { type: 'date', value: existing?.endDate || '' });
     const frequency = this.select([['', 'Única vez'], ['monthly', 'Mensual'], ['bimonthly', 'Cada dos meses'], ['quarterly', 'Trimestral'], ['semiannual', 'Semestral'], ['annual', 'Anual']], existing?.recurrenceFrequency || '');
@@ -147,7 +168,7 @@ const ObligationsPage = {
         const data = {
           title: title.value, type: type.value, assetId: asset.value || null, providerEntityId: provider.value || null,
           responsibleEntityId: responsible.value || null, accountId: account.value || null, categoryId: category.value || null,
-          currencyCode: currency.value, estimatedAmount: Number(amount.value), paymentMethod: paymentMethod.value,
+          currencyCode: currency.value, estimatedAmount: Number(amount.value), paymentMethod: paymentMethod.value, paymentMethodId: paymentMethodId.value || null,
           startDate: date.value, endDate: endDate.value || null, recurrenceFrequency: frequency.value || null,
           reminderLeadDays: Number(reminder.value === 'custom' ? customLead.value : reminder.value), notes: notes.value
         };

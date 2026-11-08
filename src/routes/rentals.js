@@ -175,7 +175,7 @@ router.post('/collections', (req, res) => {
   const key = input.idempotencyKey;
   if (typeof key !== 'string' || key.length < 8 || key.length > 120) return res.status(400).json({ error: 'Se requiere una clave de idempotencia válida' });
   const keyHash = rentals.hash(key);
-  const fingerprint = rentals.hash(JSON.stringify({ amount: input.amount, accountId: input.accountId, date: input.date, method: input.method || '', allocations: input.allocations || [] }));
+  const fingerprint = rentals.hash(JSON.stringify({ amount: input.amount, accountId: input.accountId, date: input.date, method: input.method || '', paymentMethodId: input.paymentMethodId || null, allocations: input.allocations || [] }));
   const prior = db.findAll('rentCollections', userId).find(item => item.idempotencyKey === keyHash);
   if (prior) {
     if (prior.fingerprint !== fingerprint) return res.status(409).json({ error: 'La clave de idempotencia ya se utilizó para otro cobro' });
@@ -185,7 +185,10 @@ router.post('/collections', (req, res) => {
   if (typeof amount !== 'number' || !Number.isFinite(amount) || amount <= 0) return res.status(400).json({ error: 'El importe cobrado debe ser positivo' });
   const date = input.date || ledger.localDateForUser(db, userId);
   if (!rentals.validDate(date) || date > ledger.localDateForUser(db, userId)) return res.status(400).json({ error: 'La fecha de cobro debe ser válida y no futura' });
-  if (typeof input.method !== 'string' || !input.method.trim() || input.method.trim().length > 100) return res.status(400).json({ error: 'El medio de cobro debe tener entre 1 y 100 caracteres' });
+  const paymentMethod = input.paymentMethodId ? db.findById('paymentMethods', input.paymentMethodId, userId) : null;
+  if (input.paymentMethodId && !paymentMethod) return res.status(400).json({ error: 'El medio de cobro no es válido' });
+  const methodLabel = typeof input.method === 'string' ? input.method.trim() : '';
+  if (!paymentMethod && (!methodLabel || methodLabel.length > 100)) return res.status(400).json({ error: 'El medio de cobro debe tener entre 1 y 100 caracteres' });
   ledger.ensureSetup(db, userId);
   const account = db.findById('accounts', input.accountId, userId);
   if (!account || !account.activo) return res.status(400).json({ error: 'Seleccioná una cuenta activa' });
@@ -205,11 +208,12 @@ router.post('/collections', (req, res) => {
       accountId: account.id, currencyCode: account.currency, titulo: 'Cobro de alquiler',
       categoryId: null, refundSourceId: null, fecha: date, recurrente: false, frecuencia: null, fechaFin: null,
       clasificacion: null, montoA: null, montoB: null, ivaPorcentaje: null,
-      rentCollectionId: collectionId, rentCollectionIdempotencyKey: keyHash
+      rentCollectionId: collectionId, rentCollectionIdempotencyKey: keyHash,
+      paymentMethodId: paymentMethod?.id || null, paymentMethod: methodLabel || paymentMethod?.name || ''
     }, userId);
     collection = db.create('rentCollections', {
       id: collectionId, transactionId: transaction.id, amountMinor, amount: ledger.fromMinorUnits(amountMinor, account.currency),
-      currencyCode: account.currency, accountId: account.id, date, method: (input.method || '').trim(),
+      currencyCode: account.currency, accountId: account.id, date, method: methodLabel || paymentMethod?.name || '', paymentMethodId: paymentMethod?.id || null,
       idempotencyKey: keyHash, fingerprint
     }, userId);
     allocationResult.allocations.forEach(item => savedAllocations.push(db.create('rentCollectionAllocations', {

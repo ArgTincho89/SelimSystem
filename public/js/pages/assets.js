@@ -258,6 +258,7 @@ const AssetsPage = {
       const location = asset.type === 'immovable' ? [asset.address, asset.locality, asset.province, asset.country].filter(Boolean).join(', ') : asset.location;
       if (location) body.appendChild(create('p', { textContent: `Ubicación: ${location}` }));
       if (asset.notes) body.appendChild(create('p', { textContent: `Notas: ${asset.notes}` }));
+      await this.renderRecoveries(asset, body);
       body.appendChild(create('h4', { textContent: 'Historial de titularidad', style: { marginTop: '14px' } }));
       (asset.ownerships || []).forEach(record => {
         const line = create('div', { className: 'card', style: { marginTop: '8px' } });
@@ -289,6 +290,90 @@ const AssetsPage = {
       const footer = create('div', {}, [create('button', { className: 'btn btn-primary', type: 'button', textContent: 'Cerrar', onClick: () => Modal.hide() })]);
       Modal.show(asset.name, body, { footer });
     } catch (error) { showToast(error.message, 'error'); }
+  },
+
+  async renderRecoveries(asset, container) {
+    const section = create('section', { style: { borderTop: '1px solid var(--border-color)', marginTop: '16px', paddingTop: '12px' } });
+    section.appendChild(create('h4', { textContent: 'Gastos recuperables e importes pendientes' }));
+    const rows = create('div', { style: { display: 'grid', gap: '8px' } });
+    const addButton = create('button', { className: 'btn btn-secondary btn-sm', type: 'button', textContent: 'Registrar gasto recuperable' });
+    section.append(rows, addButton);
+    container.appendChild(section);
+    try {
+      const [claims, allocations] = await Promise.all([API.finance.claims({ assetId: asset.id }), API.finance.allocations({ assetId: asset.id })]);
+      rows.appendChild(create('strong', { textContent: 'Movimientos atribuidos' }));
+      if (!allocations.length) rows.appendChild(create('small', { textContent: 'No hay movimientos atribuidos a este bien.' }));
+      allocations.forEach(allocation => {
+        const row = create('div', { className: 'card', style: { padding: '8px', display: 'flex', justifyContent: 'space-between', gap: '8px', alignItems: 'center' } });
+        row.appendChild(create('span', { textContent: `${allocation.transaction.titulo} · ${allocation.transaction.fecha} · ${allocation.amount} ${allocation.currencyCode} · ${allocation.transaction.tipo}` }));
+        row.appendChild(create('button', { className: 'btn btn-ghost btn-sm', type: 'button', textContent: 'Editar atribuciones', disabled: Boolean(allocation.transaction.obligationOccurrenceId || allocation.transaction.rentCollectionId), onClick: () => TransactionForm.show(() => this.showDetails(asset.id), allocation.transaction) }));
+        rows.appendChild(row);
+      });
+      rows.appendChild(create('strong', { textContent: 'Reclamos de reintegro' }));
+      if (!claims.length) rows.appendChild(create('small', { textContent: 'Todavía no hay gastos recuperables asociados.' }));
+      claims.forEach(claim => {
+        const card = create('article', { className: 'card', style: { padding: '10px' } });
+        card.appendChild(create('strong', { textContent: `${claim.transaction?.titulo || 'Gasto'} · ${claim.amount} ${claim.currencyCode}` }));
+        card.appendChild(create('p', { className: 'text-muted', textContent: `${claim.recoveredAmount} recuperado · ${claim.outstandingAmount} pendiente${claim.tenantEntityId ? ` · Inquilino: ${this.owners.find(owner => owner.id === claim.tenantEntityId)?.name || ''}` : ''}` }));
+        if (claim.outstandingMinor > 0) card.appendChild(create('button', { className: 'btn btn-ghost btn-sm', type: 'button', textContent: 'Registrar reintegro', onClick: async () => {
+          try {
+            const accounts = await API.accounts.list();
+            const available = accounts.filter(account => account.activo && account.currency === claim.currencyCode);
+            if (!available.length) return showToast('No hay una cuenta activa en la moneda del reclamo', 'error');
+            const form = create('div', { style: { display: 'grid', gap: '8px' } });
+            const amount = create('input', { className: 'form-control', type: 'number', min: '0.01', step: ['JPY', 'KRW', 'CLP', 'PYG'].includes(claim.currencyCode) ? '1' : '0.01', value: claim.outstandingAmount });
+            const account = this.select(available.map(item => [item.id, item.nombre]));
+            form.append(create('label', {}, [create('span', { textContent: `Importe recibido (pendiente: ${claim.outstandingAmount} ${claim.currencyCode})` }), amount]));
+            form.append(create('label', {}, [create('span', { textContent: 'Cuenta de ingreso' }), account]));
+            Modal.show('Registrar reintegro', form, { footer: create('div', {}, [create('button', { className: 'btn btn-primary', type: 'button', textContent: 'Guardar ingreso', onClick: async () => {
+              try {
+                await API.finance.collectClaim(claim.id, {
+                  amount: Number(amount.value), accountId: account.value,
+                  idempotencyKey: globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}-recovery`
+                });
+                Modal.hide();
+                await this.showDetails(asset.id);
+              } catch (error) { showToast(error.message, 'error'); }
+            } } )]) });
+          } catch (error) { showToast(error.message, 'error'); }
+        } }));
+        (claim.recoveries || []).forEach(recovery => card.appendChild(create('small', { style: { display: 'block' }, textContent: `${recovery.date} · ${recovery.amount} ${recovery.currencyCode} · ingreso real` })));
+        rows.appendChild(card);
+      });
+    } catch (error) {
+      rows.appendChild(create('small', { textContent: `No se pudieron cargar los reintegros: ${error.message}` }));
+    }
+    addButton.addEventListener('click', async () => {
+      try {
+        const [transactions, contracts, owners] = await Promise.all([API.transactions.list(), API.rentals.list({ assetId: asset.id }), API.owners.list()]);
+        const expenses = transactions.filter(item => item.tipo === 'expense' && !item.isRecurringInstance && !item.recoverableClaimId);
+        const tenants = owners.filter(item => (item.roles || []).includes('tenant'));
+        const form = create('div', { style: { display: 'grid', gap: '8px' } });
+        const expense = this.select([['', 'Seleccionar gasto'], ...expenses.map(item => [item.id, `${item.titulo} · ${item.fecha} · ${item.monto} ${item.currencyCode || 'EUR'}`])]);
+        const contract = this.select([['', 'Sin contrato'], ...contracts.map(item => [item.id, `${item.startDate} · ${item.tenants.map(tenant => tenant.name).join(', ')}`])]);
+        const tenant = this.select([['', 'Sin inquilino'], ...tenants.map(item => [item.id, item.name])]);
+        const amount = create('input', { className: 'form-control', type: 'number', min: '0.01', step: '0.01', placeholder: 'Importe recuperable' });
+        const selectedExpense = () => expenses.find(item => item.id === expense.value);
+        expense.addEventListener('change', () => {
+          const selected = selectedExpense();
+          amount.value = selected?.monto || '';
+          amount.step = ['JPY', 'KRW', 'CLP', 'PYG'].includes(selected?.currencyCode) ? '1' : '0.01';
+        });
+        form.append(create('label', {}, [create('span', { textContent: 'Gasto de origen' }), expense]));
+        form.append(create('label', {}, [create('span', { textContent: 'Contrato de alquiler (opcional)' }), contract]));
+        form.append(create('label', {}, [create('span', { textContent: 'Inquilino responsable (opcional)' }), tenant]));
+        form.append(create('label', {}, [create('span', { textContent: 'Importe recuperable' }), amount]));
+        Modal.show('Registrar gasto recuperable', form, { footer: create('div', {}, [
+          create('button', { className: 'btn btn-primary', type: 'button', textContent: 'Guardar reclamo', onClick: async () => {
+            try {
+              await API.finance.createClaim({ transactionId: expense.value, assetId: asset.id, contractId: contract.value || null, tenantEntityId: tenant.value || null, amount: Number(amount.value) });
+              Modal.hide();
+              await this.showDetails(asset.id);
+            } catch (error) { showToast(error.message, 'error'); }
+          } })
+        ]) });
+      } catch (error) { showToast(error.message, 'error'); }
+    });
   },
 
   async renderRentals(asset, container) {
@@ -357,6 +442,19 @@ const AssetsPage = {
         }).catch(error => balances.appendChild(create('small', { textContent: `No se pudieron cargar los cobros: ${error.message}` })));
         collectionHistory.appendChild(balances);
         card.appendChild(collectionHistory);
+        const movementAttributions = create('details', { style: { marginTop: '8px' } }, [create('summary', { textContent: 'Otros movimientos atribuidos al contrato' })]);
+        const movementRows = create('div', { style: { display: 'grid', gap: '4px', marginTop: '6px' } });
+        API.finance.allocations({ contractId: contract.id }).then(allocations => {
+          if (!allocations.length) movementRows.appendChild(create('small', { textContent: 'No hay atribuciones adicionales.' }));
+          allocations.forEach(allocation => {
+            const row = create('div', { className: 'card', style: { padding: '8px', display: 'flex', justifyContent: 'space-between', gap: '8px', alignItems: 'center' } });
+            row.appendChild(create('span', { textContent: `${allocation.transaction.titulo} · ${allocation.transaction.fecha} · ${allocation.amount} ${allocation.currencyCode}` }));
+            row.appendChild(create('button', { className: 'btn btn-ghost btn-sm', type: 'button', textContent: 'Editar atribuciones', disabled: Boolean(allocation.transaction.rentCollectionId), onClick: () => TransactionForm.show(() => this.showDetails(asset.id), allocation.transaction) }));
+            movementRows.appendChild(row);
+          });
+        }).catch(error => movementRows.appendChild(create('small', { textContent: `No se pudieron cargar las atribuciones: ${error.message}` })));
+        movementAttributions.appendChild(movementRows);
+        card.appendChild(movementAttributions);
         contractList.appendChild(card);
       });
     };
@@ -464,7 +562,7 @@ const AssetsPage = {
 
   async showRentCollectionModal(asset, contract, selectedOccurrenceId = null) {
     try {
-      const [fullContract, accounts] = await Promise.all([API.rentals.get(contract.id), API.accounts.list()]);
+      const [fullContract, accounts, paymentMethods] = await Promise.all([API.rentals.get(contract.id), API.accounts.list(), API.finance.paymentMethods()]);
       const open = fullContract.occurrences.filter(item => item.remainingMinor > 0 && item.status !== 'cancelled');
       const body = create('div', { style: { maxHeight: '65vh', overflowY: 'auto' } });
       const rows = create('div', { style: { display: 'grid', gap: '6px' } });
@@ -484,14 +582,17 @@ const AssetsPage = {
       const account = this.select([['', 'Seleccionar cuenta'], ...accounts.filter(item => item.activo && item.currency === contract.currencyCode).map(item => [item.id, item.nombre])]);
       body.append(create('label', { className: 'form-group' }, [create('span', { textContent: 'Cuenta (misma moneda del contrato)' }), account]));
       const date = this.rentalField(body, 'Fecha de cobro', { type: 'date', value: new Date().toISOString().slice(0, 10) });
-      const method = this.rentalField(body, 'Medio de cobro');
+      const method = this.rentalField(body, 'Medio de cobro (texto libre)');
+      const paymentMethod = this.select([['', 'Sin medio reutilizable'], ...paymentMethods.map(item => [item.id, `${item.name}${item.lastFour ? ` ···· ${item.lastFour}` : ''}`])]);
+      paymentMethod.addEventListener('change', () => { method.value = paymentMethods.find(item => item.id === paymentMethod.value)?.name || method.value; });
+      body.append(create('label', { className: 'form-group' }, [create('span', { textContent: 'Medio reutilizable' }), paymentMethod]));
       const footer = create('div', {}, [create('button', { className: 'btn btn-primary', type: 'button', textContent: 'Registrar cobro', onClick: async () => {
         const allocations = amountInputs.filter(item => item.checkbox.checked).map(item => ({ occurrenceId: item.occurrence.id, amount: Number(item.amount.value) }));
         if (!allocations.length) return showToast('Selecciona al menos un período para asignar', 'error');
         try {
           await API.rentals.collect({
             amount: Number(total.value), accountId: account.value, date: date.value,
-            method: method.value.trim(), allocations,
+            method: method.value.trim(), paymentMethodId: paymentMethod.value || null, allocations,
             idempotencyKey: crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}-rent`
           });
           showToast('Cobro registrado en los ingresos reales');

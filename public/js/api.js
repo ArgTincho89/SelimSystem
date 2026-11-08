@@ -110,6 +110,26 @@ const API = {
     delete(id) { return API.delete(`/transfers/${id}`); }
   },
 
+  finance: {
+    paymentMethods() { return API.get('/finance/payment-methods'); },
+    createPaymentMethod(data) { return API.post('/finance/payment-methods', data); },
+    updatePaymentMethod(id, data) { return API.put(`/finance/payment-methods/${encodeURIComponent(id)}`, data); },
+    deletePaymentMethod(id) { return API.delete(`/finance/payment-methods/${encodeURIComponent(id)}`); },
+    allocations(filters = {}) {
+      const query = new URLSearchParams(Object.entries(filters).filter(([, value]) => value));
+      return API.get(`/finance/allocations${query.toString() ? `?${query}` : ''}`);
+    },
+    associations(transactionId) { return API.get(`/finance/transactions/${encodeURIComponent(transactionId)}/associations`); },
+    setAllocations(transactionId, data) { return API.put(`/finance/transactions/${encodeURIComponent(transactionId)}/allocations`, data); },
+    claims(filters = {}) {
+      const query = new URLSearchParams(Object.entries(filters).filter(([, value]) => value));
+      const serialized = query.toString();
+      return API.get(`/finance/claims${serialized ? `?${serialized}` : ''}`);
+    },
+    createClaim(data) { return API.post('/finance/claims', data); },
+    collectClaim(id, data) { return API.post(`/finance/claims/${encodeURIComponent(id)}/recoveries`, data); }
+  },
+
   assets: {
     list(filters = {}) {
       const query = new URLSearchParams(Object.entries(filters).filter(([, value]) => value !== '' && value != null));
