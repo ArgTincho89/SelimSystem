@@ -259,6 +259,7 @@ const AssetsPage = {
       if (location) body.appendChild(create('p', { textContent: `Ubicación: ${location}` }));
       if (asset.notes) body.appendChild(create('p', { textContent: `Notas: ${asset.notes}` }));
       await this.renderRecoveries(asset, body);
+      await this.renderEconomicAnalysis(asset, body);
       body.appendChild(create('h4', { textContent: 'Historial de titularidad', style: { marginTop: '14px' } }));
       (asset.ownerships || []).forEach(record => {
         const line = create('div', { className: 'card', style: { marginTop: '8px' } });
@@ -374,6 +375,102 @@ const AssetsPage = {
         ]) });
       } catch (error) { showToast(error.message, 'error'); }
     });
+  },
+
+  async renderEconomicAnalysis(asset, container) {
+    const section = create('section', { style: { borderTop: '1px solid var(--border-color)', marginTop: '16px', paddingTop: '12px' } });
+    section.appendChild(create('h4', { textContent: 'Análisis económico del bien' }));
+    section.appendChild(create('p', { className: 'text-muted', textContent: 'Solo incluye movimientos reales contabilizados y atribuidos a este bien. Los importes pendientes se muestran aparte; no se convierten monedas.' }));
+    const controls = create('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '8px' } });
+    const mode = this.select([
+      ['acquisition', 'Desde adquisición o gestión hasta hoy'],
+      ['contract', 'Desde contratos activos hasta hoy'],
+      ['month', 'Mes seleccionado'],
+      ['year', 'Año seleccionado'],
+      ['custom', 'Rango personalizado']
+    ]);
+    mode.setAttribute('aria-label', 'Período del análisis económico');
+    const today = new Date();
+    const month = create('input', { className: 'form-control', type: 'month', value: `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`, 'aria-label': 'Mes' });
+    const year = create('input', { className: 'form-control', type: 'number', min: '1900', max: '9999', value: String(today.getFullYear()), 'aria-label': 'Año' });
+    const from = create('input', { className: 'form-control', type: 'date', 'aria-label': 'Desde' });
+    const to = create('input', { className: 'form-control', type: 'date', value: today.toISOString().slice(0, 10), 'aria-label': 'Hasta' });
+    const monthLabel = create('label', { textContent: 'Mes' }, [month]);
+    const yearLabel = create('label', { textContent: 'Año' }, [year]);
+    const fromLabel = create('label', { textContent: 'Desde' }, [from]);
+    const toLabel = create('label', { textContent: 'Hasta' }, [to]);
+    controls.append(mode, monthLabel, yearLabel, fromLabel, toLabel);
+    section.appendChild(controls);
+    const report = create('div', { style: { display: 'grid', gap: '8px', marginTop: '10px' } });
+    section.appendChild(report);
+    container.appendChild(section);
+
+    const updateControls = () => {
+      monthLabel.style.display = mode.value === 'month' ? '' : 'none';
+      yearLabel.style.display = mode.value === 'year' ? '' : 'none';
+      fromLabel.style.display = mode.value === 'custom' ? '' : 'none';
+      toLabel.style.display = mode.value === 'custom' ? '' : 'none';
+    };
+    mode.addEventListener('change', updateControls);
+    updateControls();
+    const load = async () => {
+      const filters = { period: mode.value };
+      if (mode.value === 'month') filters.month = month.value;
+      if (mode.value === 'year') filters.year = year.value;
+      if (mode.value === 'custom') { filters.from = from.value; filters.to = to.value; }
+      report.replaceChildren(create('small', { textContent: 'Cargando análisis económico...' }));
+      try {
+        const result = await API.assets.economics(asset.id, filters);
+        this.renderEconomicResult(report, result);
+      } catch (error) {
+        report.replaceChildren(create('small', { textContent: `No se pudo cargar el análisis económico: ${error.message}` }));
+      }
+    };
+    controls.appendChild(create('button', { className: 'btn btn-secondary btn-sm', type: 'button', textContent: 'Actualizar período', onClick: load }));
+    await load();
+  },
+
+  renderEconomicResult(container, result) {
+    container.replaceChildren();
+    container.appendChild(create('small', { className: 'text-muted', textContent: `Período: ${result.period.from} — ${result.period.to}` }));
+    if (!result.currencies.length) container.appendChild(create('small', { textContent: 'No hay movimientos reales atribuidos en este período.' }));
+    const movementList = create('div', { style: { display: 'grid', gap: '8px' } });
+    result.currencies.forEach(total => {
+      const card = create('article', { className: 'card', style: { padding: '10px' } });
+      card.appendChild(create('strong', { textContent: `${total.currency} · Resultado neto ${formatearMonedaConCodigo(total.netResult, total.currency)}` }));
+      card.appendChild(create('p', { textContent: `Ingresos reales: ${formatearMonedaConCodigo(total.income, total.currency)} · Gastos brutos: ${formatearMonedaConCodigo(total.grossExpenses, total.currency)} · Reembolsos: ${formatearMonedaConCodigo(total.refunds, total.currency)}` }));
+      card.appendChild(create('button', { className: 'btn btn-ghost btn-sm', type: 'button', textContent: 'Ver movimientos de esta moneda', onClick: () => {
+        movementList.querySelectorAll('[data-currency-row]').forEach(row => { row.style.display = row.dataset.currencyRow === total.currency ? '' : 'none'; });
+        movementList.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      } }));
+      container.appendChild(card);
+    });
+    if (result.evolution.length) {
+      const evolution = create('details', { className: 'card', style: { padding: '10px' } }, [create('summary', { textContent: 'Evolución mensual y acumulada' })]);
+      result.evolution.forEach(item => evolution.appendChild(create('p', { style: { margin: '5px 0' }, textContent: `${item.month} · ${item.currency} · ingresos ${formatearMonedaConCodigo(item.income, item.currency)} · gastos ${formatearMonedaConCodigo(item.expenses, item.currency)} · reembolsos ${formatearMonedaConCodigo(item.refunds, item.currency)} · neto ${formatearMonedaConCodigo(item.netResult, item.currency)} · acumulado ${formatearMonedaConCodigo(item.cumulativeResult, item.currency)}` })));
+      container.appendChild(evolution);
+    }
+    const movementsHeading = create('h5', { textContent: 'Movimientos reales', style: { margin: '8px 0 0' } });
+    container.append(movementsHeading, movementList);
+    if (!result.movements.length) movementList.appendChild(create('small', { textContent: 'No hay movimientos que detallar.' }));
+    result.movements.forEach(item => {
+      const row = create('article', { className: 'card', style: { padding: '8px' }, dataset: { currencyRow: item.currency } });
+      const sign = item.type === 'expense' ? '−' : '+';
+      row.appendChild(create('strong', { textContent: `${item.date} · ${item.concept} · ${sign}${formatearMonedaConCodigo(item.amount, item.currency)}` }));
+      row.appendChild(create('small', { style: { display: 'block' }, textContent: `${item.type === 'income' ? 'Ingreso' : item.type === 'expense' ? 'Gasto' : 'Reembolso'} · ${item.category || 'Sin categoría'} · ${item.account} · ${item.paymentMethod || 'Medio no indicado'} · ${item.contract || 'Sin contrato'} · ${item.status === 'posted' ? 'Contabilizado' : item.status}` }));
+      if (item.refundSourceId) row.appendChild(create('small', { style: { display: 'block' }, textContent: `Reembolso vinculado a: ${item.refundSourceConcept || 'gasto de origen'}` }));
+      (item.documents || []).forEach(document => {
+        const link = create('a', { href: API.documents.contentUrl(document.id), target: '_blank', rel: 'noopener noreferrer', textContent: `Documento: ${document.title || document.fileName}` });
+        row.appendChild(link);
+      });
+      movementList.appendChild(row);
+    });
+    const pending = create('section', { className: 'card', style: { padding: '10px' } });
+    pending.appendChild(create('strong', { textContent: 'Pendiente, fuera de resultados reales' }));
+    const pendingRows = [...(result.pending?.obligations || []).map(item => ({ ...item, kind: 'Obligación' })), ...(result.pending?.rents || []).map(item => ({ ...item, kind: 'Alquiler esperado' }))];
+    if (!pendingRows.length) pending.appendChild(create('small', { style: { display: 'block' }, textContent: 'No hay importes pendientes en este período.' }));
+    pendingRows.forEach(item => pending.appendChild(create('p', { style: { margin: '5px 0' }, textContent: `${item.date} · ${item.kind} · ${item.concept} · ${formatearMonedaConCodigo(item.amount, item.currency)} · ${item.status}` })));
+    container.appendChild(pending);
   },
 
   async renderRentals(asset, container) {

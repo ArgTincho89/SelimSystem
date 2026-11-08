@@ -2,9 +2,16 @@ const express = require('express');
 const { requireAuth } = require('../middleware/auth');
 const ledger = require('../services/account-ledger');
 const finance = require('../services/finance');
+const economicOverview = require('../services/economic-overview');
 
 const router = express.Router();
 router.use(requireAuth);
+
+router.get('/overview', (req, res) => {
+  const result = economicOverview.globalOverview(req.app.locals.db, req.session.userId, req.query.month || undefined);
+  if (result.error) return res.status(400).json({ error: result.error });
+  res.json(result);
+});
 
 function validDate(value) {
   if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;

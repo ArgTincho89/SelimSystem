@@ -1,5 +1,6 @@
 const express = require('express');
 const { requireAuth } = require('../middleware/auth');
+const economicOverview = require('../services/economic-overview');
 
 const router = express.Router();
 router.use(requireAuth);
@@ -166,6 +167,19 @@ router.get('/:id', (req, res) => {
   const asset = db.findById('assets', req.params.id, userId);
   if (!asset) return res.status(404).json({ error: 'Bien no encontrado' });
   res.json(assetResponse(db, userId, asset));
+});
+
+router.get('/:id/economics', (req, res) => {
+  const db = req.app.locals.db;
+  const userId = req.session.userId;
+  const asset = db.findById('assets', req.params.id, userId);
+  if (!asset) return res.status(404).json({ error: 'Bien no encontrado' });
+  const result = economicOverview.assetEconomics(db, userId, asset, {
+    period: req.query.period || 'acquisition', month: req.query.month,
+    year: req.query.year, from: req.query.from, to: req.query.to
+  });
+  if (result.error) return res.status(400).json({ error: result.error });
+  res.json(result);
 });
 
 router.put('/:id', (req, res) => {

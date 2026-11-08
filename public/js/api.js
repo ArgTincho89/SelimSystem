@@ -111,6 +111,7 @@ const API = {
   },
 
   finance: {
+    overview(month) { return API.get(`/finance/overview${month ? `?month=${encodeURIComponent(month)}` : ''}`); },
     paymentMethods() { return API.get('/finance/payment-methods'); },
     createPaymentMethod(data) { return API.post('/finance/payment-methods', data); },
     updatePaymentMethod(id, data) { return API.put(`/finance/payment-methods/${encodeURIComponent(id)}`, data); },
@@ -137,6 +138,10 @@ const API = {
       return API.get(`/assets${serialized ? `?${serialized}` : ''}`);
     },
     get(id) { return API.get(`/assets/${id}`); },
+    economics(id, filters = {}) {
+      const query = new URLSearchParams(Object.entries(filters).filter(([, value]) => value !== '' && value != null));
+      return API.get(`/assets/${encodeURIComponent(id)}/economics${query.toString() ? `?${query}` : ''}`);
+    },
     create(data) { return API.post('/assets', data); },
     update(id, data) { return API.put(`/assets/${id}`, data); },
     addOwnership(id, data) { return API.post(`/assets/${id}/ownerships`, data); },

@@ -25,16 +25,17 @@ const HomePage = {
 
     try {
       const trendsFrom = addMonths(this.currentMonth, -5);
-      const [summary, transactions, categories, accounts, trends] = await Promise.all([
+      const [summary, transactions, categories, accounts, trends, overview] = await Promise.all([
         API.summary.get(this.currentMonth),
         API.transactions.list(this.currentMonth),
         API.categories.list(),
         API.accounts.list(),
-        API.trends.get(trendsFrom, this.currentMonth, null).catch(() => null)
+        API.trends.get(trendsFrom, this.currentMonth, null).catch(() => null),
+        API.finance.overview(this.currentMonth)
       ]);
 
       localStorage.setItem('pate_app_currency', summary.activeCurrency || 'EUR');
-      this.renderContent(content, summary, transactions, categories, { desktop, accounts, trends });
+      this.renderContent(content, summary, transactions, categories, { desktop, accounts, trends, overview });
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
           content.classList.add('visible');
@@ -70,22 +71,32 @@ const HomePage = {
 
     const statsRow = create('div', { className: 'stats-row home-stats' });
 
-    const savingsColor = summary.ahorro >= 0 ? 'var(--success)' : 'var(--danger)';
-
-    const incomeCard = this.createStat('Ingresos', this.metricCurrencyRows(summary, 'income', summary.ingresos), 'var(--income-color)');
+    const overview = options.overview || { currencies: [], movements: [], transfers: [], pending: { obligations: [], rents: [] } };
+    const incomeCard = this.createStat('Ingresos reales', this.overviewMetricCurrencyRows(overview, 'income'), 'var(--income-color)');
+    this.attachEconomicDrilldown(incomeCard, overview, 'income');
     statsRow.appendChild(incomeCard);
-    statsRow.appendChild(this.createStat('Gastos', this.metricCurrencyRows(summary, 'expenses', summary.gastosNetos), 'var(--expense-color)'));
-    const savingsCard = this.createStat('Ahorro', this.metricCurrencyRows(summary, 'savings', summary.ahorro), savingsColor);
+    const expenseCard = this.createStat('Gastos brutos', this.overviewMetricCurrencyRows(overview, 'expenses'), 'var(--expense-color)');
+    this.attachEconomicDrilldown(expenseCard, overview, 'expense');
+    statsRow.appendChild(expenseCard);
+    const refundCard = this.createStat('Reembolsos', this.overviewMetricCurrencyRows(overview, 'refunds'), 'var(--refund-color)');
+    this.attachEconomicDrilldown(refundCard, overview, 'refund');
+    statsRow.appendChild(refundCard);
+    const netExpenseCard = this.createStat('Gastos netos', this.overviewMetricCurrencyRows(overview, 'netExpenses'), 'var(--expense-color)');
+    this.attachEconomicDrilldown(netExpenseCard, overview, 'net-expense');
+    statsRow.appendChild(netExpenseCard);
+    const activeSavings = overview.currencies?.find(total => total.currency === overview.activeCurrency)?.savings || 0;
+    const savingsColor = activeSavings >= 0 ? 'var(--success)' : 'var(--danger)';
+    const savingsCard = this.createStat('Ahorro real', this.overviewMetricCurrencyRows(overview, 'savings'), savingsColor);
+    this.attachEconomicDrilldown(savingsCard, overview, 'savings');
     statsRow.appendChild(savingsCard);
 
-    const incomeVal = incomeCard.querySelector('.stat-value');
-    const savingsVal = savingsCard.querySelector('.stat-value');
+    const sensitiveValues = $$('.stat-value', statsRow);
     if (incomeHidden) {
-      incomeVal.classList.add('income-blurred');
-      savingsVal.classList.add('income-blurred');
+      sensitiveValues.forEach(value => value.classList.add('income-blurred'));
     }
 
     if (!options.desktop) transactionPane.appendChild(statsRow);
+    if (!options.desktop) transactionPane.appendChild(this.renderEconomicContext(overview));
     if (!options.desktop) transactionPane.appendChild(this.renderAccountCards(options.accounts || []));
     if (!options.desktop) {
       const analytics = create('section', { className: 'home-analytics', 'aria-label': 'Analítica' });
@@ -127,8 +138,7 @@ const HomePage = {
       on(eyeBtn, 'click', () => {
         const nowHidden = localStorage.getItem('pate_hide_income') !== 'true';
         this.applyPrivacy(nowHidden);
-        incomeVal.classList.toggle('income-blurred', nowHidden);
-        savingsVal.classList.toggle('income-blurred', nowHidden);
+        sensitiveValues.forEach(value => value.classList.toggle('income-blurred', nowHidden));
         eyeBtn.innerHTML = nowHidden ? SVG_EYE_CLOSED : SVG_EYE_OPEN;
         eyeBtn.title = nowHidden ? 'Mostrar ingresos' : 'Ocultar ingresos';
       });
@@ -239,22 +249,29 @@ const HomePage = {
     content.appendChild(create('h1', { className: 'visually-hidden', textContent: 'Inicio' }));
 
     let hidden = localStorage.getItem('pate_hide_income') === 'true';
+    const overview = options.overview || { currencies: [], movements: [], transfers: [], pending: { obligations: [], rents: [] } };
+    const activeSavings = overview.currencies?.find(total => total.currency === overview.activeCurrency)?.savings || 0;
     const values = {
-      ingresos: this.metricCurrencyRows(summary, 'income', summary.ingresos),
-      gastos: this.metricCurrencyRows(summary, 'expenses', summary.gastosNetos),
-      ahorro: this.metricCurrencyRows(summary, 'savings', summary.ahorro)
+      ingresos: this.overviewMetricCurrencyRows(overview, 'income'),
+      gastos: this.overviewMetricCurrencyRows(overview, 'expenses'),
+      reembolsos: this.overviewMetricCurrencyRows(overview, 'refunds'),
+      neto: this.overviewMetricCurrencyRows(overview, 'netExpenses'),
+      ahorro: this.overviewMetricCurrencyRows(overview, 'savings')
     };
 
     const statsRow = create('div', { className: 'stats-row desktop-home-stats home-stats', 'aria-label': 'Resumen del mes' });
     this.desktopStatsRow = statsRow;
     const descriptors = [
-      { id: 'ingresos', label: 'Ingresos', color: 'var(--income-color)' },
-      { id: 'gastos', label: 'Gastos', color: 'var(--expense-color)' },
-      { id: 'ahorro', label: 'Ahorro', color: summary.ahorro > 0 ? 'var(--success)' : summary.ahorro < 0 ? 'var(--danger)' : 'var(--text-primary)' }
+      { id: 'ingresos', label: 'Ingresos reales', color: 'var(--income-color)', type: 'income' },
+      { id: 'gastos', label: 'Gastos brutos', color: 'var(--expense-color)', type: 'expense' },
+      { id: 'reembolsos', label: 'Reembolsos', color: 'var(--refund-color)', type: 'refund' },
+      { id: 'neto', label: 'Gastos netos', color: 'var(--expense-color)', type: 'net-expense' },
+      { id: 'ahorro', label: 'Ahorro real', color: activeSavings > 0 ? 'var(--success)' : activeSavings < 0 ? 'var(--danger)' : 'var(--text-primary)', type: 'savings' }
     ];
 
-    this.renderDesktopStats(statsRow, descriptors, values, hidden);
+    this.renderDesktopStats(statsRow, descriptors, values, hidden, overview);
     content.appendChild(statsRow);
+    content.appendChild(this.renderEconomicContext(overview));
     content.appendChild(this.renderAccountCards(options.accounts || []));
 
     const controls = create('div', { className: 'desktop-home-controls', 'aria-label': 'Controles de inicio' });
@@ -285,7 +302,7 @@ const HomePage = {
       eyeButton.title = shouldHide ? 'Mostrar métricas principales' : 'Ocultar métricas principales';
       eyeButton.setAttribute('aria-label', shouldHide ? 'Métricas principales ocultas' : 'Métricas principales visibles');
       eyeButton.setAttribute('aria-pressed', String(shouldHide));
-      this.renderDesktopStats(statsRow, descriptors, values, shouldHide);
+      this.renderDesktopStats(statsRow, descriptors, values, shouldHide, overview);
       this.renderFavoriteSlot();
     });
     controlActions.appendChild(eyeButton);
@@ -347,15 +364,29 @@ const HomePage = {
     requestAnimationFrame(() => Charts.redraw(analyticsContent));
   },
 
-  renderDesktopStats(container, descriptors, values, hidden) {
+  renderDesktopStats(container, descriptors, values, hidden, overview) {
     container.replaceChildren();
     const metricIcons = {
       ingresos: '<path d="M12 19V5M5 12l7-7 7 7"/>',
       gastos: '<path d="M12 5v14m-7-7 7 7 7-7"/>',
+      reembolsos: '<path d="M9 14l-4-4 4-4M5 10h9a5 5 0 010 10h-2"/>',
+      neto: '<path d="M4 7h16M4 12h10M4 17h6"/>',
       ahorro: '<circle cx="12" cy="12" r="9"/><path d="M15 9.5c0-1.1-1.3-2-3-2s-3 .9-3 2 1.3 2 3 2 3 .9 3 2-1.3 2-3 2-3-.9-3-2M12 6v12"/>'
     };
-    descriptors.forEach(({ id, label, color }) => {
+    descriptors.forEach(({ id, label, color, type }) => {
       const card = create('article', { className: `stat-card desktop-stat-card desktop-stat-${id}` });
+      if (type) {
+        card.setAttribute('role', 'button');
+        card.setAttribute('tabindex', '0');
+        card.setAttribute('aria-label', `Ver movimientos: ${label}`);
+        on(card, 'click', () => this.showEconomicMovements(overview, type));
+        on(card, 'keydown', event => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            this.showEconomicMovements(overview, type);
+          }
+        });
+      }
       const labelRow = create('div', { className: 'desktop-stat-label-row' });
       const heading = create('span', { className: 'desktop-stat-heading' });
       heading.appendChild(create('span', {
@@ -602,6 +633,79 @@ const HomePage = {
     this.fillStatValue(val, rows);
     card.appendChild(val);
     return card;
+  },
+
+  overviewMetricCurrencyRows(overview, metric) {
+    const active = overview?.activeCurrency || 'EUR';
+    const values = { income: 'income', expenses: 'expenses', refunds: 'refunds', netExpenses: 'netExpenses', savings: 'savings' };
+    let rows = (overview?.currencies || []).map(total => ({ currency: total.currency, amount: total[values[metric]] || 0 }))
+      .filter(row => row.currency && Number.isFinite(row.amount));
+    if (!rows.length) rows = [{ currency: active, amount: 0 }];
+    return rows.sort((a, b) => a.currency === active ? -1 : b.currency === active ? 1 : a.currency.localeCompare(b.currency))
+      .map(row => ({ ...row, positivePrefix: metric === 'savings' && rows.length === 1 && row.amount > 0 }));
+  },
+
+  attachEconomicDrilldown(card, overview, type) {
+    card.setAttribute('role', 'button');
+    card.setAttribute('tabindex', '0');
+    card.setAttribute('aria-label', `Ver movimientos: ${card.querySelector('.stat-label')?.textContent || 'Resumen'}`);
+    card.style.cursor = 'pointer';
+    on(card, 'click', () => this.showEconomicMovements(overview, type));
+    on(card, 'keydown', event => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        this.showEconomicMovements(overview, type);
+      }
+    });
+  },
+
+  showEconomicMovements(overview, type = null) {
+    const rows = type === 'transfer'
+      ? (overview?.transfers || [])
+      : (overview?.movements || []).filter(item => type === 'savings' || !type || item.type === type || type === 'net-expense' && item.type === 'refund');
+    const body = create('div', { style: { maxHeight: '60vh', overflowY: 'auto', display: 'grid', gap: '8px' } });
+    body.appendChild(create('p', { className: 'text-muted', textContent: `Movimientos reales de ${overview?.month || ''}. Las monedas se muestran por separado, sin conversión.` }));
+    if (!rows.length) body.appendChild(create('div', { className: 'empty-state', textContent: 'No hay movimientos para este detalle.' }));
+    rows.forEach(item => {
+      const line = create('article', { className: 'card', style: { padding: '10px' } });
+      if (item.type === 'transfer') {
+        line.appendChild(create('strong', { textContent: `${item.date} · ${item.concept}` }));
+        line.appendChild(create('p', { textContent: `${item.fromAccount}: ${formatearMonedaConCodigo(item.sentAmount, item.fromCurrency)} → ${item.toAccount}: ${formatearMonedaConCodigo(item.receivedAmount, item.toCurrency)}` }));
+        if (item.feeAmount) line.appendChild(create('small', { textContent: `Comisión contabilizada como gasto: ${formatearMonedaConCodigo(item.feeAmount, item.fromCurrency)}` }));
+      } else {
+        const sign = item.type === 'expense' ? '−' : '+';
+        line.appendChild(create('strong', { textContent: `${item.date} · ${item.concept}` }));
+        line.appendChild(create('p', { textContent: `${item.type === 'income' ? 'Ingreso' : item.type === 'expense' ? 'Gasto' : 'Reembolso'} · ${sign}${formatearMonedaConCodigo(item.amount, item.currency)} · ${item.accountName}` }));
+        if (item.refundSourceId) line.appendChild(create('small', { textContent: `Reembolso de: ${item.refundSourceConcept || 'gasto de origen'}` }));
+      }
+      body.appendChild(line);
+    });
+    Modal.show('Detalle del resumen económico', body, { footer: create('div', {}, [create('button', { className: 'btn btn-primary', type: 'button', textContent: 'Cerrar', onClick: () => Modal.hide() })]) });
+  },
+
+  renderEconomicContext(overview) {
+    const section = create('section', { className: 'card', style: { margin: '0 0 14px' } });
+    section.appendChild(create('h3', { textContent: `Movimientos entre cuentas · ${overview?.month || ''}` }));
+    section.appendChild(create('p', { className: 'text-muted', textContent: 'Las transferencias no se consideran ingresos ni gastos; cada importe conserva su moneda y no se convierten entre sí.' }));
+    const transfers = overview?.transfers || [];
+    if (!transfers.length) section.appendChild(create('small', { textContent: 'No hay transferencias contabilizadas en este mes.' }));
+    else {
+      (overview.currencies || []).filter(total => total.transferIn || total.transferOut).forEach(total => {
+        section.appendChild(create('p', { textContent: `${total.currency} · Entradas: ${formatearMonedaConCodigo(total.transferIn, total.currency)} · Salidas: ${formatearMonedaConCodigo(total.transferOut, total.currency)}` }));
+      });
+      section.appendChild(create('button', { className: 'btn btn-ghost btn-sm', type: 'button', textContent: 'Ver transferencias', onClick: () => this.showEconomicMovements(overview, 'transfer') }));
+    }
+    const pending = overview?.pending || { obligations: [], rents: [] };
+    section.appendChild(create('h4', { textContent: 'Pendiente, fuera de los importes reales', style: { marginTop: '12px' } }));
+    const showPending = (label, items) => {
+      section.appendChild(create('strong', { textContent: `${label} (${items.length})` }));
+      if (!items.length) section.appendChild(create('small', { style: { display: 'block' }, textContent: 'Sin importes pendientes en este mes.' }));
+      items.slice(0, 5).forEach(item => section.appendChild(create('p', { style: { margin: '4px 0' }, textContent: `${item.date} · ${item.concept} · ${formatearMonedaConCodigo(item.amount, item.currency)} · ${item.status}` })));
+      if (items.length > 5) section.appendChild(create('small', { textContent: `Y ${items.length - 5} elementos más.` }));
+    };
+    showPending('Obligaciones', pending.obligations || []);
+    showPending('Alquileres esperados', pending.rents || []);
+    return section;
   },
 
   // Builds the per-currency rows shown inside a metric card. Currencies with a
