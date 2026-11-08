@@ -513,7 +513,7 @@ const TransactionForm = {
           const created = await API.transactions.create(data);
           savedTransactionId = created.id;
         }
-        if (!transaction?.isRecurringInstance) {
+        if (!transaction?.isRecurringInstance && selectedType !== 'refund') {
           const allocations = [...allocationRows.querySelectorAll(':scope > div')].map(row => {
             const { target, amount } = row._allocationFields;
             if (!target.value || amount.value === '') return null;

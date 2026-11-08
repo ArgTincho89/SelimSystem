@@ -5,9 +5,7 @@ export class SummaryPage extends BasePage {
   readonly selectors = {
     navbar: '#navbar',
     summarySection: '.summary-section',
-    statIngresos: '.stat-card:has-text("Ingresos")',
-    statGastos: '.stat-card:has-text("Gastos")',
-    statAhorro: '.stat-card:has-text("Ahorro")',
+    statCard: '.stats-row .stat-card',
   };
 
   constructor(page: Page) {
@@ -21,9 +19,15 @@ export class SummaryPage extends BasePage {
   }
 
   async expectSummaryLoaded(): Promise<void> {
-    await expect(this.page.locator(this.selectors.statIngresos)).toBeVisible();
-    await expect(this.page.locator(this.selectors.statGastos)).toBeVisible();
-    await expect(this.page.locator(this.selectors.statAhorro)).toBeVisible();
+    await expect(this.metricCard('Ingresos reales')).toBeVisible();
+    await expect(this.metricCard('Gastos netos')).toBeVisible();
+    await expect(this.metricCard('Ahorro real')).toBeVisible();
+  }
+
+  private metricCard(label: string): Locator {
+    return this.page.locator(this.selectors.statCard).filter({
+      has: this.page.getByText(label, { exact: true }),
+    }).first();
   }
 
   async expectIvaBadge(amountText: string): Promise<void> {

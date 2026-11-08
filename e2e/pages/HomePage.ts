@@ -95,11 +95,9 @@ export class HomePage extends BasePage {
   }
 
   private statCard(label: string): Locator {
-    const statIds: Record<string, string> = { Ingresos: 'ingresos', Gastos: 'gastos', Ahorro: 'ahorro' };
-    const id = statIds[label];
-    return id
-      ? this.page.locator(`.desktop-stat-${id}, .stats-row .stat-card`).filter({ hasText: label }).first()
-      : this.page.locator('.stat-card').filter({ hasText: label }).first();
+    return this.page.locator('.stats-row .stat-card')
+      .filter({ has: this.page.getByText(label, { exact: true }) })
+      .first();
   }
 
   async getStatValue(label: string): Promise<string> {
@@ -119,18 +117,18 @@ export class HomePage extends BasePage {
   }
 
   async expectValuesBlurred(): Promise<void> {
-    await expect(this.statCard('Ingresos').locator('.stat-value')).toHaveClass(/income-blurred/);
-    await expect(this.statCard('Ahorro').locator('.stat-value')).toHaveClass(/income-blurred/);
+    await expect(this.statCard('Ingresos reales').locator('.stat-value')).toHaveClass(/income-blurred/);
+    await expect(this.statCard('Ahorro real').locator('.stat-value')).toHaveClass(/income-blurred/);
     if (await this.page.locator('body.desktop-mode').count()) {
-      await expect(this.statCard('Gastos').locator('.stat-value')).toHaveClass(/income-blurred/);
+      await expect(this.statCard('Gastos netos').locator('.stat-value')).toHaveClass(/income-blurred/);
     }
   }
 
   async expectValuesNotBlurred(): Promise<void> {
-    await expect(this.statCard('Ingresos').locator('.stat-value')).not.toHaveClass(/income-blurred/);
-    await expect(this.statCard('Ahorro').locator('.stat-value')).not.toHaveClass(/income-blurred/);
+    await expect(this.statCard('Ingresos reales').locator('.stat-value')).not.toHaveClass(/income-blurred/);
+    await expect(this.statCard('Ahorro real').locator('.stat-value')).not.toHaveClass(/income-blurred/);
     if (await this.page.locator('body.desktop-mode').count()) {
-      await expect(this.statCard('Gastos').locator('.stat-value')).not.toHaveClass(/income-blurred/);
+      await expect(this.statCard('Gastos netos').locator('.stat-value')).not.toHaveClass(/income-blurred/);
     }
   }
 
@@ -158,7 +156,7 @@ export class HomePage extends BasePage {
 
   async expectNoPersistedCategoryBreakdownFavorite(): Promise<void> {
     await expect(this.page.locator(this.selectors.favoriteCard)).toHaveCount(0);
-    await expect(this.page.locator('.desktop-home-stats > .desktop-stat-card')).toHaveCount(3);
+    await this.expectFivePrimaryCards();
     expect(await this.page.evaluate(() => localStorage.getItem('pate_home_favorite'))).toBeNull();
   }
 
@@ -189,15 +187,15 @@ export class HomePage extends BasePage {
       };
     });
     expect(metrics.height).toBeLessThanOrEqual(110);
-    expect(metrics.rowHeight).toBeLessThanOrEqual(121);
-    expect(metrics.slotIndex).toBe(3);
-    expect(metrics.savingsIndex).toBe(2);
+    expect(metrics.rowHeight).toBeLessThanOrEqual(237);
+    expect(metrics.slotIndex).toBe(5);
+    expect(metrics.savingsIndex).toBe(4);
     expect(metrics.favoriteLeft).toBeGreaterThanOrEqual(metrics.savingsRight);
     expect(metrics.overflowY).toBe('visible');
     expect(metrics.overflowX).toBe('visible');
     expect(metrics.scrollHeight).toBeLessThanOrEqual(metrics.clientHeight + 1);
     expect(metrics.canvasHeight).toBeLessThanOrEqual(66);
-    expect(metrics.primaryCardHeights).toEqual([110, 110, 110]);
+    expect(metrics.primaryCardHeights).toEqual([110, 110, 110, 110, 110]);
   }
 
   async expectFavoriteLegendContains(...values: string[]): Promise<void> {
@@ -271,7 +269,19 @@ export class HomePage extends BasePage {
 
   async expectFixedMetricsHaveNoStars(): Promise<void> {
     await expect(this.page.locator('.desktop-home-stats > .desktop-stat-card .analytics-favorite-toggle')).toHaveCount(0);
-    await expect(this.page.locator('.desktop-stat-card')).toHaveCount(3);
+    await this.expectFivePrimaryCards();
+  }
+
+  async expectFivePrimaryCards(): Promise<void> {
+    const cards = this.page.locator('.desktop-home-stats > .desktop-stat-card:not(.desktop-favorite-card)');
+    await expect(cards).toHaveCount(5);
+    await expect(cards.locator('.stat-label')).toHaveText([
+      'Ingresos reales',
+      'Gastos brutos',
+      'Reembolsos',
+      'Gastos netos',
+      'Ahorro real',
+    ]);
   }
 
   async expectLegacyAnalyticsNavigationRemoved(): Promise<void> {
@@ -413,12 +423,12 @@ export class HomePage extends BasePage {
     expect(order).toEqual(['Nueva transacción,Privacidad,Filtro', 'Mes']);
   }
 
-  async expectThreePrimaryCards(): Promise<void> {
-    await expect(this.page.locator('.desktop-home-stats > .desktop-stat-card:not(.desktop-favorite-card)')).toHaveCount(3);
+  async expectFivePrimaryMetrics(): Promise<void> {
+    await this.expectFivePrimaryCards();
   }
 
   async expectDesktopMetricIconsAndTransactionLabel(): Promise<void> {
-    for (const id of ['ingresos', 'gastos', 'ahorro']) {
+    for (const id of ['ingresos', 'gastos', 'reembolsos', 'neto', 'ahorro']) {
       const icon = this.page.locator(`.desktop-stat-${id} .desktop-stat-icon svg`);
       await expect(icon).toHaveCount(1);
       await expect(icon).toHaveAttribute('aria-hidden', 'true');
@@ -557,11 +567,10 @@ export class HomePage extends BasePage {
     await this.page.locator('.modal-overlay button:has-text("Cancelar")').click();
   }
 
-  async expectDesktopTransactionCommentTooltip(titulo: string, comments: string): Promise<void> {
+  async expectDesktopTransactionCommentsInTitle(titulo: string, comments: string): Promise<void> {
     const item = this.page.locator('.desktop-transaction-item').filter({ hasText: titulo });
     await expect(item).toHaveAttribute('title', `Comentarios: ${comments}`);
     await expect(item).not.toContainText(comments);
-    await item.hover();
   }
 
   async deleteTransaction(titulo: string): Promise<void> {

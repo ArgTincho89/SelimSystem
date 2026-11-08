@@ -111,9 +111,11 @@ When('redimensiono el inicio al ancho de escritorio {int}', async function (this
 });
 
 When('configuro el inicio en modo escritorio', async function (this: SelimSystemWorld) {
+  await this.page!.setViewportSize({ width: 1280, height: 900 });
   await this.page!.evaluate(() => localStorage.setItem('pate_experience', 'desktop'));
   await this.page!.reload();
   await this.page!.waitForSelector('.desktop-home-workspace', { state: 'visible' });
+  await expect(this.page!.locator('body')).toHaveClass(/desktop-mode/);
 });
 
 When('guardo el desglose por categoría como favorito heredado y recargo', async function (this: SelimSystemWorld) {
@@ -147,13 +149,13 @@ Then('los comentarios de {string} se muestran en el detalle y el formulario de e
   await homePage.expectTransactionCommentsInDetailAndEdit(titulo, comments);
 });
 
-Then('el tooltip de escritorio de {string} muestra los comentarios {string}', async function (
+Then('los comentarios de escritorio de {string} se guardan en el atributo title y no se muestran inline como {string}', async function (
   this: SelimSystemWorld,
   titulo: string,
   comments: string
 ) {
   const homePage = new HomePage(this.page!);
-  await homePage.expectDesktopTransactionCommentTooltip(titulo, comments);
+  await homePage.expectDesktopTransactionCommentsInTitle(titulo, comments);
 });
 
 Then('el título del mes cambia', async function (this: SelimSystemWorld) {
@@ -196,9 +198,9 @@ Then('los controles de inicio aparecen en el orden requerido', async function (t
   await homePage.expectDesktopControlOrder();
 });
 
-Then('aparecen tres tarjetas principales', async function (this: SelimSystemWorld) {
+Then('aparecen cinco métricas principales', async function (this: SelimSystemWorld) {
   const homePage = new HomePage(this.page!);
-  await homePage.expectThreePrimaryCards();
+  await homePage.expectFivePrimaryMetrics();
 });
 
 Then('las métricas tienen iconos decorativos y el botón dice Nueva transacción', async function (this: SelimSystemWorld) {
@@ -206,7 +208,7 @@ Then('las métricas tienen iconos decorativos y el botón dice Nueva transacció
   await homePage.expectDesktopMetricIconsAndTransactionLabel();
 });
 
-Then('las tres métricas principales no tienen estrellas', async function (this: SelimSystemWorld) {
+Then('las cinco métricas principales no tienen estrellas', async function (this: SelimSystemWorld) {
   const homePage = new HomePage(this.page!);
   await homePage.expectFixedMetricsHaveNoStars();
 });
@@ -241,7 +243,7 @@ Then('el favorito heredado de desglose por categoría se descarta', async functi
   await homePage.expectNoPersistedCategoryBreakdownFavorite();
 });
 
-Then('la réplica favorita es compacta, sin desplazamiento interno y amplía la fila KPI como máximo un 10 por ciento', async function (this: SelimSystemWorld) {
+Then('la réplica favorita es compacta, sin desplazamiento interno y la fila KPI ocupa como máximo dos filas', async function (this: SelimSystemWorld) {
   const homePage = new HomePage(this.page!);
   await homePage.expectFavoriteReplicaCompactWithoutScrolling();
 });

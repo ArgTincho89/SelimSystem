@@ -184,5 +184,6 @@ body.desktop-mode #page-content {
 body.desktop-home #page-content {
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
