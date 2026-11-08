@@ -1,0 +1,3 @@
+# Jest coverage thresholds apply to the full source set, so run every suite
+# to collect complete coverage before allowing a push.
+npm run test:coverage

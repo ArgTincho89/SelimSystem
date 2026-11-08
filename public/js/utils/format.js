@@ -1,0 +1,97 @@
+function formatearEuro(cantidad) {
+  const currency = localStorage.getItem('pate_app_currency') || 'EUR';
+  return formatearMoneda(cantidad, currency);
+}
+
+function formatearMoneda(cantidad, currency = 'EUR', locale = null) {
+  const language = locale || localStorage.getItem('pate_locale') || 'es-AR';
+  try {
+    const zeroDecimalCurrencies = ['JPY', 'KRW', 'CLP', 'PYG', 'BIF', 'DJF', 'GNF', 'KMF', 'RWF', 'UGX', 'VND', 'VUV', 'XAF', 'XOF', 'XPF'];
+    return new Intl.NumberFormat(language, { style: 'currency', currency, maximumFractionDigits: zeroDecimalCurrencies.includes(currency) ? 0 : 2 }).format(cantidad);
+  } catch {
+    return `${currency} ${new Intl.NumberFormat('es-AR', { maximumFractionDigits: 2 }).format(cantidad)}`;
+  }
+}
+
+// Formats an amount as "<CODE> <number>", e.g. "EUR 2.500,00". Used where
+// several currencies are shown together and a symbol would be ambiguous.
+function formatearMonedaConCodigo(cantidad, currency = 'EUR', locale = null) {
+  const language = locale || localStorage.getItem('pate_locale') || 'es-AR';
+  const zeroDecimalCurrencies = ['JPY', 'KRW', 'CLP', 'PYG', 'BIF', 'DJF', 'GNF', 'KMF', 'RWF', 'UGX', 'VND', 'VUV', 'XAF', 'XOF', 'XPF'];
+  const digits = zeroDecimalCurrencies.includes(currency) ? 0 : 2;
+  try {
+    const amount = new Intl.NumberFormat(language, {
+      minimumFractionDigits: digits,
+      maximumFractionDigits: digits
+    }).format(cantidad);
+    return `${currency} ${amount}`;
+  } catch {
+    return `${currency} ${cantidad}`;
+  }
+}
+
+function parseFecha(fechaStr) {
+  const [year, month, day] = fechaStr.split('-').map(Number);
+  return new Date(year, month - 1, day);
+}
+
+function formatFechaLarga(fechaStr) {
+  const date = parseFecha(fechaStr);
+  return date.toLocaleDateString(localStorage.getItem('pate_locale') || 'es-ES', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long'
+  });
+}
+
+function formatFechaCorta(fechaStr) {
+  const date = parseFecha(fechaStr);
+  return date.toLocaleDateString(localStorage.getItem('pate_locale') || 'es-ES', {
+    day: 'numeric',
+    month: 'short'
+  });
+}
+
+function formatMonth(monthStr) {
+  const [year, month] = monthStr.split('-');
+  const date = new Date(parseInt(year), parseInt(month) - 1);
+  const raw = date.toLocaleDateString(localStorage.getItem('pate_locale') || 'es-ES', { month: 'long', year: 'numeric' });
+  return raw.charAt(0).toUpperCase() + raw.slice(1);
+}
+
+function formatMonthLabel(monthStr) {
+  const [year, month] = monthStr.split('-');
+  const rawMonth = new Date(parseInt(year), parseInt(month) - 1)
+    .toLocaleDateString(localStorage.getItem('pate_locale') || 'es-ES', { month: 'long' });
+  const monthLabel = rawMonth.charAt(0).toUpperCase() + rawMonth.slice(1);
+  return `${monthLabel} ${year}`;
+}
+
+function getCurrentMonth() {
+  return getToday().slice(0, 7);
+}
+
+function getToday() {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: localStorage.getItem('pate_timezone') || Intl.DateTimeFormat().resolvedOptions().timeZone,
+    year: 'numeric', month: '2-digit', day: '2-digit'
+  }).formatToParts(new Date()).reduce((result, part) => ({ ...result, [part.type]: part.value }), {});
+  return `${parts.year}-${parts.month}-${parts.day}`;
+}
+
+function addMonths(monthStr, delta) {
+  const [year, month] = monthStr.split('-').map(Number);
+  const date = new Date(year, month - 1 + delta);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function groupTransactionsByDate(transactions) {
+  const groups = {};
+  transactions.forEach(t => {
+    if (!groups[t.fecha]) groups[t.fecha] = [];
+    groups[t.fecha].push(t);
+  });
+  return Object.entries(groups)
+    .sort(([a], [b]) => b.localeCompare(a))
+    .map(([fecha, items]) => ({ fecha, items }));
+}

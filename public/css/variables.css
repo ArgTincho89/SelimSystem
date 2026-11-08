@@ -1,0 +1,55 @@
+:root {
+  --bg-primary: #1a1a2e;
+  --bg-secondary: #16213e;
+  --bg-card: #0f3460;
+  --bg-input: #1a1a3e;
+  --bg-hover: #1a2744;
+
+  --text-primary: #e8e8e8;
+  --text-secondary: #a0a0b0;
+  --text-muted: #6c6c7c;
+
+  --accent: #4ECDC4;
+  --accent-hover: #3dbdb5;
+  --accent-light: rgba(78, 205, 196, 0.15);
+
+  --danger: #FF6B6B;
+  --danger-hover: #e55a5a;
+  --success: #4ECDC4;
+  --warning: #FFE66D;
+
+  --income-color: #4ECDC4;
+  --expense-color: #FF6B6B;
+  --refund-color: #FFE66D;
+
+  --border: #2a2a4a;
+  --shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.4);
+
+  --radius-sm: 6px;
+  --radius: 10px;
+  --radius-lg: 16px;
+  --radius-full: 50%;
+
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 16px;
+  --space-lg: 24px;
+  --space-xl: 32px;
+
+  --font-xs: 0.7rem;
+  --font-sm: 0.85rem;
+  --font-base: 1rem;
+  --font-md: 1.1rem;
+  --font-lg: 1.3rem;
+  --font-xl: 1.6rem;
+  --font-2xl: 2rem;
+
+  --navbar-height: 64px;
+  --desktop-nav-width: 88px;
+  --header-height: 56px;
+  --touch-min: 44px;
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+
+  --transition: 0.2s ease;
+}

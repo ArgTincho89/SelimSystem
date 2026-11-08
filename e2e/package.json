@@ -1,0 +1,29 @@
+{
+  "name": "selimsystem-e2e",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Suite E2E/API para SelimSystem con Playwright + TypeScript + Cucumber",
+  "scripts": {
+    "precucumber": "node -e \"require('fs').mkdirSync('reports', { recursive: true })\"",
+    "test": "npm run precucumber && cucumber-js",
+    "test:e2e": "npm run precucumber && cucumber-js",
+    "test:api": "npm run precucumber && cucumber-js --tags @api",
+    "test:ui": "npm run precucumber && cucumber-js --tags @ui",
+    "report": "node -e \"const {execSync}=require('child_process'); const cmd=process.platform==='win32'?'start reports/cucumber-report.html':'open reports/cucumber-report.html'; try { execSync(cmd, {stdio:'inherit'}); } catch(e) {}\"",
+    "ui": "npm run precucumber && cross-env HEADLESS=false cucumber-js && npm run report",
+    "ui:only": "npm run precucumber && cross-env HEADLESS=false cucumber-js --tags @ui && npm run report",
+    "ui:regression": "npm run precucumber && cross-env HEADLESS=false cucumber-js --tags @regression && npm run report",
+    "install:browsers": "playwright install --with-deps chromium"
+  },
+  "devDependencies": {
+    "@cucumber/cucumber": "^10.9.0",
+    "@playwright/test": "^1.46.0",
+    "cross-env": "^7.0.3",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.5.0",
+    "wait-on": "^7.2.0"
+  },
+  "dependencies": {
+    "selimsystem": "file:.."
+  }
+}

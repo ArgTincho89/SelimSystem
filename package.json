@@ -1,0 +1,40 @@
+{
+  "name": "selimsystem",
+  "version": "1.11.20",
+  "description": "Herramienta de finanzas personales multiusuario",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "test": "jest --forceExit --detectOpenHandles",
+    "test:coverage": "jest --forceExit --detectOpenHandles --coverage",
+    "test:e2e": "npm run --prefix e2e test",
+    "test:e2e:report": "npm run --prefix e2e report",
+    "test:e2e:ui": "npm run --prefix e2e ui",
+    "test:e2e:ui:only": "npm run --prefix e2e ui:only",
+    "test:e2e:ui:regression": "npm run --prefix e2e ui:regression",
+    "test:e2e:install": "npm install --prefix e2e && npm run --prefix e2e install:browsers",
+    "test:coverage:diff": "jest --changedSince=origin/master --coverage --forceExit --detectOpenHandles",
+    "prepare": "node -e \"const {execSync} = require('child_process'); try { execSync('husky', {stdio: 'inherit'}); } catch(e) { }\""
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "connect-loki": "^1.0.2",
+    "cors": "^2.8.5",
+    "cron": "^3.1.7",
+    "express": "^4.19.2",
+    "express-session": "^1.18.0",
+    "helmet": "^7.1.0",
+    "multer": "^2.5.0",
+    "nodemailer": "^6.9.9",
+    "uuid": "^9.0.0"
+  },
+  "devDependencies": {
+    "husky": "^9.1.7",
+    "jest": "^29.7.0",
+    "supertest": "^6.3.4"
+  }
+}

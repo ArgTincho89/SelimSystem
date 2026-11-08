@@ -1,0 +1,16 @@
+services:
+  app:
+    build: .
+    ports:
+      - "3000:3000"
+    volumes:
+      - selimsystem_data:/data
+    environment:
+      - NODE_ENV=development
+      - SESSION_SECRET=dev-secret-change-in-production
+      - DATA_DIR=/data
+      - PORT=3000
+      - APP_URL=http://localhost:3000
+
+volumes:
+  selimsystem_data:
