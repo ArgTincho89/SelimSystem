@@ -598,3 +598,8 @@ body.desktop-mode .fab {
 .installment-item .transaction-amount {
   color: var(--text-secondary);
 }
+
+.badge-resolved {
+  color: var(--success, #2e7d32);
+  font-weight: 600;
+}

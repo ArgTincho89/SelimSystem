@@ -44,7 +44,7 @@ const ObligationsPage = {
     const form = create('form', { className: 'card', style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(145px, 1fr))', gap: '10px', marginBottom: '16px' } });
     const asset = this.filterSelect('Bien', [['', 'Todos los bienes'], ...this.assets.map(item => [item.id, item.name])], filters.assetId || '');
     const provider = this.filterSelect('Proveedor', [['', 'Todos los proveedores'], ...this.owners.filter(item => (item.roles || []).includes('provider')).map(item => [item.id, item.name])], filters.providerEntityId || '');
-    const status = this.filterSelect('Estado', [['', 'Todos'], ['expected', 'Previstas'], ['confirmed', 'Confirmadas'], ['partial', 'Parciales'], ['paid', 'Pagadas'], ['overdue', 'Vencidas'], ['cancelled', 'Canceladas']], filters.status || '');
+    const status = this.filterSelect('Estado', [['', 'Todos'], ['expected', 'Previstas'], ['confirmed', 'Confirmadas'], ['partial', 'Parciales'], ['paid', 'Pagadas'], ['resolved', 'Resueltas por inquilino'], ['overdue', 'Vencidas'], ['cancelled', 'Canceladas']], filters.status || '');
     const type = this.filterInput('Tipo', filters.type || '');
     const from = this.filterInput('Desde (AAAA-MM-DD)', filters.from || '', 'date');
     const to = this.filterInput('Hasta (AAAA-MM-DD)', filters.to || '', 'date');
@@ -100,16 +100,24 @@ const ObligationsPage = {
     if (occurrences.length) {
       const table = create('div', { style: { display: 'grid', gap: '6px' } });
       occurrences.forEach(occurrence => {
-        const label = create('span', { textContent: `${occurrence.date} · ${this.statusLabel(occurrence.status)} · Pagado ${occurrence.totalPaid}/${occurrence.actualDueAmount} ${occurrence.currencyCode}` });
+        const portions = occurrence.tenantDueAmount !== undefined
+          ? ` · Propietario ${occurrence.ownerDueAmount} (pendiente ${occurrence.remainingAmount}) · Inquilino ${occurrence.tenantDueAmount} (${occurrence.resolution ? 'resuelto' : 'pendiente'})`
+          : '';
+        const label = create('span', { className: occurrence.status === 'resolved' ? 'badge-resolved' : '', textContent: `${occurrence.date} · ${this.statusLabel(occurrence.status)} · Pagado ${occurrence.totalPaid}/${occurrence.actualDueAmount} ${occurrence.currencyCode}${portions}` });
         const row = create('div', { style: { display: 'flex', gap: '8px', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap' } }, [label]);
         const actions = create('div', { style: { display: 'flex', gap: '6px', flexWrap: 'wrap' } });
-        if (!['paid', 'cancelled'].includes(occurrence.status)) {
-          actions.append(
-            create('button', { className: 'btn btn-ghost btn-sm', textContent: 'Confirmar', onClick: () => this.runAction(() => API.obligations.confirm(item.id, occurrence.id)) }),
-            create('button', { className: 'btn btn-ghost btn-sm', textContent: 'Editar', onClick: () => this.editOccurrence(item, occurrence) }),
-            create('button', { className: 'btn btn-ghost btn-sm', textContent: 'Pagar', onClick: () => this.pay(item, occurrence) }),
-            create('button', { className: 'btn btn-ghost btn-sm', textContent: 'Cancelar', onClick: () => this.runAction(() => API.obligations.cancelOccurrence(item.id, occurrence.id)) })
-          );
+        const hasTenantPortion = occurrence.tenantDueAmount !== undefined;
+        if (!['paid', 'resolved', 'cancelled'].includes(occurrence.status)) {
+          if (!occurrence.resolution) actions.append(create('button', { className: 'btn btn-ghost btn-sm', textContent: 'Confirmar', onClick: () => this.runAction(() => API.obligations.confirm(item.id, occurrence.id)) }));
+          if (!occurrence.resolution) actions.append(create('button', { className: 'btn btn-ghost btn-sm', textContent: 'Editar', onClick: () => this.editOccurrence(item, occurrence) }));
+          if (!hasTenantPortion || occurrence.remainingAmount > 0) actions.append(create('button', { className: 'btn btn-ghost btn-sm', textContent: 'Pagar', onClick: () => this.pay(item, occurrence) }));
+          if (!occurrence.resolution) actions.append(create('button', { className: 'btn btn-ghost btn-sm', textContent: 'Cancelar', onClick: () => this.runAction(() => API.obligations.cancelOccurrence(item.id, occurrence.id)) }));
+        }
+        if (hasTenantPortion && !occurrence.resolution && occurrence.status !== 'cancelled') {
+          actions.append(create('button', { className: 'btn btn-secondary btn-sm', textContent: 'Resolver (pagó el inquilino)', onClick: () => this.showResolveModal(item, occurrence) }));
+        }
+        if (occurrence.resolution) {
+          actions.append(create('button', { className: 'btn btn-ghost btn-sm', textContent: 'Anular resolución', onClick: () => this.voidResolution(item, occurrence) }));
         }
         row.appendChild(actions);
         table.appendChild(row);
@@ -261,6 +269,53 @@ const ObligationsPage = {
     await this.runAction(() => API.obligations.updateOccurrence(obligation.id, occurrence.id, { actualDueAmount: Number(amount), scope }));
   },
 
+  async showResolveModal(obligation, occurrence) {
+    const tenants = this.owners.filter(owner => (owner.roles || []).includes('tenant'));
+    if (!tenants.length) { alert('Primero registrá un inquilino en Entidades.'); return; }
+    const form = create('form', { style: { display: 'grid', gap: '10px', maxHeight: '70vh', overflowY: 'auto' } });
+    const tenant = this.select(tenants.map(owner => [owner.id, owner.name]), tenants[0].id);
+    this.fieldWrap(form, 'Inquilino', tenant);
+    const period = this.field(form, 'Período (AAAA-MM)', { type: 'month', required: true, value: occurrence.date.slice(0, 7) });
+    const amount = this.field(form, 'Importe pagado por el inquilino', { type: 'number', min: '0.01', step: occurrence.currencyCode === 'JPY' ? '1' : '0.01', required: true, value: occurrence.tenantDueAmount });
+    const resolvedAt = this.field(form, 'Fecha de resolución', { type: 'date', required: true, value: new Date().toISOString().slice(0, 10) });
+    const existingDocuments = create('div', { style: { display: 'grid', gap: '4px' } });
+    this.fieldWrap(form, 'Comprobantes existentes de esta ocurrencia', existingDocuments);
+    try {
+      const documents = await API.documents.listBy({ occurrenceId: occurrence.id });
+      if (!documents.length) existingDocuments.appendChild(create('small', { className: 'text-muted', textContent: 'No hay comprobantes cargados.' }));
+      documents.forEach(document => {
+        const checkbox = create('input', { type: 'checkbox', value: document.id });
+        existingDocuments.appendChild(create('label', { style: { display: 'flex', gap: '6px' } }, [checkbox, create('span', { textContent: document.title || document.fileName })]));
+      });
+    } catch { existingDocuments.appendChild(create('small', { className: 'text-muted', textContent: 'No se pudieron cargar los comprobantes.' })); }
+    const files = create('input', { className: 'form-control', type: 'file', multiple: true, accept: '.pdf,.png,.jpg,.jpeg,.webp,.txt' });
+    this.fieldWrap(form, 'Subir comprobantes nuevos', files);
+    const notes = this.field(form, 'Notas', { multiline: true });
+    form.appendChild(create('p', { className: 'text-muted', textContent: 'No crea ningún movimiento: no afecta saldos, KPIs ni gastos del propietario.' }));
+    form.appendChild(create('button', { className: 'btn btn-primary', type: 'submit', textContent: 'Registrar resolución' }));
+    on(form, 'submit', async event => {
+      event.preventDefault();
+      try {
+        const documentIds = [...existingDocuments.querySelectorAll('input:checked')].map(input => input.value);
+        for (const file of [...(files.files || [])]) {
+          const uploaded = await API.documents.uploadTargets({ occurrenceId: occurrence.id, tenantEntityId: tenant.value }, file);
+          documentIds.push(uploaded.id);
+        }
+        await API.obligations.createResolution(obligation.id, occurrence.id, {
+          tenantEntityId: tenant.value, period: period.value, amount: Number(amount.value), resolvedAt: resolvedAt.value, documentIds, notes: notes.value
+        });
+        Modal.hide();
+        await this.render();
+      } catch (error) { alert(error.message); }
+    });
+    Modal.show('Resolver obligación pagada por el inquilino', form);
+  },
+
+  async voidResolution(obligation, occurrence) {
+    if (!confirm('¿Anular la resolución? La obligación volverá a figurar como pendiente.')) return;
+    await this.runAction(() => API.obligations.voidResolution(obligation.id, occurrence.id));
+  },
+
   async pay(obligation, occurrence) {
     const amount = prompt(`Importe pagado (restante: ${occurrence.remainingAmount} ${occurrence.currencyCode})`, String(occurrence.remainingAmount));
     if (amount === null) return;
@@ -366,6 +421,6 @@ const ObligationsPage = {
   },
 
   statusLabel(value) {
-    return ({ expected: 'Previsto', confirmed: 'Confirmado', paid: 'Pagado', partial: 'Parcial', overdue: 'Vencido', cancelled: 'Cancelado' })[value] || value;
+    return ({ expected: 'Previsto', confirmed: 'Confirmado', paid: 'Pagado', resolved: 'Resuelto por inquilino', partial: 'Parcial', overdue: 'Vencido', cancelled: 'Cancelado' })[value] || value;
   }
 };

@@ -211,7 +211,10 @@ const API = {
     confirm(id, occurrenceId) { return API.post(`/obligations/${encodeURIComponent(id)}/occurrences/${encodeURIComponent(occurrenceId)}/confirm`, {}); },
     cancelOccurrence(id, occurrenceId) { return API.post(`/obligations/${encodeURIComponent(id)}/occurrences/${encodeURIComponent(occurrenceId)}/cancel`, {}); },
     updateOccurrence(id, occurrenceId, data) { return API.put(`/obligations/${encodeURIComponent(id)}/occurrences/${encodeURIComponent(occurrenceId)}`, data); },
-    pay(id, occurrenceId, data) { return API.post(`/obligations/${encodeURIComponent(id)}/occurrences/${encodeURIComponent(occurrenceId)}/payments`, data); }
+    pay(id, occurrenceId, data) { return API.post(`/obligations/${encodeURIComponent(id)}/occurrences/${encodeURIComponent(occurrenceId)}/payments`, data); },
+    createResolution(id, occurrenceId, data) { return API.post(`/obligations/${encodeURIComponent(id)}/occurrences/${encodeURIComponent(occurrenceId)}/resolution`, data); },
+    voidResolution(id, occurrenceId) { return API.delete(`/obligations/${encodeURIComponent(id)}/occurrences/${encodeURIComponent(occurrenceId)}/resolution`); },
+    listResolutions(filters = {}) { return API.get(`/obligations/resolutions?${new URLSearchParams(filters)}`); }
   },
 
   rentals: {

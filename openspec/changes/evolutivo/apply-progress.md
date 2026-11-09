@@ -61,4 +61,10 @@ Results: `npm run test:coverage` 41 suites / 457 tests pass.
 
 Notes: a resolution persists after the obligation responsibility is later changed, but the view then follows the current responsibility (legacy path when tenant portion is 0); changing responsibility is not blocked.
 
-## Remaining: S5..S7, S9
+## S5 - Phase 2b frontend (done; commit S5)
+
+- [x] 5.1 `public/js/pages/obligations.js`: `resolved` badge/label and status filter, owner vs tenant portion in the occurrence row, "Resolver (pagó el inquilino)" dialog (tenant select, period, amount, existing/new receipts via `uploadTargets` with occurrenceId+tenantEntityId, date, notes), "Anular resolución"; Confirm/Edit/Cancel hidden while resolved, Pagar hidden when the owner portion is settled. `public/js/api.js` `createResolution`/`voidResolution`/`listResolutions`. `public/sw.js` -> `selimsystem-v22`.
+
+Tests: tests/ui/evolutivo-s5-contract.test.js.
+
+## Remaining: S6, S7, S9
