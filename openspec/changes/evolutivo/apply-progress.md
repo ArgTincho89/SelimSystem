@@ -77,4 +77,14 @@ Tests: tests/routes/alerts.test.js, tests/services/alerts.test.js, tests/ui/evol
 
 Notes: `document_pending` and the installment "En N días" message follow the business examples; amounts use es-AR formatting with a currency symbol (`$`, `€`, `US$`). Historical never-generated past occurrences of an active obligation surface as overdue (same as the pre-existing `getAlerts`).
 
-## Remaining: S7, S9
+## S7 - Phase 4 (done; commits S7a backend, S7b frontend)
+
+- [x] 7.1 `monthlyView(db,userId,asset,{from,to})` in `src/services/economic-overview.js`: default 12 months ending current, max 120, YYYY-MM validation. Runs on `alerts.readOnlyView` so lazily generated rent/obligation occurrences are never persisted. Rent grouped per currency (`rentByCurrency`; `rent` = the single currency summary, zero object with `currencyCode: null` when no rent, `null` when several currencies). Obligation rows follow the contract plus `date`; `resolutionStatus` none|partial|resolved with `resolutionAmountMinor`. Expenses/income/refunds/recoveries per currency come from `assetEconomics` (posted, attributed movements); recovery transactions are split out of income. Claims by source-expense month with `recoveredMinor`/status. Documents by linked occurrence/rent occurrence/transaction date, else `uploadedAt` month (asset, obligation, contract links). Cancelled occurrences excluded; empty months present.
+- [x] 7.2 `GET /api/assets/:id/monthly-view` (404 unknown/foreign asset, 400 bad range).
+- [x] 7.3 `API.assets.monthlyView`, "Ficha mensual" section in the asset detail (`renderMonthlyView` in `public/js/pages/assets.js`, one table per month, columns Concepto | Responsable | Esperado | Pagado o cobrado | Estado | Comprobante). `public/sw.js` -> `selimsystem-v24`.
+
+Tests: tests/routes/monthly-view.test.js, tests/ui/evolutivo-s7-contract.test.js.
+
+Notes: the frontend is a collapsible-on-demand section (button loads last 12 months), not a separate tab, to keep the slice small. Owner payments are expenses on their posting date, which can fall in a different month than the occurrence.
+
+## Remaining: S9

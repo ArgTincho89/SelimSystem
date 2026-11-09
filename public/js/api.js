@@ -142,6 +142,10 @@ const API = {
       const query = new URLSearchParams(Object.entries(filters).filter(([, value]) => value !== '' && value != null));
       return API.get(`/assets/${encodeURIComponent(id)}/economics${query.toString() ? `?${query}` : ''}`);
     },
+    monthlyView(id, filters = {}) {
+      const query = new URLSearchParams(Object.entries(filters).filter(([, value]) => value !== '' && value != null));
+      return API.get(`/assets/${encodeURIComponent(id)}/monthly-view${query.toString() ? `?${query}` : ''}`);
+    },
     create(data) { return API.post('/assets', data); },
     update(id, data) { return API.put(`/assets/${id}`, data); },
     addOwnership(id, data) { return API.post(`/assets/${id}/ownerships`, data); },

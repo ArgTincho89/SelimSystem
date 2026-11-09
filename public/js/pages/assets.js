@@ -246,6 +246,7 @@ const AssetsPage = {
       if (asset.notes) body.appendChild(create('p', { textContent: `Notas: ${asset.notes}` }));
       await this.renderRecoveries(asset, body);
       await this.renderEconomicAnalysis(asset, body);
+      this.renderMonthlyView(asset, body);
       body.appendChild(create('h4', { textContent: 'Historial de titularidad', style: { marginTop: '14px' } }));
       (asset.ownerships || []).forEach(record => {
         const line = create('div', { className: 'card', style: { marginTop: '8px' } });
@@ -414,6 +415,53 @@ const AssetsPage = {
     };
     controls.appendChild(create('button', { className: 'btn btn-secondary btn-sm', type: 'button', textContent: 'Actualizar período', onClick: load }));
     await load();
+  },
+
+  renderMonthlyView(asset, container) {
+    const section = create('section', { style: { borderTop: '1px solid var(--border-color)', marginTop: '16px', paddingTop: '12px' } });
+    section.appendChild(create('h4', { textContent: 'Ficha mensual' }));
+    const report = create('div', { style: { display: 'grid', gap: '12px', marginTop: '8px' } });
+    const money = (minor, currency) => (typeof minor === 'number'
+      ? `${new Intl.NumberFormat('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(minor / 100)} ${currency || ''}`.trim() : '-');
+    const totals = map => Object.entries(map || {}).map(([currency, minor]) => money(minor, currency)).join(' · ') || '-';
+    const responsibility = { owner: 'Propietario', tenant: 'Inquilino', shared: 'Compartido', third: 'Tercero', none: 'Sin responsable' };
+    const statusLabel = { paid: 'Pagado', resolved: 'Resuelto', partial: 'Parcial', overdue: 'Vencido', expected: 'Esperado', confirmed: 'Confirmado' };
+    const render = result => {
+      report.replaceChildren();
+      [...result.months].reverse().forEach(month => {
+        const table = create('table', { className: 'table', style: { width: '100%', fontSize: '0.85rem' } });
+        table.appendChild(create('caption', { textContent: month.month, style: { textAlign: 'left', fontWeight: '600' } }));
+        table.appendChild(create('thead', {}, [create('tr', {}, ['Concepto', 'Responsable', 'Esperado', 'Pagado o cobrado', 'Estado', 'Comprobante'].map(text => create('th', { textContent: text })))]));
+        const rows = create('tbody');
+        const add = cells => rows.appendChild(create('tr', {}, cells.map(text => create('td', { textContent: text }))));
+        (month.rentByCurrency.length ? month.rentByCurrency : [null]).forEach(rent => add(['Alquiler', 'Inquilino',
+          rent ? money(rent.expectedMinor, rent.currencyCode) : '-', rent ? money(rent.collectedMinor, rent.currencyCode) : '-',
+          rent ? (rent.differenceMinor > 0 ? `Falta ${money(rent.differenceMinor, rent.currencyCode)}` : 'Cobrado') : 'Sin alquiler', '']));
+        month.obligations.forEach(item => {
+          const tenantPaid = item.resolutionStatus !== 'none';
+          add([item.title, responsibility[item.responsibilityType] || item.responsibilityType, money(item.estimatedMinor, item.currencyCode),
+            tenantPaid ? `${money(item.actualMinor, item.currencyCode)} · Pagado por inquilino ${money(item.resolutionAmountMinor, item.currencyCode)}` : money(item.actualMinor, item.currencyCode),
+            statusLabel[item.status] || item.status, item.documentIds.length ? `${item.documentIds.length} adjunto(s)` : 'Sin comprobante']);
+        });
+        [['Gastos imputados', month.expensesMinorByCurrency], ['Ingresos imputados', month.incomeMinorByCurrency],
+          ['Reintegros', month.refundsMinorByCurrency], ['Recuperos', month.recoveriesMinorByCurrency]].forEach(([label, map]) => {
+          if (Object.keys(map).length) add([label, 'Propietario', '', totals(map), '', '']);
+        });
+        month.claims.forEach(claim => add(['Gasto a recuperar', 'Inquilino', money(claim.amountMinor, claim.currencyCode), money(claim.recoveredMinor, claim.currencyCode), claim.status === 'recovered' ? 'Recuperado' : claim.status === 'partial' ? 'Parcial' : 'Pendiente', '']));
+        month.documents.forEach(doc => add([`Documento: ${doc.title}`, '', '', '', '', doc.fileName]));
+        month.notes.forEach(note => add([`Nota: ${note}`, '', '', '', '', '']));
+        table.appendChild(rows);
+        report.appendChild(table);
+      });
+    };
+    const load = async () => {
+      report.replaceChildren(create('small', { textContent: 'Cargando ficha mensual...' }));
+      try { render(await API.assets.monthlyView(asset.id)); } catch (error) {
+        report.replaceChildren(create('small', { textContent: `No se pudo cargar la ficha mensual: ${error.message}` }));
+      }
+    };
+    section.append(create('button', { className: 'btn btn-secondary btn-sm', type: 'button', textContent: 'Ver ficha mensual (últimos 12 meses)', onClick: load }), report);
+    container.appendChild(section);
   },
 
   renderEconomicResult(container, result) {

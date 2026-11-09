@@ -1,4 +1,4 @@
-const CACHE_NAME = 'selimsystem-v23';
+const CACHE_NAME = 'selimsystem-v24';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
