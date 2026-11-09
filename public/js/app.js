@@ -89,7 +89,7 @@ const App = {
     });
     Router.register('/obligations', (params) => {
       if (!this.user) return Router.navigate('/login');
-      ObligationsPage.render({}, params.focus);
+      ObligationsPage.render({}, params.focus, params.newForAsset);
     });
     Router.register('/profile', () => {
       if (!this.user) return Router.navigate('/login');

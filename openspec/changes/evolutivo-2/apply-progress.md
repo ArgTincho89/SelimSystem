@@ -39,3 +39,10 @@ Notes: `documents.contentUrl` already existed. Single-titular edits resend the s
 - [x] 6.3 asset-form applies `rental` (create/update/end, locked -> 409) and `obligationResponsibilities`; assetResponse adds `activeContract` and `obligations` (also GET /api/assets/:id)
 
 Notes: rented/usufruct with no rental and no active contract returns 400 ("Completá los datos del alquiler..."); with an existing active contract and `rental: null` the contract is kept unchanged (S5 UI edits still work). not_rented ignores `rental`; rental on a movable is 400. validateContract takes an `assetHint` so a contract can be validated before the asset exists. alerts.js still reads the live obligation type (not part of the task).
+
+## Slice S7 (rental block and obligations section UI) - done
+- [x] 7.1 assets.js `renderRentalAndObligations` mounted in the S5 slot: tenant select, desde/hasta, Monto original + currency (ARS/EUR/USD), frecuencia/criterio de ajuste; locked contract read-only with hint; prefill from `activeContract`; inline (no window.confirm) confirmation before ending a contract via No alquilado
+- [x] 7.2 "Identificacion catastral" header + obligation lines ("<Proveedor> - Cuenta Nº: x"), "A cargo de" Titular/Inquilino selectors (legacy shared read-only), "Nueva obligacion" shortcut -> `/obligations?newForAsset=<id>` opens the create modal prefilled; `API.obligations.setResponsibility`
+- [x] 7.3 sw.js v29; tests/ui/evolutivo2-s7-contract.test.js; S5/S6 contract tests relaxed/updated
+
+Notes: the asset Editar button now fetches GET /api/assets/:id so activeContract and obligations are available. Responsibilities travel in the composite form body (not via PATCH). Frequency is a text input with integer validation; the amount is the only number input of the block.

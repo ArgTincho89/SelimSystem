@@ -16,7 +16,7 @@ describe('Evolutivo S6 UI contract', () => {
     expect(app).toContain('data-route="/avisos"');
     expect(app).toContain('<span>Avisos</span>');
     expect(app).toContain('setAlertBadge');
-    expect(app).toContain('ObligationsPage.render({}, params.focus)');
+    expect(app).toContain('ObligationsPage.render({}, params.focus, params.newForAsset)');
     expect(read('index.html')).toContain('/js/pages/alerts.js');
     expect(read('sw.js')).toContain("'/js/pages/alerts.js'");
     expect(read('css/pages.css')).toContain('.nav-badge');

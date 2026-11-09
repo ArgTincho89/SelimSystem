@@ -65,7 +65,7 @@ const AssetsPage = {
       ]);
       const actions = create('div', { style: { display: 'flex', gap: '8px' } }, [
         create('button', { className: 'btn btn-ghost btn-sm', textContent: 'Ver historial', onClick: () => this.showDetails(asset.id) }),
-        create('button', { className: 'btn btn-secondary btn-sm', textContent: 'Editar', onClick: () => this.showAssetModal(asset) })
+        create('button', { className: 'btn btn-secondary btn-sm', textContent: 'Editar', onClick: async () => { try { this.showAssetModal(await API.assets.get(asset.id)); } catch (error) { showToast(error.message, 'error'); } } })
       ]);
       if (asset.type === 'immovable') actions.appendChild(create('button', { className: 'btn btn-secondary btn-sm', textContent: 'Alquileres', onClick: () => this.showDetails(asset.id) }));
       card.append(details, actions);
@@ -136,6 +136,88 @@ const AssetsPage = {
     return { value: Number(raw) };
   },
 
+  identifierLabel(type) {
+    return ({ account: 'Cuenta Nº', contract: 'Contrato Nº', meter: 'Medidor Nº', policy: 'Póliza Nº', client: 'Cliente Nº' })[type] || 'Identificador';
+  },
+
+  obligationLine(item) {
+    const provider = item.providerName || 'Sin proveedor';
+    return item.externalIdentifier ? `${provider} - ${this.identifierLabel(item.externalIdentifierType)}: ${item.externalIdentifier}` : `${provider} - ${item.title}`;
+  },
+
+  // Rental block + cadastral identification + obligations list (evolutivo-2 S7). Returns a controller used by the save handler.
+  renderRentalAndObligations(slot, asset, conditionSelect) {
+    slot.replaceChildren();
+    const contract = asset?.activeContract || null;
+    const locked = Boolean(contract?.locked);
+    const items = asset?.obligations || [];
+    const tenants = this.owners.filter(owner => (owner.roles || []).includes('tenant'));
+    const block = create('section', { className: 'card', style: { padding: '10px', marginBottom: '10px' }, dataset: { rentalBlock: 'true' } });
+    const tenant = this.select([['', 'Seleccionar inquilino'], ...tenants.map(item => [item.id, item.name])], contract?.tenantIds?.[0] || '');
+    const startDate = create('input', { className: 'form-control', type: 'date', value: contract?.startDate || '' });
+    const endDate = create('input', { className: 'form-control', type: 'date', value: contract?.endDate || '' });
+    const amount = create('input', { className: 'form-control', type: 'number', min: '1', step: '1', value: contract?.initialRent ?? '' });
+    const currency = this.select(['ARS', 'EUR', 'USD'].map(code => [code, code]), contract?.currencyCode || 'ARS');
+    const frequency = create('input', { className: 'form-control', type: 'text', inputMode: 'numeric', value: contract?.adjustmentFrequencyMonths ?? '' });
+    const criterion = create('input', { className: 'form-control', type: 'text', placeholder: 'Ej.: porcentaje, IPC', value: contract?.adjustmentCriterion || '' });
+    if (locked) [tenant, startDate, amount, currency].forEach(control => { control.disabled = true; });
+    const labelled = (text, control) => create('div', { className: 'form-group' }, [create('label', { textContent: text }), control]);
+    block.append(labelled('Inquilino', tenant), labelled('Contrato vigente desde', startDate), labelled('Hasta', endDate), labelled('Monto original', amount), labelled('Moneda', currency), labelled('Frecuencia ajuste (meses)', frequency), labelled('Criterio ajuste', criterion));
+    if (locked) block.appendChild(create('small', { className: 'text-muted', textContent: 'Para cambiar el inquilino, marcá el bien como No alquilado y volvé a declararlo' }));
+    const responsibilities = create('div', { style: { display: 'grid', gap: '6px', marginTop: '8px' } });
+    responsibilities.appendChild(create('strong', { textContent: 'Obligaciones del bien' }));
+    if (!items.length) responsibilities.appendChild(create('small', { className: 'text-muted', textContent: 'Este bien todavía no tiene obligaciones asignadas.' }));
+    const selectors = new Map();
+    items.forEach(item => {
+      const row = create('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', flexWrap: 'wrap' } }, [create('span', { textContent: this.obligationLine(item) })]);
+      if (['owner', 'tenant'].includes(item.responsibilityType)) {
+        const selector = this.select([['owner', 'Titular'], ['tenant', 'Inquilino']], item.responsibilityType);
+        selector.setAttribute('aria-label', 'A cargo de');
+        selectors.set(item.id, selector);
+        row.appendChild(create('label', {}, [create('span', { textContent: 'A cargo de: ' }), selector]));
+      } else row.appendChild(create('small', { className: 'text-muted', textContent: 'A cargo de: compartida (solo lectura)' }));
+      responsibilities.appendChild(row);
+    });
+    block.appendChild(responsibilities);
+
+    const catastral = create('section', { style: { marginBottom: '10px' } }, [create('h4', { textContent: 'Identificación catastral' })]);
+    if (!asset?.id) catastral.appendChild(create('small', { className: 'text-muted', textContent: 'Guardá el bien para asignarle obligaciones.' }));
+    else if (!items.length) catastral.appendChild(create('small', { className: 'text-muted', textContent: 'Sin obligaciones asignadas.' }));
+    items.forEach(item => catastral.appendChild(create('p', { style: { margin: '4px 0' }, textContent: this.obligationLine(item) })));
+    catastral.appendChild(create('button', { className: 'btn btn-ghost btn-sm', type: 'button', textContent: 'Nueva obligación', disabled: !asset?.id,
+      onClick: () => { Modal.hide(); Router.navigate(`/obligations?newForAsset=${encodeURIComponent(asset.id)}`); } }));
+    const confirmBox = create('div', { className: 'card', style: { display: 'none', padding: '10px', marginBottom: '10px' }, dataset: { endContractConfirm: 'true' } });
+    slot.append(block, confirmBox, catastral);
+
+    const rented = () => ['rented', 'usufruct'].includes(conditionSelect.value);
+    const refresh = () => { block.style.display = rented() ? '' : 'none'; confirmBox.style.display = 'none'; };
+    on(conditionSelect, 'change', refresh);
+    refresh();
+    return {
+      needsEndConfirmation: () => Boolean(contract) && !rented(),
+      askEndConfirmation: onConfirm => {
+        confirmBox.replaceChildren(
+          create('p', { textContent: 'Al marcar el bien como No alquilado se finaliza el contrato vigente y las obligaciones a cargo del inquilino vuelven al titular.' }),
+          create('button', { className: 'btn btn-danger btn-sm', type: 'button', textContent: 'Finalizar contrato y guardar', onClick: onConfirm }),
+          create('button', { className: 'btn btn-ghost btn-sm', type: 'button', textContent: 'Cancelar', onClick: () => { confirmBox.style.display = 'none'; } })
+        );
+        confirmBox.style.display = '';
+      },
+      collect: () => {
+        if (!rented()) return { rental: null, obligationResponsibilities: [] };
+        const obligationResponsibilities = [...selectors].map(([obligationId, selector]) => ({ obligationId, responsibilityType: selector.value }));
+        const parsedFrequency = this.parseIntegerField(frequency, 'La frecuencia de ajuste');
+        if (parsedFrequency.error) return { error: parsedFrequency.error };
+        const adjustment = { adjustmentFrequencyMonths: parsedFrequency.value, adjustmentCriterion: criterion.value.trim() || null };
+        if (locked) return { rental: { tenantId: contract.tenantIds[0], startDate: contract.startDate, endDate: endDate.value || null, amount: contract.initialRent, currencyCode: contract.currencyCode, ...adjustment }, obligationResponsibilities };
+        if (!tenant.value) return { error: 'Seleccioná un inquilino' };
+        if (!startDate.value) return { error: 'Indicá desde cuándo rige el contrato' };
+        if (!/^\d+$/.test(amount.value.trim()) || Number(amount.value) <= 0) return { error: 'El monto original debe ser un número entero positivo' };
+        return { rental: { tenantId: tenant.value, startDate: startDate.value, endDate: endDate.value || null, amount: Number(amount.value), currencyCode: currency.value, ...adjustment }, obligationResponsibilities };
+      }
+    };
+  },
+
   showAssetModal(asset = null) {
     const editing = Boolean(asset);
     const form = create('div', { style: { maxHeight: '65vh', overflowY: 'auto', paddingRight: '4px' } });
@@ -185,8 +267,11 @@ const AssetsPage = {
     const kindFields = create('div');
     form.appendChild(kindFields);
     const fields = {};
+    let rentalUi = null;
+    let endConfirmed = false;
     const renderKind = () => {
       kindFields.replaceChildren();
+      rentalUi = null;
       Object.keys(fields).forEach(key => delete fields[key]);
       const same = asset?.type === typeControl.value;
       if (typeControl.value === 'movable') {
@@ -212,8 +297,9 @@ const AssetsPage = {
         fields.condition = this.select(this.conditionOptions(), same ? asset.condition || 'not_rented' : 'not_rented');
         conditionGroup.appendChild(fields.condition);
         kindFields.appendChild(conditionGroup);
-        // Mount point for the rental block and the obligations section (evolutivo-2 S7).
-        kindFields.appendChild(create('div', { dataset: { slot: 'rental-and-obligations' } }));
+        const slot = create('div', { dataset: { slot: 'rental-and-obligations' } });
+        kindFields.appendChild(slot);
+        rentalUi = this.renderRentalAndObligations(slot, same ? asset : null, fields.condition);
       }
     };
     typeControl.addEventListener('change', renderKind);
@@ -254,8 +340,14 @@ const AssetsPage = {
         if (owners.some(item => !(item.percentage > 0))) return showToast('Cada titular debe tener un porcentaje mayor que 0', 'error');
         if (Math.abs(owners.reduce((total, item) => total + item.percentage, 0) - 100) > 0.01) return showToast('El total de los porcentajes debe ser 100', 'error');
       }
+      let rentalPart = { rental: null, obligationResponsibilities: [] };
+      if (rentalUi) {
+        if (rentalUi.needsEndConfirmation() && !endConfirmed) return rentalUi.askEndConfirmation(() => { endConfirmed = true; footer.lastChild.click(); });
+        rentalPart = rentalUi.collect();
+        if (rentalPart.error) return showToast(rentalPart.error, 'error');
+      }
       try {
-        await API.assets.saveForm(editing ? asset.id : null, { asset: payload, owners, rental: null, obligationResponsibilities: [] });
+        await API.assets.saveForm(editing ? asset.id : null, { asset: payload, owners, rental: rentalPart.rental, obligationResponsibilities: rentalPart.obligationResponsibilities });
         Modal.hide();
         showToast(editing ? 'Bien actualizado' : 'Bien creado');
         this.render();

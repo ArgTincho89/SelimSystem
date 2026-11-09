@@ -54,7 +54,7 @@ describe('Evolutivo 2 S5 asset form UI contract', () => {
     ['Ficha del bien', 'Ficha mensual', 'Análisis económico del bien'].forEach(heading => expect(source).toContain(heading));
   });
 
-  it('bumps the service worker cache to v28', () => {
-    expect(sw).toContain("CACHE_NAME = 'selimsystem-v28'");
+  it('uses a versioned service worker cache (v28 or later)', () => {
+    expect(sw).toMatch(/CACHE_NAME = 'selimsystem-v(2[8-9]|[3-9]\d)'/);
   });
 });

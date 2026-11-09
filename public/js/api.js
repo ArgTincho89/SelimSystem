@@ -225,6 +225,7 @@ const API = {
     create(data) { return API.post('/obligations', data); },
     update(id, data) { return API.put(`/obligations/${encodeURIComponent(id)}`, data); },
     delete(id) { return API.delete(`/obligations/${encodeURIComponent(id)}`); },
+    setResponsibility(id, responsibilityType) { return API.patch(`/obligations/${encodeURIComponent(id)}/responsibility`, { responsibilityType }); },
     alerts() { return API.get('/obligations/alerts'); },
     confirm(id, occurrenceId) { return API.post(`/obligations/${encodeURIComponent(id)}/occurrences/${encodeURIComponent(occurrenceId)}/confirm`, {}); },
     cancelOccurrence(id, occurrenceId) { return API.post(`/obligations/${encodeURIComponent(id)}/occurrences/${encodeURIComponent(occurrenceId)}/cancel`, {}); },

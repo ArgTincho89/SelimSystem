@@ -26,7 +26,7 @@ const ObligationsPage = {
     } else await this.render();
   },
 
-  async render(filters = {}, focusId = null) {
+  async render(filters = {}, focusId = null, newForAssetId = null) {
     this.onChange = null;
     const content = $('#page-content');
     $('#navbar').style.display = '';
@@ -45,6 +45,7 @@ const ObligationsPage = {
       this.paymentMethods = paymentMethods;
       this.renderContent(content, filters);
       if (focusId) this.focusObligation(content, focusId);
+      if (newForAssetId) this.showCreateModal(null, { assetId: newForAssetId });
     } catch (error) {
       content.replaceChildren(create('div', { className: 'empty-state', textContent: `No se pudieron cargar las obligaciones: ${error.message}` }));
     }
@@ -178,12 +179,12 @@ const ObligationsPage = {
     return card;
   },
 
-  async showCreateModal(existing = null) {
+  async showCreateModal(existing = null, defaults = {}) {
     const form = create('form', { style: { display: 'grid', gap: '10px', maxHeight: '70vh', overflowY: 'auto' } });
     const title = this.field(form, 'Nombre', { required: true, value: existing?.title || '' });
     const type = this.select([['utility', 'Servicios'], ['insurance', 'Seguro'], ['tax', 'Impuesto'], ['loan', 'Préstamo'], ['maintenance', 'Mantenimiento'], ['subscription', 'Suscripción'], ['other', 'Otro']], existing?.type || 'utility');
     this.fieldWrap(form, 'Tipo', type);
-    const asset = this.select([['', 'Sin bien vinculado'], ...this.assets.map(item => [item.id, item.name])], existing?.assetId || '');
+    const asset = this.select([['', 'Sin bien vinculado'], ...this.assets.map(item => [item.id, item.name])], existing?.assetId || defaults.assetId || '');
     this.fieldWrap(form, 'Bien', asset);
     const providers = this.owners.filter(item => (item.roles || []).includes('provider'));
     const provider = this.select([['', 'Sin proveedor'], ...providers.map(item => [item.id, item.name])], existing?.providerEntityId || '');
