@@ -222,6 +222,15 @@ router.delete('/:id/occurrences/:occurrenceId/resolution', (req, res) => {
   res.json({ resolution: result.resolution, occurrence: obligations.occurrenceView(db, userId, occurrence, ledger.localDateForUser(db, userId)) });
 });
 
+router.get('/:id/occurrences/:occurrenceId/payment-context', (req, res) => {
+  const db = req.app.locals.db;
+  const userId = req.session.userId;
+  const obligation = db.findById('obligations', req.params.id, userId);
+  const occurrence = db.findById('obligationOccurrences', req.params.occurrenceId, userId);
+  if (!obligation || !occurrence || occurrence.obligationId !== obligation.id) return res.status(404).json({ error: 'Ocurrencia no encontrada' });
+  res.json(obligations.paymentContext(db, userId, obligation, occurrence));
+});
+
 router.post('/:id/occurrences/:occurrenceId/payments', (req, res) => {
   const db = req.app.locals.db;
   const userId = req.session.userId;
@@ -229,10 +238,10 @@ router.post('/:id/occurrences/:occurrenceId/payments', (req, res) => {
   const occurrence = db.findById('obligationOccurrences', req.params.occurrenceId, userId);
   if (!obligation || !occurrence || occurrence.obligationId !== obligation.id) return res.status(404).json({ error: 'Ocurrencia no encontrada' });
   if (occurrence.status === 'cancelled') return res.status(409).json({ error: 'La ocurrencia está cancelada' });
-  const { amount, accountId, categoryId, idempotencyKey } = req.body || {};
+  const { amount, accountId, categoryId, idempotencyKey, paymentMethodId, paymentMethod } = req.body || {};
   if (typeof idempotencyKey !== 'string' || idempotencyKey.length < 8 || idempotencyKey.length > 120) return res.status(400).json({ error: 'Se requiere una clave de idempotencia válida' });
   const keyHash = obligations.idempotencyDigest(idempotencyKey);
-  const fingerprint = obligations.idempotencyDigest(JSON.stringify({ amount, accountId: accountId || null, categoryId: categoryId || null, date: req.body.date || null }));
+  const fingerprint = obligations.idempotencyDigest(JSON.stringify({ amount, accountId: accountId || null, categoryId: categoryId || null, date: req.body.date || null, paymentMethodId: paymentMethodId || null, paymentMethod: paymentMethod || null }));
   const existing = db.findAll('transactions', userId).find(tx => tx.obligationIdempotencyKey === keyHash);
   if (existing) {
     if (existing.obligationOccurrenceId !== occurrence.id || existing.obligationPaymentFingerprint !== fingerprint) return res.status(409).json({ error: 'La clave de idempotencia ya fue utilizada para otro pago' });
@@ -242,10 +251,11 @@ router.post('/:id/occurrences/:occurrenceId/payments', (req, res) => {
   const account = db.findById('accounts', selectedAccountId, userId);
   if (!account || !account.activo) return res.status(400).json({ error: 'Seleccioná una cuenta activa' });
   if (account.currency !== occurrence.currencyCode) return res.status(400).json({ error: 'La moneda de la cuenta no coincide con la obligación' });
-  const providerCategoryId = obligation.providerEntityId ? db.findById('legalOwners', obligation.providerEntityId, userId)?.expenseCategoryId : null;
-  const selectedCategoryId = categoryId || occurrence.categoryId || obligation.categoryId || providerCategoryId;
+  const selectedCategoryId = obligations.categoryChain(db, userId, obligation, occurrence, categoryId);
   const category = db.findById('categories', selectedCategoryId, userId);
   if (!category) return res.status(400).json({ error: 'Seleccioná una categoría válida' });
+  if (paymentMethodId && !db.findById('paymentMethods', paymentMethodId, userId)) return res.status(400).json({ error: 'El medio de pago no es válido' });
+  if (paymentMethod !== undefined && paymentMethod !== null && (typeof paymentMethod !== 'string' || paymentMethod.length > 120)) return res.status(400).json({ error: 'El medio de pago no es válido' });
   const amountMinor = ledger.moneyInput(amount, account.currency);
   if (amountMinor === null) return res.status(400).json({ error: 'El importe pagado debe ser positivo y válido para la moneda' });
   const today = ledger.localDateForUser(db, userId);
@@ -263,7 +273,7 @@ router.post('/:id/occurrences/:occurrenceId/payments', (req, res) => {
       clasificacion: 'variable', obligationId: obligation.id, obligationOccurrenceId: occurrence.id,
       obligationIdempotencyKey: keyHash, obligationPaymentFingerprint: fingerprint,
       // The payment method is chosen when paying; legacy obligation values are not copied.
-      paymentMethod: '', paymentMethodId: null, paymentId
+      paymentMethod: paymentMethod || '', paymentMethodId: paymentMethodId || null, paymentId
     }, userId);
   } catch {
     db.clearCache();

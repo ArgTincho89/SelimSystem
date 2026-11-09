@@ -486,6 +486,7 @@ function monthlyView(db, userId, asset, options = {}) {
   }));
 
   const assetObligationIds = new Set();
+  const allDocuments = db.findAll('documents', userId);
   db.findAll('obligations', userId).filter(obligation => obligation.assetId === asset.id).forEach(obligation => {
     assetObligationIds.add(obligation.id);
     let occurrences;
@@ -498,13 +499,22 @@ function monthlyView(db, userId, asset, options = {}) {
       dateOf.set(`occurrenceId:${item.id}`, item.date);
       const bucket = byMonth.get(item.date.slice(0, 7));
       const state = resolutionState(item, item.resolution);
+      const paymentIds = new Set(item.paymentIds || []);
+      const resolutionDocIds = new Set(item.resolution?.documentIds || []);
+      const rowDocuments = allDocuments.filter(doc => doc.occurrenceId === item.id || paymentIds.has(doc.transactionId) || resolutionDocIds.has(doc.id))
+        .map(doc => ({ id: doc.id, title: doc.title, fileName: doc.fileName, contentType: doc.contentType, mimeType: doc.contentType }));
+      const rowPayments = (item.paymentIds || []).map(id => db.findById('transactions', id, userId)).filter(Boolean).map(tx => ({
+        transactionId: tx.id, date: tx.fecha, amountMinor: Number.isSafeInteger(tx.amountMinor) ? tx.amountMinor : ledger.toMinorUnits(tx.monto, tx.currencyCode || item.currencyCode),
+        accountName: db.findById('accounts', tx.accountId, userId)?.nombre || null, paymentMethod: tx.paymentMethod || ''
+      }));
       bucket.obligations.push({
         occurrenceId: item.id, obligationId: obligation.id, title: item.title || obligation.title,
         responsibilityType: obligations.responsibilityFor(obligation, item).responsibilityType, date: item.date,
         estimatedMinor: ledger.toMinorUnits(item.actualDueAmount, item.currencyCode),
         actualMinor: ledger.toMinorUnits(item.totalPaid, item.currencyCode),
         status: item.status, currencyCode: item.currencyCode,
-        documentIds: db.findAll('documents', userId).filter(doc => doc.occurrenceId === item.id).map(doc => doc.id),
+        documentIds: allDocuments.filter(doc => doc.occurrenceId === item.id).map(doc => doc.id),
+        documents: rowDocuments, payments: rowPayments, resolvedAt: item.resolution?.resolvedAt || null,
         resolutionStatus: state.status, resolutionAmountMinor: state.amountMinor
       });
       if (item.resolution?.notes) bucket.notes.push(`${item.title || obligation.title}: ${item.resolution.notes}`);

@@ -52,3 +52,9 @@ Notes: the asset Editar button now fetches GET /api/assets/:id so activeContract
 - [x] 8.2 obligations.js form: Nombre, Tipo, Bien, Proveedor, Cuenta/Contrato selector + number, Frecuencia, Primer/Ultimo vencimiento, Aviso, Moneda, Importe, Categoria (provider prefill), Responsable Titular/Inquilino, Notas; sw.js v30; tests/ui/evolutivo2-s8-contract.test.js, tests/routes/obligation-simplified.test.js
 
 Notes: provider field stays providerEntityId (legalOwners). Cuenta habitual and responsibleEntityId were removed from the form but stored values are kept (omitted from PUT payload). Legacy shared/third/none appear as an "(anterior)" option and are left untouched unless changed. Custom reminder days is a text input so the amount stays the first number input. Obligation list no longer shows paymentMethod.
+
+## Slice S9 (payments backend) - done
+- [x] 9.1 `paymentContext` + `categoryChain` in services/obligations.js; GET /api/obligations/:id/occurrences/:occurrenceId/payment-context; payment POST accepts optional paymentMethodId/paymentMethod (validated, stored, part of the idempotency fingerprint); category chain shared helper
+- [x] 9.2 monthlyView obligation rows add documents[] (id,title,fileName,contentType,mimeType), payments[], resolvedAt; documentIds kept
+
+Notes: `accounts` in the context always lists every active account in the occurrence currency (so the dialog can override); `accountSource` reports how the suggestion was resolved. Context is blocked for cancelled, tenant-only (hint "Resolver"), settled and no-account cases. The payment POST keeps its account fallback (occurrence/obligation account) unchanged. Asset-file summary already exposed document metadata, left as is. Tests: tests/routes/obligation-payment-context.test.js, tests/routes/monthly-view-receipts.test.js (service-level files from the task were folded into these route suites).

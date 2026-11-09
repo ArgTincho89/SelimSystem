@@ -436,11 +436,64 @@ function getAlerts(db, userId) {
   ).sort((a, b) => a.date.localeCompare(b.date));
 }
 
+function categoryChain(db, userId, obligation, occurrence, bodyCategoryId = null) {
+  const provider = obligation.providerEntityId ? db.findById('legalOwners', obligation.providerEntityId, userId) : null;
+  return bodyCategoryId || occurrence.categoryId || obligation.categoryId || provider?.expenseCategoryId || null;
+}
+
+// Ranks the titular accounts of the asset: largest current ownership, earliest start,
+// then the user's primary account, then account order.
+function titularCandidates(db, userId, obligation, accounts, today) {
+  if (!obligation.assetId) return [];
+  const holders = db.findAll('assetOwnerships', userId)
+    .filter(item => item.assetId === obligation.assetId && item.startDate <= today && (!item.endDate || item.endDate >= today));
+  const best = new Map();
+  holders.forEach(holder => {
+    const percentage = typeof holder.percentage === 'number' ? holder.percentage : 100;
+    const current = best.get(holder.ownerId);
+    if (!current || percentage > current.percentage) best.set(holder.ownerId, { percentage, startDate: holder.startDate });
+  });
+  return accounts.filter(account => account.ownerId && best.has(account.ownerId))
+    .map(account => ({ account, ...best.get(account.ownerId) }))
+    .sort((a, b) => b.percentage - a.percentage || a.startDate.localeCompare(b.startDate)
+      || Number(Boolean(b.account.primary)) - Number(Boolean(a.account.primary)) || (a.account.order ?? 0) - (b.account.order ?? 0))
+    .map(item => item.account);
+}
+
+// Read model for the pay dialog: which account to suggest and whether the owner can pay.
+function paymentContext(db, userId, obligation, occurrence) {
+  const today = ledger.localDateForUser(db, userId);
+  const view = occurrenceView(db, userId, occurrence, today);
+  const responsibilityType = responsibilityFor(obligation, occurrence).responsibilityType;
+  const owners = new Map(db.findAll('legalOwners', userId).map(item => [item.id, item.name]));
+  const accounts = db.findAll('accounts', userId).filter(item => item.activo && item.currency === occurrence.currencyCode)
+    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  const context = {
+    occurrence: { id: occurrence.id, date: occurrence.date, currencyCode: occurrence.currencyCode, remainingAmount: view.remainingAmount },
+    responsibilityType, categoryId: categoryChain(db, userId, obligation, occurrence),
+    accounts: accounts.map(item => ({ id: item.id, name: item.nombre || item.name, currency: item.currency, ownerId: item.ownerId || null, ownerName: owners.get(item.ownerId) || null, primary: Boolean(item.primary) })),
+    suggestedAccountId: null, accountSource: 'none', warning: null, blocked: false, blockedReason: null,
+    paymentMethods: db.findAll('paymentMethods', userId)
+  };
+  const block = reason => ({ ...context, blocked: true, blockedReason: reason });
+  if (occurrence.status === 'cancelled') return block('La ocurrencia está cancelada');
+  if (responsibilityType === 'tenant' || (view.ownerDueAmount !== undefined && view.ownerDueAmount === 0)) return block('Este pago está a cargo del inquilino. Usá Resolver');
+  if (view.remainingAmount <= 0) return block('La ocurrencia ya está saldada');
+  const explicit = [occurrence.accountId, obligation.accountId].map(id => accounts.find(item => item.id === id)).find(Boolean);
+  if (explicit) return { ...context, suggestedAccountId: explicit.id, accountSource: 'explicit' };
+  const titular = titularCandidates(db, userId, obligation, accounts, today);
+  if (titular.length) return { ...context, suggestedAccountId: titular[0].id, accountSource: 'titular' };
+  if (accounts.length) {
+    return { ...context, suggestedAccountId: accounts[0].id, accountSource: 'fallback', warning: 'Ninguna cuenta de los titulares coincide con la moneda; elegí la cuenta con la que pagás' };
+  }
+  return block('No hay cuentas activas en la moneda de la obligación');
+}
+
 function idempotencyDigest(key) {
   return crypto.createHash('sha256').update(key).digest('hex');
 }
 
 module.exports = {
   COLLECTION, OCCURRENCES, RESOLUTIONS, validDate, occurrenceView, activeResolution, createResolution, voidResolution, listResolutions, occurrencesFor,
-  validateDefinition, validateResponsibility, portionsFor, responsibilityFor, setResponsibility, RESPONSIBILITY_TYPES, EXTERNAL_IDENTIFIER_TYPES, createObligation, updateOccurrence, paymentTransactions, getAlerts, idempotencyDigest, isScheduledOn
+  validateDefinition, validateResponsibility, portionsFor, responsibilityFor, setResponsibility, RESPONSIBILITY_TYPES, EXTERNAL_IDENTIFIER_TYPES, createObligation, updateOccurrence, paymentTransactions, getAlerts, idempotencyDigest, isScheduledOn, paymentContext, categoryChain
 };
