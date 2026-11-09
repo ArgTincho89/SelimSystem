@@ -58,3 +58,10 @@ Notes: provider field stays providerEntityId (legalOwners). Cuenta habitual and 
 - [x] 9.2 monthlyView obligation rows add documents[] (id,title,fileName,contentType,mimeType), payments[], resolvedAt; documentIds kept
 
 Notes: `accounts` in the context always lists every active account in the occurrence currency (so the dialog can override); `accountSource` reports how the suggestion was resolved. Context is blocked for cancelled, tenant-only (hint "Resolver"), settled and no-account cases. The payment POST keeps its account fallback (occurrence/obligation account) unchanged. Asset-file summary already exposed document metadata, left as is. Tests: tests/routes/obligation-payment-context.test.js, tests/routes/monthly-view-receipts.test.js (service-level files from the task were folded into these route suites).
+
+## Slice S10 (pay dialog and receipts UI) - done
+- [x] 10.1 `API.obligations.paymentContext`; obligations.js `pay()` is now a modal (amount = only/first number input, account select grouped titular/other with suggested preselected, warning banner, blocked message, date, required category, optional payment method, receipt file); tenant-only occurrences show "Resolver" instead of "Pagar"; alerts page reuses `ObligationsPage.pay`
+- [x] 10.2 receipt upload after payment POST (linked occurrenceId + transactionId), failure keeps payment and toasts; row button "Adjuntar comprobante" for paid/partial/resolved; `API.documents.receiptLinks` ("Ver" inline, "Descargar" ?download=1, "Sin comprobante") used in Ficha del bien, Ficha mensual (plus per-payment date/amount/account/method) and economic movements
+- [x] 10.3 sw.js v31; tests/ui/evolutivo2-s10-contract.test.js
+
+Notes: files are CRLF; no existing evolutivo-s* test needed changes (they assert `ObligationsPage.pay(` which is kept). Resolutions: "Adjuntar comprobante" row button uploads linked only to the occurrence.

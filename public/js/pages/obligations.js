@@ -138,15 +138,17 @@ const ObligationsPage = {
         const row = create('div', { style: { display: 'flex', gap: '8px', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap' } }, [label]);
         const actions = create('div', { style: { display: 'flex', gap: '6px', flexWrap: 'wrap' } });
         const hasTenantPortion = occurrence.tenantDueAmount !== undefined;
+        const tenantOnly = this.isTenantOnly(item, occurrence);
         if (!['paid', 'resolved', 'cancelled'].includes(occurrence.status)) {
           if (!occurrence.resolution) actions.append(create('button', { className: 'btn btn-ghost btn-sm', textContent: 'Confirmar', onClick: () => this.runAction(() => API.obligations.confirm(item.id, occurrence.id)) }));
           if (!occurrence.resolution) actions.append(create('button', { className: 'btn btn-ghost btn-sm', textContent: 'Editar', onClick: () => this.editOccurrence(item, occurrence) }));
-          if (!hasTenantPortion || occurrence.remainingAmount > 0) actions.append(create('button', { className: 'btn btn-ghost btn-sm', textContent: 'Pagar', onClick: () => this.pay(item, occurrence) }));
+          if (!tenantOnly && (!hasTenantPortion || occurrence.remainingAmount > 0)) actions.append(create('button', { className: 'btn btn-ghost btn-sm', textContent: 'Pagar', onClick: () => this.pay(item, occurrence) }));
           if (!occurrence.resolution) actions.append(create('button', { className: 'btn btn-ghost btn-sm', textContent: 'Cancelar', onClick: () => this.runAction(() => API.obligations.cancelOccurrence(item.id, occurrence.id)) }));
         }
         if (hasTenantPortion && !occurrence.resolution && occurrence.status !== 'cancelled') {
-          actions.append(create('button', { className: 'btn btn-secondary btn-sm', textContent: 'Resolver (pagó el inquilino)', onClick: () => this.showResolveModal(item, occurrence) }));
+          actions.append(create('button', { className: 'btn btn-secondary btn-sm', textContent: tenantOnly ? 'Resolver' : 'Resolver (pagó el inquilino)', onClick: () => this.showResolveModal(item, occurrence) }));
         }
+        if (occurrence.resolution || Number(occurrence.totalPaid) > 0) actions.append(create('button', { className: 'btn btn-ghost btn-sm', textContent: 'Adjuntar comprobante', onClick: () => this.attachReceiptTo(occurrence) }));
         if (occurrence.resolution) {
           actions.append(create('button', { className: 'btn btn-ghost btn-sm', textContent: 'Anular resolución', onClick: () => this.voidResolution(item, occurrence) }));
         }
@@ -346,15 +348,79 @@ const ObligationsPage = {
     await this.runAction(() => API.obligations.voidResolution(obligation.id, occurrence.id));
   },
 
+  isTenantOnly(obligation, occurrence) {
+    return (occurrence.responsibilityType || obligation.responsibilityType) === 'tenant' || (occurrence.tenantDueAmount !== undefined && occurrence.ownerDueAmount === 0);
+  },
+
+  // Uploads a receipt linked to the occurrence (and the payment transaction when there is one).
+  async uploadReceipt(occurrence, file, transactionId = null) {
+    return API.documents.uploadTargets({ occurrenceId: occurrence.id, transactionId }, file);
+  },
+
+  // Row action used when a receipt is missing or its upload failed (payments and resolutions).
+  attachReceiptTo(occurrence) {
+    const input = create('input', { type: 'file', accept: '.pdf,.png,.jpg,.jpeg,.webp,.txt' });
+    on(input, 'change', async () => {
+      if (!input.files?.[0]) return;
+      try { await this.uploadReceipt(occurrence, input.files[0]); showToast('Comprobante adjuntado'); await this.refresh(); }
+      catch (error) { showToast(error.message, 'error'); }
+    });
+    input.click();
+  },
+
   async pay(obligation, occurrence) {
-    const amount = prompt(`Importe pagado (restante: ${occurrence.remainingAmount} ${occurrence.currencyCode})`, String(occurrence.remainingAmount));
-    if (amount === null) return;
-    const selectedAccount = obligation.accountId || this.accounts.find(account => account.currency === obligation.currencyCode)?.id;
-    const selectedCategory = obligation.categoryId || this.categories[0]?.id;
-    await this.runAction(() => API.obligations.pay(obligation.id, occurrence.id, {
-      amount: Number(amount), accountId: selectedAccount, categoryId: selectedCategory,
-      idempotencyKey: globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`
-    }));
+    let context;
+    try { context = await API.obligations.paymentContext(obligation.id, occurrence.id); } catch (error) { alert(error.message); return; }
+    const form = create('form', { style: { display: 'grid', gap: '10px', maxHeight: '70vh', overflowY: 'auto' } });
+    if (context.blocked) {
+      form.appendChild(create('p', { className: 'text-muted', textContent: context.blockedReason || 'No se puede registrar el pago' }));
+      Modal.show('Registrar pago', form);
+      return;
+    }
+    const remaining = occurrence.remainingAmount ?? occurrence.actualDueAmount;
+    const amount = this.field(form, `Importe pagado (restante: ${remaining} ${occurrence.currencyCode})`, { type: 'number', min: '0.01', step: '0.01', required: true, value: remaining });
+    if (context.warning) form.appendChild(create('div', { className: 'card', role: 'alert', style: { borderLeft: '4px solid var(--danger)', padding: '8px' }, textContent: context.warning }));
+    const accountSelect = create('select', { className: 'form-control', required: true });
+    const titular = context.accounts.filter(item => item.ownerId);
+    const others = context.accounts.filter(item => !item.ownerId);
+    [['Cuentas de los titulares', titular], ['Otras cuentas', others]].forEach(([label, group]) => {
+      if (!group.length) return;
+      const optgroup = create('optgroup', { label });
+      group.forEach(item => optgroup.appendChild(create('option', { value: item.id, textContent: `${item.name}${item.ownerName ? ` · ${item.ownerName}` : ''} (${item.currency})` })));
+      accountSelect.appendChild(optgroup);
+    });
+    accountSelect.value = context.suggestedAccountId || '';
+    this.fieldWrap(form, 'Cuenta', accountSelect);
+    const date = this.field(form, 'Fecha de pago', { type: 'date', required: true, value: new Date().toISOString().slice(0, 10) });
+    const category = this.select([['', 'Seleccionar categoría'], ...this.categories.map(item => [item.id, item.nombre])], context.categoryId || obligation.categoryId || '');
+    category.required = true;
+    this.fieldWrap(form, 'Categoría', category);
+    const method = this.select([['', 'Sin medio de pago'], ...this.paymentMethods.map(item => [item.id, `${item.name}${item.lastFour ? ` ···· ${item.lastFour}` : ''}`])], '');
+    this.fieldWrap(form, 'Medio de pago (opcional)', method);
+    const file = create('input', { className: 'form-control', type: 'file', accept: '.pdf,.png,.jpg,.jpeg,.webp,.txt' });
+    this.fieldWrap(form, 'Comprobante (opcional)', file);
+    const submit = create('button', { className: 'btn btn-primary', type: 'submit', textContent: 'Registrar pago' });
+    form.appendChild(submit);
+    const idempotencyKey = globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`;
+    on(form, 'submit', async event => {
+      event.preventDefault();
+      if (!category.value) { alert('Seleccioná una categoría'); return; }
+      submit.disabled = true;
+      let result;
+      try {
+        result = await API.obligations.pay(obligation.id, occurrence.id, {
+          amount: Number(amount.value), accountId: accountSelect.value, categoryId: category.value, date: date.value,
+          ...(method.value ? { paymentMethodId: method.value } : {}), idempotencyKey
+        });
+      } catch (error) { submit.disabled = false; alert(error.message); return; }
+      Modal.hide();
+      if (file.files?.[0]) {
+        try { await this.uploadReceipt(occurrence, file.files[0], result.transaction?.id || null); }
+        catch (error) { showToast(`El pago se registró, pero no se pudo adjuntar el comprobante: ${error.message}. Usá "Adjuntar comprobante" en la fila.`, 'error'); }
+      }
+      await this.refresh();
+    });
+    Modal.show('Registrar pago', form);
   },
 
   async addNote(obligation) {

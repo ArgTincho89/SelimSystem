@@ -595,7 +595,10 @@ const AssetsPage = {
     list('Próximos vencimientos', file.upcoming, item => `${item.date} · ${item.title}`);
     list('Pendientes', file.pending, item => `${item.dueDate} · ${item.title}${item.type === 'document_pending' ? ' (falta comprobante)' : item.type === 'tenant_obligation_pending' ? ' (comprobante del inquilino pendiente)' : ''}`);
     list('Obligaciones', file.obligations, item => `${item.title} · ${responsibility[item.responsibilityType] || item.responsibilityType}${item.responsibleParty?.name ? ` (${item.responsibleParty.name})` : ''} · ${item.nextDueDate ? `próximo ${item.nextDueDate}` : 'sin próximo vencimiento'}${item.settledBy ? ` · ${settled[item.settledBy]}` : ''}${resolution[item.resolutionStatus] || ''}`);
-    list('Documentos', file.documents, item => `${item.title} (${item.fileName})`);
+    const documents = create('div', { style: { display: 'grid', gap: '4px' } }, [create('strong', { textContent: 'Documentos', style: { display: 'block', marginTop: '8px' } })]);
+    if (!(file.documents || []).length) documents.appendChild(create('small', { className: 'text-muted', textContent: 'Sin elementos' }));
+    (file.documents || []).forEach(item => documents.appendChild(API.documents.receiptLinks([item])));
+    section.appendChild(documents);
     list('Notas', file.notes, item => item.text);
   },
 
@@ -615,22 +618,23 @@ const AssetsPage = {
         table.appendChild(create('caption', { textContent: month.month, style: { textAlign: 'left', fontWeight: '600' } }));
         table.appendChild(create('thead', {}, [create('tr', {}, ['Concepto', 'Responsable', 'Esperado', 'Pagado o cobrado', 'Estado', 'Comprobante'].map(text => create('th', { textContent: text })))]));
         const rows = create('tbody');
-        const add = cells => rows.appendChild(create('tr', {}, cells.map(text => create('td', { textContent: text }))));
+        const add = cells => rows.appendChild(create('tr', {}, cells.map(cell => (typeof cell === 'string' ? create('td', { textContent: cell }) : create('td', {}, [cell])))));
         (month.rentByCurrency.length ? month.rentByCurrency : [null]).forEach(rent => add(['Alquiler', 'Inquilino',
           rent ? money(rent.expectedMinor, rent.currencyCode) : '-', rent ? money(rent.collectedMinor, rent.currencyCode) : '-',
           rent ? (rent.differenceMinor > 0 ? `Falta ${money(rent.differenceMinor, rent.currencyCode)}` : 'Cobrado') : 'Sin alquiler', '']));
         month.obligations.forEach(item => {
           const tenantPaid = item.resolutionStatus !== 'none';
           add([item.title, responsibility[item.responsibilityType] || item.responsibilityType, money(item.estimatedMinor, item.currencyCode),
-            tenantPaid ? `${money(item.actualMinor, item.currencyCode)} · Pagado por inquilino ${money(item.resolutionAmountMinor, item.currencyCode)}` : money(item.actualMinor, item.currencyCode),
-            statusLabel[item.status] || item.status, item.documentIds.length ? `${item.documentIds.length} adjunto(s)` : 'Sin comprobante']);
+            (tenantPaid ? `${money(item.actualMinor, item.currencyCode)} · Pagado por inquilino ${money(item.resolutionAmountMinor, item.currencyCode)}` : money(item.actualMinor, item.currencyCode))
+              + (item.payments || []).map(pay => ` | ${pay.date}: ${money(pay.amountMinor, item.currencyCode)}${pay.accountName ? ` (${pay.accountName}${pay.paymentMethod ? `, ${pay.paymentMethod}` : ''})` : ''}`).join(''),
+            statusLabel[item.status] || item.status, API.documents.receiptLinks(item.documents || [])]);
         });
         [['Gastos imputados', month.expensesMinorByCurrency], ['Ingresos imputados', month.incomeMinorByCurrency],
           ['Reintegros', month.refundsMinorByCurrency], ['Recuperos', month.recoveriesMinorByCurrency]].forEach(([label, map]) => {
           if (Object.keys(map).length) add([label, 'Propietario', '', totals(map), '', '']);
         });
         month.claims.forEach(claim => add(['Gasto a recuperar', 'Inquilino', money(claim.amountMinor, claim.currencyCode), money(claim.recoveredMinor, claim.currencyCode), claim.status === 'recovered' ? 'Recuperado' : claim.status === 'partial' ? 'Parcial' : 'Pendiente', '']));
-        month.documents.forEach(doc => add([`Documento: ${doc.title}`, '', '', '', '', doc.fileName]));
+        month.documents.forEach(doc => add([`Documento: ${doc.title}`, '', '', '', '', API.documents.receiptLinks([doc])]));
         month.notes.forEach(note => add([`Nota: ${note}`, '', '', '', '', '']));
         table.appendChild(rows);
         report.appendChild(table);
@@ -676,8 +680,7 @@ const AssetsPage = {
       row.appendChild(create('small', { style: { display: 'block' }, textContent: `${item.type === 'income' ? 'Ingreso' : item.type === 'expense' ? 'Gasto' : 'Reembolso'} · ${item.category || 'Sin categoría'} · ${item.account} · ${item.paymentMethod || 'Medio no indicado'} · ${item.contract || 'Sin contrato'} · ${item.status === 'posted' ? 'Contabilizado' : item.status}` }));
       if (item.refundSourceId) row.appendChild(create('small', { style: { display: 'block' }, textContent: `Reembolso vinculado a: ${item.refundSourceConcept || 'gasto de origen'}` }));
       (item.documents || []).forEach(document => {
-        const link = create('a', { href: API.documents.contentUrl(document.id), target: '_blank', rel: 'noopener noreferrer', textContent: `Documento: ${document.title || document.fileName}` });
-        row.appendChild(link);
+        row.appendChild(API.documents.receiptLinks([document]));
       });
       movementList.appendChild(row);
     });

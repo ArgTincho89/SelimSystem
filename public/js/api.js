@@ -204,7 +204,19 @@ const API = {
       if (!response.ok) throw new Error(data.error || 'No se pudo cargar el documento');
       return data;
     },
-    contentUrl(id, download = false) { return `/api/documents/${encodeURIComponent(id)}/content${download ? '?download=1' : ''}`; }
+    contentUrl(id, download = false) { return `/api/documents/${encodeURIComponent(id)}/content${download ? '?download=1' : ''}`; },
+    // Receipt list with "Ver" (inline) and "Descargar" links; "Sin comprobante" when empty.
+    receiptLinks(documents = []) {
+      const box = create('span', { style: { display: 'inline-flex', gap: '8px', flexWrap: 'wrap' } });
+      if (!documents.length) box.textContent = 'Sin comprobante';
+      documents.forEach(doc => box.append(create('span', {}, [
+        document.createTextNode(`${doc.title || doc.fileName} `),
+        create('a', { href: API.documents.contentUrl(doc.id), target: '_blank', rel: 'noopener noreferrer', textContent: 'Ver' }),
+        document.createTextNode(' · '),
+        create('a', { href: API.documents.contentUrl(doc.id, true), textContent: 'Descargar' })
+      ])));
+      return box;
+    }
   },
 
   wealthNotes: {
@@ -230,6 +242,7 @@ const API = {
     confirm(id, occurrenceId) { return API.post(`/obligations/${encodeURIComponent(id)}/occurrences/${encodeURIComponent(occurrenceId)}/confirm`, {}); },
     cancelOccurrence(id, occurrenceId) { return API.post(`/obligations/${encodeURIComponent(id)}/occurrences/${encodeURIComponent(occurrenceId)}/cancel`, {}); },
     updateOccurrence(id, occurrenceId, data) { return API.put(`/obligations/${encodeURIComponent(id)}/occurrences/${encodeURIComponent(occurrenceId)}`, data); },
+    paymentContext(id, occurrenceId) { return API.get(`/obligations/${encodeURIComponent(id)}/occurrences/${encodeURIComponent(occurrenceId)}/payment-context`); },
     pay(id, occurrenceId, data) { return API.post(`/obligations/${encodeURIComponent(id)}/occurrences/${encodeURIComponent(occurrenceId)}/payments`, data); },
     createResolution(id, occurrenceId, data) { return API.post(`/obligations/${encodeURIComponent(id)}/occurrences/${encodeURIComponent(occurrenceId)}/resolution`, data); },
     voidResolution(id, occurrenceId) { return API.delete(`/obligations/${encodeURIComponent(id)}/occurrences/${encodeURIComponent(occurrenceId)}/resolution`); },
