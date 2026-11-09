@@ -20,3 +20,9 @@ Notes: e2e has no references to Contactos or /entities. Roles checkboxes keep th
 - [x] 3.3 migrateEvolutivo2 extended (assets and contracts), add-only/idempotent
 
 Notes: when `condition` is omitted it is derived from `usageStatus` (rented -> rented) so legacy posts keep their usage status; the sync only runs when `condition` is sent explicitly.
+
+## Slice S4 (asset composite form) - done
+- [x] 4.1 src/services/asset-form.js validate/apply/diffHolders
+- [x] 4.2 POST /api/assets/form and PUT /api/assets/:id/form; non-null rental returns 400 until S6; assetResponse adds activeContract:null and obligations:[] placeholders
+
+Notes: validateAsset is injected into the service (no circular require). Holders starting today or later are edited/removed in place; older changed ones close at yesterday. obligationResponsibilities is only type-checked (S6 applies it). Tests in tests/routes/assets-form.test.js.

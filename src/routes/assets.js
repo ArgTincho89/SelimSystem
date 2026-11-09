@@ -2,7 +2,8 @@ const express = require('express');
 const { requireAuth } = require('../middleware/auth');
 const economicOverview = require('../services/economic-overview');
 const assetFile = require('../services/asset-file');
-const { validateOwnershipSet } = require('../utils/ownership-overlap');
+const assetForm = require('../services/asset-form');
+const { validateOwnershipSet } =require('../utils/ownership-overlap');
 
 const router = express.Router();
 router.use(requireAuth);
@@ -170,6 +171,8 @@ function assetResponse(db, userId, asset) {
   return {
     ...asset,
     ownerships: ownershipsForAsset(db, userId, asset.id),
+    activeContract: null,
+    obligations: [],
     statusHistory: db.findAll('assetStatusHistory', userId).filter(event => event.assetId === asset.id).sort((a, b) => a.changedAt.localeCompare(b.changedAt))
   };
 }
@@ -224,6 +227,29 @@ router.post('/', (req, res) => {
   ownershipRecords.forEach(record => db.create('assetOwnerships', { ...record, assetId: asset.id }, userId));
   db.create('assetStatusHistory', { assetId: asset.id, status: asset.status, changedAt: asset.createdAt, notes: 'Estado inicial' }, userId);
   res.status(201).json(assetResponse(db, userId, asset));
+});
+
+function saveForm(req, res, existing) {
+  const db = req.app.locals.db;
+  const userId = req.session.userId;
+  const parsed = assetForm.validate(db, userId, req.body, existing, validateAsset);
+  if (parsed.error) return res.status(400).json({ error: parsed.error });
+  let asset;
+  try {
+    asset = assetForm.apply(db, userId, existing, parsed.value);
+  } catch (error) {
+    db.clearCache();
+    return res.status(500).json({ error: 'No se pudo guardar el bien' });
+  }
+  return res.status(existing ? 200 : 201).json(assetResponse(db, userId, asset));
+}
+
+router.post('/form', (req, res) => saveForm(req, res, null));
+
+router.put('/:id/form', (req, res) => {
+  const asset = req.app.locals.db.findById('assets', req.params.id, req.session.userId);
+  if (!asset) return res.status(404).json({ error: 'Bien no encontrado' });
+  return saveForm(req, res, asset);
 });
 
 router.get('/:id', (req, res) => {
