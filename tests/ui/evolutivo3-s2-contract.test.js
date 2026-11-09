@@ -33,7 +33,7 @@ describe('Evolutivo 3 S2 rent collection UI contract', () => {
   it('the Transacciones delete explains the period returns to pending', () => {
     expect(read('js/pages/home.js')).toContain('el período vuelve a quedar pendiente de cobro');
   });
-  it('bumps the service worker cache to v33', () => {
-    expect(read('sw.js')).toContain("CACHE_NAME = 'selimsystem-v33'");
+  it('bumps the service worker cache to v33 or later', () => {
+    expect(Number(read('sw.js').match(/CACHE_NAME = 'selimsystem-v(\d+)'/)[1])).toBeGreaterThanOrEqual(33);
   });
 });

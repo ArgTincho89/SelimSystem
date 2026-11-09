@@ -95,6 +95,8 @@ const CONTRACT_TYPE_BY_KIND = { galpon: 'industrial', lote: 'other' };
  */
 function planRental(db, userId, rental, existing, asset) {
   const active = existing ? rentals.activeContractFor(db, userId, existing.id) : null;
+  // The UI no longer sends `rental`: contracts are managed by declarations, so leave them untouched.
+  if (rental === undefined) return { value: { action: 'none', contract: active } };
   if (!(asset.type === 'immovable' && ['rented', 'usufruct'].includes(asset.condition))) {
     if (rental != null && asset.type !== 'immovable') return fail('Solo los inmuebles pueden tener un alquiler');
     return { value: { action: active ? 'end' : 'none', contract: active } };

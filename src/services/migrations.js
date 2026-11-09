@@ -91,4 +91,28 @@ function migrateAssetsAndContracts(db, userId) {
   return updated;
 }
 
-module.exports = { migrateEvolutivo, migrateEvolutivo2 };
+/**
+ * Idempotent add-only backfill for "evolutivo-3" (assets part).
+ * Sets `cadastralId` and `constructionDate` to null on immovables only when undefined.
+ */
+function migrateEvolutivo3(db) {
+  let updated = 0;
+  for (const user of db.findAll('users')) {
+    const assets = db.findAll('assets', user.id);
+    let changed = false;
+    const next = assets.map(asset => {
+      if (asset.type !== 'immovable') return asset;
+      const patch = {};
+      if (asset.cadastralId === undefined) patch.cadastralId = null;
+      if (asset.constructionDate === undefined) patch.constructionDate = null;
+      if (!Object.keys(patch).length) return asset;
+      changed = true;
+      updated += 1;
+      return { ...asset, ...patch };
+    });
+    if (changed) db.replace('assets', user.id, next);
+  }
+  return { updated };
+}
+
+module.exports = { migrateEvolutivo, migrateEvolutivo2, migrateEvolutivo3 };

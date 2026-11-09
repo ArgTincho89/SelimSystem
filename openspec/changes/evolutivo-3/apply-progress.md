@@ -22,3 +22,13 @@ Notes:
 - Tests: new `tests/helpers/rent-fixture.js` (shared fixture), `rentals-collection-classification`, `rentals-reverse`, `transactions-rent-delete`, `income-iva-included`, `evolutivo3-s2-contract`. Updated `rentals.test.js` (DELETE of a collection tx is no longer 409) and the S1 contract test cache version (v33).
 - The `ivaPercent` contract field is seeded directly in tests; the declarations API arrives in S4a. The dialog reads `ivaPercent` from the contract response.
 - Asset-level "Registrar cobro" keeps multi-period selection (now with MoneyInput and no reusable method).
+
+## Slice S3 (asset-form-simplify, sw v34) - done
+- [x] 3.1 `src/services/asset-age.js` (`ageFor`, `completedYears`, `isValidDay`); `src/routes/assets.js` immovable `cadastralId` (trimmed, <=100 else 400, empty -> null) and `constructionDate` (valid, not future else 400 "La fecha de construcción no puede ser futura", empty -> null); list and detail responses add `age: {years, source}`; legacy `ageYears` is kept and used only without a date. `asset-form.planRental` returns `action:'none'` when `body.rental === undefined` (the UI never sends it); a legacy `rental` payload still works.
+- [x] 3.2 `migrateEvolutivo3(db)` (assets part) in `src/services/migrations.js`, called in `src/app.js` after `migrateEvolutivo2`.
+- [x] 3.3 `public/js/pages/assets.js`: "Identificación catastral" text, "Fecha de construcción" date with live "Antigüedad: N años/meses" and "Antigüedad (dato anterior): N años"; no condition select or rental block (`renderRentalAndObligations` replaced by `renderObligations`: list, A cargo de, "Nueva obligación", heading "Obligaciones del bien"; "Inquilino" is offered only with an active contract); "Ver" per row opens the edit modal with `{readOnly:true}` (all controls disabled, footer only "Cerrar"); inline "Estás por modificar datos del bien. Revisá los cambios antes de confirmar." with "Confirmar y guardar"/"Volver" before every edit save; holder add/end blocks removed from the details modal (which now shows cadastral, construction date and age). `sw.js` -> `selimsystem-v34`.
+
+Notes:
+- Tests: new `asset-age`, `migrations-evolutivo3-assets`, `assets-cadastral-age`, `evolutivo3-s3-contract`. `evolutivo2-s5`/`s7` contract tests rewritten for the removed condition/rental block (obligations behavior still covered); S1/S2 cache-version assertions relaxed to ">= vN" so later bumps do not break them. No e2e feature touched the removed UI.
+- Edit save sends no `rental` and no `condition`, so existing contracts are left untouched until the declaration modal (S4b) exists; `condition` stays derived/legacy.
+- Read-only "Ver" disables controls by DOM query after build; the "Nueva obligación" shortcut is disabled too.

@@ -10,7 +10,7 @@ describe('Evolutivo 3 S1 money input contract', () => {
     const sw = read('sw.js');
     expect(sw).toContain("'/js/components/moneyInput.js'");
     expect(sw).toContain("'/js/pages/settings.js'");
-    expect(sw).toContain("CACHE_NAME = 'selimsystem-v33'");
+    expect(Number(sw.match(/CACHE_NAME = 'selimsystem-v(\d+)'/)[1])).toBeGreaterThanOrEqual(32);
   });
 
   it('declares the money input attributes', () => {

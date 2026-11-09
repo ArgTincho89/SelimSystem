@@ -3,6 +3,8 @@ const { requireAuth } = require('../middleware/auth');
 const economicOverview = require('../services/economic-overview');
 const assetFile = require('../services/asset-file');
 const assetForm = require('../services/asset-form');
+const { ageFor } = require('../services/asset-age');
+const ledger = require('../services/account-ledger');
 const { validateOwnershipSet } =require('../utils/ownership-overlap');
 
 const router = express.Router();
@@ -67,7 +69,7 @@ function nonNegativeInt(value, max) {
   return { value };
 }
 
-function validateImmovableFields(body, existing, usageStatus) {
+function validateImmovableFields(body, existing, usageStatus, db, userId) {
   const propertyKind = pick(body, existing, 'propertyKind', null);
   if (propertyKind !== null && propertyKind !== '' && !PROPERTY_KINDS.has(propertyKind)) return { error: 'El tipo de inmueble no es válido' };
   const characteristics = pick(body, existing, 'characteristics', '');
@@ -79,6 +81,15 @@ function validateImmovableFields(body, existing, usageStatus) {
     if (parsed.error) return { error: `El campo ${field} debe ser un entero igual o mayor que cero` };
     value[field] = parsed.value;
   }
+  const cadastral = pick(body, existing, 'cadastralId', null);
+  if (cadastral !== null && !boundedString(cadastral, 100)) return { error: 'La identificación catastral no puede superar los 100 caracteres' };
+  value.cadastralId = typeof cadastral === 'string' && cadastral.trim() ? cadastral.trim() : null;
+  const built = pick(body, existing, 'constructionDate', null);
+  if (built !== null && built !== '') {
+    if (!validDate(built, false)) return { error: 'La fecha de construcción no es válida' };
+    if (built > ledger.localDateForUser(db, userId)) return { error: 'La fecha de construcción no puede ser futura' };
+  }
+  value.constructionDate = built || null;
   let condition = body.condition !== undefined ? body.condition : existing?.condition;
   if (condition === undefined || condition === null) condition = usageStatus === 'rented' ? 'rented' : 'not_rented';
   if (!CONDITIONS.has(condition)) return { error: 'La condición no es válida' };
@@ -140,7 +151,7 @@ function validateAsset(body, existing, db, userId) {
     result.propertyType = propertyType || '';
     result.area = area == null ? null : area;
     result.usageStatus = usageStatus;
-    const typed = validateImmovableFields(body, existing, usageStatus);
+    const typed = validateImmovableFields(body, existing, usageStatus, db, userId);
     if (typed.error) return { error: typed.error };
     Object.assign(result, typed.value);
   }
@@ -170,6 +181,7 @@ function ownershipsForAsset(db, userId, assetId) {
 function assetResponse(db, userId, asset) {
   return {
     ...asset,
+    age: ageFor(asset, ledger.localDateForUser(db, userId)),
     ownerships: ownershipsForAsset(db, userId, asset.id),
     ...assetForm.describe(db, userId, asset),
     statusHistory: db.findAll('assetStatusHistory', userId).filter(event => event.assetId === asset.id).sort((a, b) => a.changedAt.localeCompare(b.changedAt))
@@ -201,8 +213,10 @@ router.get('/', (req, res) => {
   const assets = db.findAll('assets', userId);
   const owners = db.findAll('legalOwners', userId);
   const ownerships = db.findAll('assetOwnerships', userId);
+  const today = ledger.localDateForUser(db, userId);
   res.json(assets.filter(asset => matchesFilter(asset, filters, owners, ownerships)).map(asset => ({
     ...asset,
+    age: ageFor(asset, today),
     owners: ownershipsForAsset(db, userId, asset.id).filter(record => !record.endDate).map(record => record.owner).filter(Boolean)
   })));
 });

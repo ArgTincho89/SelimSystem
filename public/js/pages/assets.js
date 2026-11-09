@@ -64,6 +64,7 @@ const AssetsPage = {
         create('div', { textContent: `Estado: ${statusLabel(asset.status || 'active')}${asset.owners?.length ? ` · Titular: ${asset.owners.map(item => item.name).join(', ')}` : ''}`, style: { color: 'var(--text-muted)', fontSize: 'var(--font-sm)', marginTop: '3px' } })
       ]);
       const actions = create('div', { style: { display: 'flex', gap: '8px' } }, [
+        create('button', { className: 'btn btn-ghost btn-sm', textContent: 'Ver', onClick: async () => { try { this.showAssetModal(await API.assets.get(asset.id), { readOnly: true }); } catch (error) { showToast(error.message, 'error'); } } }),
         create('button', { className: 'btn btn-ghost btn-sm', textContent: 'Ver historial', onClick: () => this.showDetails(asset.id) }),
         create('button', { className: 'btn btn-secondary btn-sm', textContent: 'Editar', onClick: async () => { try { this.showAssetModal(await API.assets.get(asset.id)); } catch (error) { showToast(error.message, 'error'); } } })
       ]);
@@ -145,80 +146,48 @@ const AssetsPage = {
     return item.externalIdentifier ? `${provider} - ${this.identifierLabel(item.externalIdentifierType)}: ${item.externalIdentifier}` : `${provider} - ${item.title}`;
   },
 
-  // Rental block + cadastral identification + obligations list (evolutivo-2 S7). Returns a controller used by the save handler.
-  renderRentalAndObligations(slot, asset, conditionSelect) {
+  // "Obligaciones del bien": list, per-obligation responsibility and shortcut. Rent is declared separately.
+  renderObligations(slot, asset) {
     slot.replaceChildren();
-    const contract = asset?.activeContract || null;
-    const locked = Boolean(contract?.locked);
     const items = asset?.obligations || [];
-    const tenants = this.owners.filter(owner => (owner.roles || []).includes('tenant'));
-    const block = create('section', { className: 'card', style: { padding: '10px', marginBottom: '10px' }, dataset: { rentalBlock: 'true' } });
-    const tenant = this.select([['', 'Seleccionar inquilino'], ...tenants.map(item => [item.id, item.name])], contract?.tenantIds?.[0] || '');
-    const startDate = create('input', { className: 'form-control', type: 'date', value: contract?.startDate || '' });
-    const endDate = create('input', { className: 'form-control', type: 'date', value: contract?.endDate || '' });
-    const amount = create('input', { className: 'form-control', type: 'number', min: '1', step: '1', value: contract?.initialRent ?? '' });
-    const currency = this.select(['ARS', 'EUR', 'USD'].map(code => [code, code]), contract?.currencyCode || 'ARS');
-    const frequency = create('input', { className: 'form-control', type: 'text', inputMode: 'numeric', value: contract?.adjustmentFrequencyMonths ?? '' });
-    const criterion = create('input', { className: 'form-control', type: 'text', placeholder: 'Ej.: porcentaje, IPC', value: contract?.adjustmentCriterion || '' });
-    if (locked) [tenant, startDate, amount, currency].forEach(control => { control.disabled = true; });
-    const labelled = (text, control) => create('div', { className: 'form-group' }, [create('label', { textContent: text }), control]);
-    block.append(labelled('Inquilino', tenant), labelled('Contrato vigente desde', startDate), labelled('Hasta', endDate), labelled('Monto original', amount), labelled('Moneda', currency), labelled('Frecuencia ajuste (meses)', frequency), labelled('Criterio ajuste', criterion));
-    if (locked) block.appendChild(create('small', { className: 'text-muted', textContent: 'Para cambiar el inquilino, marcá el bien como No alquilado y volvé a declararlo' }));
-    const responsibilities = create('div', { style: { display: 'grid', gap: '6px', marginTop: '8px' } });
-    responsibilities.appendChild(create('strong', { textContent: 'Obligaciones del bien' }));
-    if (!items.length) responsibilities.appendChild(create('small', { className: 'text-muted', textContent: 'Este bien todavía no tiene obligaciones asignadas.' }));
+    const hasTenant = Boolean(asset?.activeContract);
+    const section = create('section', { className: 'card', style: { padding: '10px', marginBottom: '10px' }, dataset: { obligationsBlock: 'true' } });
+    section.appendChild(create('h4', { textContent: 'Obligaciones del bien' }));
+    if (!asset?.id) section.appendChild(create('small', { className: 'text-muted', textContent: 'Guardá el bien para asignarle obligaciones.' }));
+    else if (!items.length) section.appendChild(create('small', { className: 'text-muted', textContent: 'Este bien todavía no tiene obligaciones asignadas.' }));
     const selectors = new Map();
     items.forEach(item => {
-      const row = create('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', flexWrap: 'wrap' } }, [create('span', { textContent: this.obligationLine(item) })]);
+      const row = create('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', flexWrap: 'wrap', margin: '4px 0' } }, [create('span', { textContent: this.obligationLine(item) })]);
       if (['owner', 'tenant'].includes(item.responsibilityType)) {
-        const selector = this.select([['owner', 'Titular'], ['tenant', 'Inquilino']], item.responsibilityType);
+        const selector = this.select(hasTenant || item.responsibilityType === 'tenant' ? [['owner', 'Titular'], ['tenant', 'Inquilino']] : [['owner', 'Titular']], item.responsibilityType);
         selector.setAttribute('aria-label', 'A cargo de');
         selectors.set(item.id, selector);
         row.appendChild(create('label', {}, [create('span', { textContent: 'A cargo de: ' }), selector]));
       } else row.appendChild(create('small', { className: 'text-muted', textContent: 'A cargo de: compartida (solo lectura)' }));
-      responsibilities.appendChild(row);
+      section.appendChild(row);
     });
-    block.appendChild(responsibilities);
-
-    const catastral = create('section', { style: { marginBottom: '10px' } }, [create('h4', { textContent: 'Identificación catastral' })]);
-    if (!asset?.id) catastral.appendChild(create('small', { className: 'text-muted', textContent: 'Guardá el bien para asignarle obligaciones.' }));
-    else if (!items.length) catastral.appendChild(create('small', { className: 'text-muted', textContent: 'Sin obligaciones asignadas.' }));
-    items.forEach(item => catastral.appendChild(create('p', { style: { margin: '4px 0' }, textContent: this.obligationLine(item) })));
-    catastral.appendChild(create('button', { className: 'btn btn-ghost btn-sm', type: 'button', textContent: 'Nueva obligación', disabled: !asset?.id,
+    section.appendChild(create('button', { className: 'btn btn-ghost btn-sm', type: 'button', textContent: 'Nueva obligación', disabled: !asset?.id,
       onClick: () => { Modal.hide(); Router.navigate(`/obligations?newForAsset=${encodeURIComponent(asset.id)}`); } }));
-    const confirmBox = create('div', { className: 'card', style: { display: 'none', padding: '10px', marginBottom: '10px' }, dataset: { endContractConfirm: 'true' } });
-    slot.append(block, confirmBox, catastral);
-
-    const rented = () => ['rented', 'usufruct'].includes(conditionSelect.value);
-    const refresh = () => { block.style.display = rented() ? '' : 'none'; confirmBox.style.display = 'none'; };
-    on(conditionSelect, 'change', refresh);
-    refresh();
+    slot.appendChild(section);
     return {
-      needsEndConfirmation: () => Boolean(contract) && !rented(),
-      askEndConfirmation: onConfirm => {
-        confirmBox.replaceChildren(
-          create('p', { textContent: 'Al marcar el bien como No alquilado se finaliza el contrato vigente y las obligaciones a cargo del inquilino vuelven al titular.' }),
-          create('button', { className: 'btn btn-danger btn-sm', type: 'button', textContent: 'Finalizar contrato y guardar', onClick: onConfirm }),
-          create('button', { className: 'btn btn-ghost btn-sm', type: 'button', textContent: 'Cancelar', onClick: () => { confirmBox.style.display = 'none'; } })
-        );
-        confirmBox.style.display = '';
-      },
-      collect: () => {
-        if (!rented()) return { rental: null, obligationResponsibilities: [] };
-        const obligationResponsibilities = [...selectors].map(([obligationId, selector]) => ({ obligationId, responsibilityType: selector.value }));
-        const parsedFrequency = this.parseIntegerField(frequency, 'La frecuencia de ajuste');
-        if (parsedFrequency.error) return { error: parsedFrequency.error };
-        const adjustment = { adjustmentFrequencyMonths: parsedFrequency.value, adjustmentCriterion: criterion.value.trim() || null };
-        if (locked) return { rental: { tenantId: contract.tenantIds[0], startDate: contract.startDate, endDate: endDate.value || null, amount: contract.initialRent, currencyCode: contract.currencyCode, ...adjustment }, obligationResponsibilities };
-        if (!tenant.value) return { error: 'Seleccioná un inquilino' };
-        if (!startDate.value) return { error: 'Indicá desde cuándo rige el contrato' };
-        if (!/^\d+$/.test(amount.value.trim()) || Number(amount.value) <= 0) return { error: 'El monto original debe ser un número entero positivo' };
-        return { rental: { tenantId: tenant.value, startDate: startDate.value, endDate: endDate.value || null, amount: Number(amount.value), currencyCode: currency.value, ...adjustment }, obligationResponsibilities };
-      }
+      collect: () => ({ obligationResponsibilities: [...selectors].map(([obligationId, selector]) => ({ obligationId, responsibilityType: selector.value })) })
     };
   },
 
-  showAssetModal(asset = null) {
+  // Live "Antigüedad" text from a YYYY-MM-DD construction date: whole years, or months when under one year.
+  ageText(dateValue, now = new Date()) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateValue || '')) return '';
+    const [y, m, d] = dateValue.split('-').map(Number);
+    let months = (now.getFullYear() - y) * 12 + (now.getMonth() + 1 - m);
+    if (now.getDate() < d) months -= 1;
+    if (months < 0) return '';
+    if (months < 12) return `Antigüedad: ${months} ${months === 1 ? 'mes' : 'meses'}`;
+    const years = Math.floor(months / 12);
+    return `Antigüedad: ${years} ${years === 1 ? 'año' : 'años'}`;
+  },
+
+  showAssetModal(asset = null, options = {}) {
+    const readOnly = Boolean(options.readOnly);
     const editing = Boolean(asset);
     const form = create('div', { style: { maxHeight: '65vh', overflowY: 'auto', paddingRight: '4px' } });
     const typeControl = this.select([['movable', 'Mueble'], ['immovable', 'Inmueble']], asset?.type || 'movable');
@@ -267,11 +236,11 @@ const AssetsPage = {
     const kindFields = create('div');
     form.appendChild(kindFields);
     const fields = {};
-    let rentalUi = null;
-    let endConfirmed = false;
+    let obligationsUi = null;
+    let saveConfirmed = false;
     const renderKind = () => {
       kindFields.replaceChildren();
-      rentalUi = null;
+      obligationsUi = null;
       Object.keys(fields).forEach(key => delete fields[key]);
       const same = asset?.type === typeControl.value;
       if (typeControl.value === 'movable') {
@@ -292,25 +261,36 @@ const AssetsPage = {
         fields.location = this.addField(kindFields, 'Ubicación', { value: same ? asset.location || '' : '' });
         fields.coveredAreaM2 = this.addField(kindFields, 'Superficie cubierta (m²)', { type: 'number', min: 0, step: '1', value: same ? asset.coveredAreaM2 ?? '' : '' });
         fields.freeAreaM2 = this.addField(kindFields, 'Superficie libre (m²)', { type: 'number', min: 0, step: '1', value: same ? asset.freeAreaM2 ?? '' : '' });
-        fields.ageYears = this.addField(kindFields, 'Antigüedad', { type: 'number', min: 0, step: '1', value: same ? asset.ageYears ?? '' : '' });
-        const conditionGroup = create('div', { className: 'form-group' }, [create('label', { textContent: 'Condición' })]);
-        fields.condition = this.select(this.conditionOptions(), same ? asset.condition || 'not_rented' : 'not_rented');
-        conditionGroup.appendChild(fields.condition);
-        kindFields.appendChild(conditionGroup);
-        const slot = create('div', { dataset: { slot: 'rental-and-obligations' } });
+        fields.cadastralId = this.addField(kindFields, 'Identificación catastral', { value: same ? asset.cadastralId || '' : '' });
+        fields.cadastralId.maxLength = 100;
+        fields.constructionDate = this.addField(kindFields, 'Fecha de construcción', { type: 'date', value: same ? asset.constructionDate || '' : '' });
+        fields.constructionDate.max = new Date().toISOString().slice(0, 10);
+        const ageLine = create('p', { className: 'text-muted', dataset: { ageText: 'true' }, style: { margin: '0 0 10px' } });
+        kindFields.appendChild(ageLine);
+        const legacyAge = same && !asset.constructionDate && asset.age?.source === 'legacy' ? `Antigüedad (dato anterior): ${asset.age.years} años` : '';
+        const refreshAge = () => { ageLine.textContent = this.ageText(fields.constructionDate.value) || legacyAge; };
+        on(fields.constructionDate, 'input', refreshAge);
+        on(fields.constructionDate, 'change', refreshAge);
+        refreshAge();
+        const slot = create('div', { dataset: { slot: 'obligations' } });
         kindFields.appendChild(slot);
-        rentalUi = this.renderRentalAndObligations(slot, same ? asset : null, fields.condition);
+        obligationsUi = this.renderObligations(slot, same ? asset : null);
       }
     };
     typeControl.addEventListener('change', renderKind);
     renderKind();
     const notes = this.addField(form, 'Notas', { value: asset?.notes || '', multiline: true });
 
-    const footer = create('div', { style: { display: 'flex', gap: '8px' } }, [
-      create('button', { className: 'btn btn-ghost', type: 'button', textContent: 'Cancelar', onClick: () => Modal.hide() }),
-      create('button', { className: 'btn btn-primary', type: 'button', textContent: editing ? 'Guardar cambios' : 'Crear bien' })
-    ]);
-    on(footer.lastChild, 'click', async () => {
+    const confirmBox = create('div', { className: 'card', style: { display: 'none', padding: '10px', width: '100%' }, dataset: { saveConfirm: 'true' } });
+    const saveButton = create('button', { className: 'btn btn-primary', type: 'button', textContent: editing ? 'Guardar cambios' : 'Crear bien' });
+    const footer = readOnly
+      ? create('div', {}, [create('button', { className: 'btn btn-primary', type: 'button', textContent: 'Cerrar', onClick: () => Modal.hide() })])
+      : create('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap' } }, [
+        confirmBox,
+        create('button', { className: 'btn btn-ghost', type: 'button', textContent: 'Cancelar', onClick: () => Modal.hide() }),
+        saveButton
+      ]);
+    on(saveButton, 'click', async () => {
       const payload = { type: typeControl.value, name: title.value.trim(), notes: notes.value.trim() };
       if (!payload.name) return showToast('El título es obligatorio', 'error');
       if (typeControl.value === 'movable') {
@@ -321,8 +301,9 @@ const AssetsPage = {
         payload.propertyKind = fields.propertyKind.value;
         payload.characteristics = fields.characteristics.value.trim();
         payload.location = fields.location.value.trim();
-        payload.condition = fields.condition.value;
-        const labels = { coveredAreaM2: 'La superficie cubierta', freeAreaM2: 'La superficie libre', ageYears: 'La antigüedad' };
+        payload.cadastralId = fields.cadastralId.value.trim() || null;
+        payload.constructionDate = fields.constructionDate.value || null;
+        const labels = { coveredAreaM2: 'La superficie cubierta', freeAreaM2: 'La superficie libre' };
         for (const key of Object.keys(labels)) {
           const parsed = this.parseIntegerField(fields[key], labels[key]);
           if (parsed.error) return showToast(parsed.error, 'error');
@@ -340,20 +321,26 @@ const AssetsPage = {
         if (owners.some(item => !(item.percentage > 0))) return showToast('Cada titular debe tener un porcentaje mayor que 0', 'error');
         if (Math.abs(owners.reduce((total, item) => total + item.percentage, 0) - 100) > 0.01) return showToast('El total de los porcentajes debe ser 100', 'error');
       }
-      let rentalPart = { rental: null, obligationResponsibilities: [] };
-      if (rentalUi) {
-        if (rentalUi.needsEndConfirmation() && !endConfirmed) return rentalUi.askEndConfirmation(() => { endConfirmed = true; footer.lastChild.click(); });
-        rentalPart = rentalUi.collect();
-        if (rentalPart.error) return showToast(rentalPart.error, 'error');
+      if (editing && !saveConfirmed) {
+        confirmBox.replaceChildren(
+          create('p', { style: { margin: '0 0 8px' }, textContent: 'Estás por modificar datos del bien. Revisá los cambios antes de confirmar.' }),
+          create('button', { className: 'btn btn-primary btn-sm', type: 'button', textContent: 'Confirmar y guardar', onClick: () => { saveConfirmed = true; confirmBox.style.display = 'none'; saveButton.click(); } }),
+          create('button', { className: 'btn btn-ghost btn-sm', type: 'button', textContent: 'Volver', onClick: () => { confirmBox.style.display = 'none'; } })
+        );
+        confirmBox.style.display = '';
+        return;
       }
+      saveConfirmed = false;
+      const obligationPart = obligationsUi ? obligationsUi.collect() : { obligationResponsibilities: [] };
       try {
-        await API.assets.saveForm(editing ? asset.id : null, { asset: payload, owners, rental: rentalPart.rental, obligationResponsibilities: rentalPart.obligationResponsibilities });
+        await API.assets.saveForm(editing ? asset.id : null, { asset: payload, owners, obligationResponsibilities: obligationPart.obligationResponsibilities });
         Modal.hide();
         showToast(editing ? 'Bien actualizado' : 'Bien creado');
         this.render();
       } catch (error) { showToast(error.message, 'error'); }
     });
-    Modal.show(editing ? 'Editar bien' : 'Nuevo bien', form, { footer });
+    if (readOnly) form.querySelectorAll('input, select, textarea, button').forEach(control => { control.disabled = true; });
+    Modal.show(readOnly ? 'Ver bien' : (editing ? 'Editar bien' : 'Nuevo bien'), form, { footer });
   },
 
   legacyLines(asset) {
@@ -386,7 +373,7 @@ const AssetsPage = {
       body.append(create('p', { textContent: `${asset.type === 'immovable' ? 'Inmueble' : 'Mueble'}${asset.type === 'immovable' && asset.condition ? ` · ${this.optionLabel(this.conditionOptions(), asset.condition)}` : ''}` }));
       const typed = asset.type === 'immovable'
         ? [['Tipo', this.optionLabel(this.propertyKindOptions(), asset.propertyKind)], ['Características', asset.characteristics], ['Ubicación', asset.location],
-          ['Superficie cubierta', asset.coveredAreaM2 != null ? `${asset.coveredAreaM2} m²` : ''], ['Superficie libre', asset.freeAreaM2 != null ? `${asset.freeAreaM2} m²` : ''], ['Antigüedad', asset.ageYears != null ? asset.ageYears : '']]
+          ['Superficie cubierta', asset.coveredAreaM2 != null ? `${asset.coveredAreaM2} m²` : ''], ['Superficie libre', asset.freeAreaM2 != null ? `${asset.freeAreaM2} m²` : ''], ['Identificación catastral', asset.cadastralId], ['Fecha de construcción', asset.constructionDate], [asset.age?.source === 'legacy' ? 'Antigüedad (dato anterior)' : 'Antigüedad', asset.age?.years != null ? `${asset.age.years} años` : '']]
         : [['Tipo', asset.vehicleType === 'automovil' ? 'Automóvil' : ''], ['Marca', asset.brand], ['Dominio', asset.plate], ['KMs', asset.mileage], ['Color', asset.color]];
       typed.forEach(([label, value]) => { if (value !== '' && value != null) body.appendChild(create('p', { style: { margin: '4px 0' }, textContent: `${label}: ${value}` })); });
       if (asset.notes) body.appendChild(create('p', { textContent: `Notas: ${asset.notes}` }));
@@ -400,25 +387,8 @@ const AssetsPage = {
         const line = create('div', { className: 'card', style: { marginTop: '8px' } });
         line.appendChild(create('p', { textContent: `${record.owner?.name || 'Titular'}${record.percentage !== null ? ` · ${record.percentage}%` : ''}` }));
         line.appendChild(create('small', { textContent: `${record.startDate}${record.endDate ? ` — ${record.endDate}` : ' — vigente'}${record.notes ? ` · ${record.notes}` : ''}` }));
-        if (!record.endDate) line.appendChild(create('button', { className: 'btn btn-ghost btn-sm', type: 'button', textContent: 'Finalizar titularidad hoy', style: { marginTop: '6px' }, onClick: async () => {
-          try { await API.assets.closeOwnership(id, record.id, new Date().toISOString().slice(0, 10)); await this.showDetails(id); }
-          catch (error) { showToast(error.message, 'error'); }
-        } }));
         body.appendChild(line);
       });
-      const addGroup = create('div', { style: { borderTop: '1px solid var(--border-color)', marginTop: '12px', paddingTop: '12px' } });
-      addGroup.appendChild(create('h4', { textContent: 'Añadir titularidad' }));
-      const ownerSelect = this.select([['', 'Seleccionar titular'], ...this.owners.filter(owner => (owner.roles || ['owner']).includes('owner')).map(owner => [owner.id, owner.name])]);
-      const startDate = create('input', { className: 'form-control', type: 'date', value: new Date().toISOString().slice(0, 10) });
-      const percentage = create('input', { className: 'form-control', type: 'number', min: '0', max: '100', step: '0.01', placeholder: 'Porcentaje informativo' });
-      const ownerNotes = create('input', { className: 'form-control', type: 'text', placeholder: 'Notas' });
-      addGroup.append(ownerSelect, startDate, percentage, ownerNotes, create('button', { className: 'btn btn-secondary btn-sm', type: 'button', textContent: 'Añadir', style: { marginTop: '8px' }, onClick: async () => {
-        try {
-          await API.assets.addOwnership(id, { ownerId: ownerSelect.value, startDate: startDate.value, percentage: percentage.value === '' ? null : Number(percentage.value), notes: ownerNotes.value.trim() });
-          await this.showDetails(id);
-        } catch (error) { showToast(error.message, 'error'); }
-      } }));
-      body.appendChild(addGroup);
       if (asset.type === 'immovable') await this.renderRentals(asset, body);
       body.appendChild(create('h4', { textContent: 'Historial de estados', style: { marginTop: '14px' } }));
       (asset.statusHistory || []).slice().reverse().forEach(event => body.appendChild(create('p', { textContent: `${statusLabel(event.status)} · ${new Date(event.changedAt).toLocaleDateString()}${event.notes ? ` · ${event.notes}` : ''}` })));
