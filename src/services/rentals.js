@@ -231,7 +231,45 @@ function collectionView(db, userId, collection) {
   };
 }
 
+function plusDays(date, days) {
+  const value = new Date(`${date}T00:00:00.000Z`);
+  value.setUTCDate(value.getUTCDate() + days);
+  return value.toISOString().slice(0, 10);
+}
+
+/**
+ * Raw rent-related alert items for active contracts: pending/overdue rent, contract expiry and
+ * scheduled rent adjustments (rental conditions taking effect soon). Pass a read-only db view so
+ * lazily generated occurrences are never persisted.
+ */
+function rentAlerts(db, userId, { today, leadDays = 5, expiryDays = 30, adjustmentDays = 30 } = {}) {
+  const rentEnd = plusDays(today, leadDays);
+  const expiryEnd = plusDays(today, expiryDays);
+  const adjustmentEnd = plusDays(today, adjustmentDays);
+  const items = [];
+  db.findAll('rentalContracts', userId).filter(contract => contract.status === 'active').forEach(contract => {
+    const base = { contractId: contract.id, assetId: contract.assetId, tenantIds: contract.tenantIds || [] };
+    generateOccurrences(db, userId, contract, rentEnd)
+      .filter(item => ['pending', 'partially_collected', 'overdue'].includes(item.status) && (item.date < today || item.date <= rentEnd))
+      .forEach(item => items.push({
+        ...base, type: 'rent_due', id: `rent:${contract.id}:${item.date}`, date: item.date, period: item.period,
+        rentOccurrenceId: String(item.id).startsWith('virtual:') ? null : item.id,
+        amount: item.remainingAmount, expectedAmount: item.rentAmount, currencyCode: item.currencyCode,
+        status: item.date < today ? 'overdue' : item.status
+      }));
+    if (contract.endDate && contract.endDate >= today && contract.endDate <= expiryEnd) {
+      items.push({ ...base, type: 'contract_expiry', id: `expiry:${contract.id}`, date: contract.endDate, status: 'expiring', currencyCode: contract.currencyCode });
+    }
+    conditionsFor(db, userId, contract.id).filter(item => item.effectiveDate >= today && item.effectiveDate <= adjustmentEnd).forEach(item => items.push({
+      ...base, type: 'rent_adjustment_due', id: `adjust:${item.id}`, date: item.effectiveDate, amount: item.rentAmount,
+      currencyCode: contract.currencyCode, status: 'scheduled'
+    }));
+  });
+  return items;
+}
+
 module.exports = {
+  rentAlerts,
   CONTRACT_TYPES, CONTRACT_STATES, PERIODICITIES, CONDITION_METHODS, validDate, hash,
   validateContract, conditionsFor, applyCondition, generateOccurrences, occurrenceView,
   validateAllocations, collectionView, intervalMonths
