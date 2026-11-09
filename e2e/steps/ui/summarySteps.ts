@@ -157,3 +157,10 @@ Then('veo la tarjeta de progreso {string}', async function (this: SelimSystemWor
   const summaryPage = new SummaryPage(this.page!);
   await summaryPage.expectGoalProgressLabel(etiqueta);
 });
+
+
+
+Then('los contadores mensuales de IVA estan visibles', async function (this: SelimSystemWorld) {
+  const summaryPage = new SummaryPage(this.page!);
+  await summaryPage.expectIvaMonthlyCounters();
+});

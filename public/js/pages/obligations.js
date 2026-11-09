@@ -136,8 +136,13 @@ const ObligationsPage = {
     this.fieldWrap(form, 'Cuenta habitual', account);
     const category = this.select([['', 'Sin categoría'], ...this.categories.map(item => [item.id, item.nombre])], existing?.categoryId || '');
     this.fieldWrap(form, 'Categoría', category);
-    const currencies = ['EUR', 'USD', 'ARS', 'GBP', 'CAD', 'AUD', 'CHF', 'JPY', 'BRL', 'CLP', 'MXN', 'CNY', 'UYU', 'PYG', 'COP', 'PEN', 'BOB', 'CRC', 'DOP', 'PLN', 'SEK', 'NOK', 'DKK', 'NZD', 'INR', 'ZAR', 'KRW'];
-    const currency = this.select([...new Set([...currencies, ...this.accounts.map(item => item.currency)])].map(code => [code, code]), existing?.currencyCode || 'EUR');
+    const currencies = ['ARS', 'EUR', 'USD'];
+    const currency = this.select(currencies.map(code => [code, code]), existing?.currencyCode || 'ARS');
+    if (existing?.currencyCode && !currencies.includes(existing.currencyCode)) {
+      const legacyCurrency = create('option', { value: existing.currencyCode, textContent: `${existing.currencyCode} (histórica)`, disabled: true });
+      currency.prepend(legacyCurrency);
+      currency.value = existing.currencyCode;
+    }
     this.fieldWrap(form, 'Moneda', currency);
     const amount = this.field(form, 'Importe estimado', { type: 'number', min: '0.01', step: '0.01', required: true, value: existing?.estimatedAmount ?? '' });
     const paymentMethod = this.field(form, 'Medio de pago (texto libre)', { value: existing?.paymentMethod || '' });

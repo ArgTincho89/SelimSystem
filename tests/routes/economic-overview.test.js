@@ -26,7 +26,8 @@ describe('Economic overview routes', () => {
     otherUserId = db.findUserByName('Other Overview User').id;
     ledger.ensureSetup(db, userId);
     ledger.ensureSetup(db, otherUserId);
-    eurAccount = ledger.accountsForUser(db, userId).find(item => item.currency === 'EUR');
+    eurAccount = ledger.accountsForUser(db, userId).find(item => item.legacyPrimary);
+    eurAccount = db.update('accounts', eurAccount.id, { currency: 'EUR' }, userId);
     usdAccount = db.create('accounts', {
       nombre: 'Overview USD', currency: 'USD', primary: false, legacyPrimary: false,
       activo: true, archivedAt: null, order: 1

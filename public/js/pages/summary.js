@@ -38,9 +38,10 @@ const SummaryPage = {
       const savingsColor = summary.ahorro >= 0 ? 'var(--success)' : 'var(--danger)';
       const savingsSign = summary.ahorro >= 0 ? '+' : '';
 
-      statsRow.appendChild(this.createStat('Ingresos', formatearEuro(summary.ingresos), 'var(--income-color)'));
-      statsRow.appendChild(this.createStat('Gastos', formatearEuro(summary.gastosNetos), 'var(--expense-color)'));
-      statsRow.appendChild(this.createStat('Ahorro', `${savingsSign}${formatearEuro(summary.ahorro)}`, savingsColor));
+      const currency = summary.activeCurrency || 'ARS';
+      statsRow.appendChild(this.createStat('Ingresos', formatearMoneda(summary.ingresos, currency), 'var(--income-color)'));
+      statsRow.appendChild(this.createStat('Gastos', formatearMoneda(summary.gastosNetos, currency), 'var(--expense-color)'));
+      statsRow.appendChild(this.createStat('Ahorro', `${savingsSign}${formatearMoneda(summary.ahorro, currency)}`, savingsColor));
       content.appendChild(statsRow);
     }
 
@@ -112,7 +113,7 @@ const SummaryPage = {
           className: 'category-dot',
           style: { background: cat.color || '#6c6c7c' }
         }));
-        item.appendChild(document.createTextNode(`${cat.nombre} (${formatearEuro(cat.neto)})`));
+        item.appendChild(document.createTextNode(`${cat.nombre} (${formatearMoneda(cat.neto, summary.activeCurrency || 'ARS')})`));
         legend.appendChild(item);
       });
       chartCard.appendChild(legend);
@@ -132,13 +133,13 @@ const SummaryPage = {
     let breakdownContent = catSection;
     if (options.categoryDisclosure) {
       const details = create('details', { className: 'desktop-category-disclosure' });
-      details.appendChild(create('summary', { textContent: 'Desglose por categoría' }));
+        details.appendChild(create('summary', { textContent: 'Gastos por categoría' }));
       breakdownContent = create('div', { className: 'desktop-category-breakdown-scroll' });
       details.appendChild(breakdownContent);
       catSection.appendChild(details);
     } else {
       catSection.appendChild(create('h3', {
-        textContent: 'Desglose por categoría',
+        textContent: 'Gastos por categoría',
         style: { marginBottom: '16px' }
       }));
     }
@@ -163,7 +164,7 @@ const SummaryPage = {
               <span class="category-dot" style="background:${cat.color || '#6c6c7c'}"></span>
               ${cat.nombre}
             </span>
-            <span style="font-weight:600;">${formatearEuro(cat.neto)} <span style="color:var(--text-muted); font-weight:400; font-size:var(--font-sm);">(${pct}%)</span></span>
+             <span style="font-weight:600;">${formatearMoneda(cat.neto, summary.activeCurrency || 'ARS')} <span style="color:var(--text-muted); font-weight:400; font-size:var(--font-sm);">(${pct}%)</span></span>
           </div>
           <div class="category-bar-track">
             <div class="category-bar-fill" style="width:${barWidth}%; background:${cat.color || '#6c6c7c'};"></div>
@@ -198,13 +199,13 @@ const SummaryPage = {
       const fvLegend = create('div', { className: 'fv-legend' });
       if (summary.fijos > 0) {
         const fijoItem = create('div', { className: 'fv-legend-item' });
-        fijoItem.appendChild(create('div', { className: 'category-badge', innerHTML: `<span class="category-dot" style="background:#FF6B6B"></span>Fijo: ${formatearEuro(summary.fijos)}` }));
+        fijoItem.appendChild(create('div', { className: 'category-badge', innerHTML: `<span class="category-dot" style="background:#FF6B6B"></span>Fijo: ${formatearMoneda(summary.fijos, summary.activeCurrency || 'ARS')}` }));
         fijoItem.appendChild(create('div', { className: 'fv-legend-pct', textContent: `${fijoPct}%` }));
         fvLegend.appendChild(fijoItem);
       }
       if (summary.variables > 0) {
         const varItem = create('div', { className: 'fv-legend-item' });
-        varItem.appendChild(create('div', { className: 'category-badge', innerHTML: `<span class="category-dot" style="background:#4ECDC4"></span>Variable: ${formatearEuro(summary.variables)}` }));
+        varItem.appendChild(create('div', { className: 'category-badge', innerHTML: `<span class="category-dot" style="background:#4ECDC4"></span>Variable: ${formatearMoneda(summary.variables, summary.activeCurrency || 'ARS')}` }));
         varItem.appendChild(create('div', { className: 'fv-legend-pct', textContent: `${varPct}%` }));
         fvLegend.appendChild(varItem);
       }
@@ -219,27 +220,35 @@ const SummaryPage = {
       });
     }
 
-    if (summary.ingresos > 0 && !summary.normalizedIncome) {
-      const incomeCard = create('div', { className: 'chart-container' });
-      incomeCard.dataset.favoriteType = 'income-split';
-      incomeCard.dataset.favoriteKey = 'income-ab';
-      incomeCard.dataset.favoriteLabel = 'Ingresos A vs B';
-      incomeCard.appendChild(create('div', { className: 'chart-title', textContent: 'Ingresos A vs B' }));
+    const holderIncome = summary.incomeBreakdownByHolder || [];
+    holderIncome.filter(item => item.A + item.B > 0).forEach(item => {
+      const card = create('div', { className: 'chart-container' });
+      card.dataset.favoriteType = 'income-split';
+      card.dataset.favoriteKey = `income-ab:${item.ownerId || 'unassigned'}:${item.currency}`;
+      card.dataset.favoriteLabel = `Ingresos A vs B · ${item.ownerName} · ${item.currency}`;
+      card.appendChild(create('div', { className: 'chart-title', textContent: `Ingresos A vs B · ${item.ownerName} (${item.currency})` }));
       const wrapper = create('div', { style: { display: 'flex', justifyContent: 'center' } });
-      const canvas = create('canvas', { className: 'chart-canvas', role: 'img', 'aria-label': 'Gráfico de ingresos A y B' });
+      const canvas = create('canvas', { className: 'chart-canvas', role: 'img', 'aria-label': `Gráfico de ingresos A y B para ${item.ownerName} en ${item.currency}` });
       wrapper.appendChild(canvas);
-      incomeCard.appendChild(wrapper);
+      card.appendChild(wrapper);
       const legend = create('div', { className: 'fv-legend' });
-      [['A', summary.ingresosA, summary.porcentajeA, '#4ECDC4'], ['B', summary.ingresosB, summary.porcentajeB, '#FF6B6B']].forEach(([label, value, pct, color]) => {
-        legend.appendChild(create('div', { className: 'fv-legend-item', innerHTML: `<div class="category-badge"><span class="category-dot" style="background:${color}"></span>${label}: ${formatearEuro(value)}</div><div class="fv-legend-pct">${pct}%</div>` }));
+      [['A', item.A, item.porcentajeA, '#4ECDC4'], ['B', item.B, item.porcentajeB, '#FF6B6B']].forEach(([label, value, pct, color]) => {
+        const row = create('div', { className: 'fv-legend-item' });
+        row.appendChild(create('div', { className: 'category-badge' }, [
+          create('span', { className: 'category-dot', style: { background: color } }),
+          document.createTextNode(`${label}: ${formatearMoneda(value, item.currency)}`)
+        ]));
+        row.appendChild(create('div', { className: 'fv-legend-pct', textContent: `${pct}%` }));
+        legend.appendChild(row);
       });
-      incomeCard.appendChild(legend);
-      content.appendChild(incomeCard);
+      card.appendChild(legend);
+      content.appendChild(card);
       requestAnimationFrame(() => Charts.drawDonut(canvas, [
-        { value: summary.ingresosA, color: '#4ECDC4', label: 'A' },
-        { value: summary.ingresosB, color: '#FF6B6B', label: 'B' }
+        { value: item.A, color: '#4ECDC4', label: 'A' },
+        { value: item.B, color: '#FF6B6B', label: 'B' }
       ], 200));
-    } else if (summary.normalizedIncome) {
+    });
+    if (summary.normalizedIncome) {
       content.appendChild(create('p', { className: 'account-status-note', textContent: 'La clasificación A/B corresponde a los ingresos originales; las normalizaciones se muestran por moneda.' }));
     }
 
@@ -256,41 +265,34 @@ const SummaryPage = {
     const card = create('div', { className: 'chart-container' });
     card.dataset.favoriteType = 'trend-iva';
     card.dataset.favoriteKey = 'trend-iva';
-    card.dataset.favoriteLabel = 'IVA acumulado por mes';
-    card.appendChild(create('div', { className: 'chart-title', textContent: 'IVA acumulado por mes' }));
+    card.dataset.favoriteLabel = 'IVA mensual por titular';
+    card.appendChild(create('div', { className: 'chart-title', textContent: 'IVA mensual por titular' }));
 
     const monthlyData = trends?.monthlyData || [];
     if (monthlyData.length === 0) {
       card.appendChild(create('p', {
         className: 'text-muted text-center',
-        textContent: 'No se pudo cargar el gráfico de IVA acumulado.'
+        textContent: 'No se pudieron cargar los totales mensuales de IVA.'
       }));
       return card;
     }
-
-    const canvas = create('canvas', {
-      className: 'chart-canvas',
-      role: 'img',
-      'aria-label': 'IVA acumulado en cada mes del período'
-    });
-    card.appendChild(create('div', { style: { display: 'flex', justifyContent: 'center' } }, [canvas]));
-    const legend = create('div', { className: 'fv-legend' });
-    legend.appendChild(create('div', {
-      className: 'category-badge',
-      innerHTML: '<span class="category-dot" style="background:#FFE66D"></span>IVA acumulado'
-    }));
-    card.appendChild(legend);
-
-    const labels = monthlyData.map(item => {
+    monthlyData.forEach(item => {
+      const monthCard = create('section', { className: 'account-alert-row', 'aria-label': `IVA ${item.month}` });
       const [year, month] = item.month.split('-');
-      return new Date(parseInt(year, 10), parseInt(month, 10) - 1)
-        .toLocaleDateString('es-ES', { month: 'short' });
+      const label = new Date(Number(year), Number(month) - 1).toLocaleDateString('es-AR', { month: 'long', year: 'numeric' });
+      monthCard.appendChild(create('strong', { textContent: label }));
+      const totals = item.ivaByHolder || [];
+      if (!totals.length) {
+        monthCard.appendChild(create('span', { className: 'text-muted', textContent: 'Sin ingresos con IVA registrado.' }));
+      } else {
+        const ownerRows = create('div', { style: { display: 'grid', gap: '4px', marginTop: '6px' } });
+        totals.forEach(total => ownerRows.appendChild(create('div', {
+          textContent: `${total.ownerName} · ${total.currency}: ${formatearMoneda(total.amount, total.currency)}`
+        })));
+        monthCard.appendChild(ownerRows);
+      }
+      card.appendChild(monthCard);
     });
-    requestAnimationFrame(() => Charts.drawBarChart(canvas, monthlyData.map((item, index) => ({
-      value: item.ivaAcumulado || 0,
-      color: '#FFE66D',
-      label: labels[index]
-    })), { height: 180, seriesLabel: 'IVA acumulado' }));
 
     return card;
   },

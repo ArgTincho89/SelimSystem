@@ -62,6 +62,23 @@ describe('Summary Routes', () => {
       expect(res.body.ahorro).toBe(2465);
     });
 
+    it('counts posted fixed and variable expenses but never classifies refunds as expenses', async () => {
+      const fixed = await agent.post('/api/transactions').send({
+        tipo: 'expense', monto: 20, titulo: 'Synthetic fixed expense', categoryId, fecha: '2025-04-01', clasificacion: 'fijo'
+      });
+      await agent.post('/api/transactions').send({
+        tipo: 'expense', monto: 30, titulo: 'Synthetic variable expense', categoryId, fecha: '2025-04-02', clasificacion: 'variable'
+      });
+      await agent.post('/api/transactions').send({
+        tipo: 'refund', monto: 10, titulo: 'Synthetic refund', categoryId, fecha: '2025-04-03', refundSourceId: fixed.body.id
+      });
+
+      const response = await agent.get('/api/summary?month=2025-04');
+
+      expect(response.body).toMatchObject({ gastos: 50, reembolsos: 10, gastosNetos: 40, fijos: 20, variables: 30 });
+      expect(response.body.porCategoria.find(item => item.categoryId === categoryId).neto).toBe(40);
+    });
+
     it('should report income A/B breakdown and legacy income as B', async () => {
       await agent.post('/api/transactions').send({ tipo: 'income', monto: 100, titulo: 'A income', fecha: '2024-03-10', clasificacion: 'A' });
       await agent.post('/api/transactions').send({ tipo: 'income', monto: 50, titulo: 'Mixed income', fecha: '2024-03-11', clasificacion: 'Mixto', montoA: 20, montoB: 30 });

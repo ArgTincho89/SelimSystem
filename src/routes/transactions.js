@@ -4,6 +4,7 @@ const { generateRecurringInstances, getMonthTransactions } = require('../utils/r
 const { roundCents, sumCents } = require('../utils/income');
 const ledger = require('../services/account-ledger');
 const finance = require('../services/finance');
+const incomeAttribution = require('../services/income-attribution');
 
 const router = express.Router();
 
@@ -72,7 +73,7 @@ router.get('/recurring-total', (req, res) => {
   }
 
   ledger.ensureSetup(db, userId);
-  const currency = ledger.getSettings(db, userId).appCurrency || 'EUR';
+  const currency = ledger.getSettings(db, userId).appCurrency || 'ARS';
   const transactions = db.findAll('transactions', userId);
   let totalRecurrentesMinor = 0;
   const recurrentes = [];
@@ -196,6 +197,7 @@ router.post('/', (req, res) => {
     amountMinor,
     accountId: account.id,
     currencyCode: account.currency,
+    ...(tipo === 'income' ? incomeAttribution.incomeHolderSnapshot(db, userId, account) : {}),
     titulo: finalTitulo,
     categoryId: categoryId || null,
     refundSourceId,

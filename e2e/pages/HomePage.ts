@@ -117,18 +117,18 @@ export class HomePage extends BasePage {
   }
 
   async expectValuesBlurred(): Promise<void> {
-    await expect(this.statCard('Ingresos reales').locator('.stat-value')).toHaveClass(/income-blurred/);
-    await expect(this.statCard('Ahorro real').locator('.stat-value')).toHaveClass(/income-blurred/);
+    await expect(this.statCard('Ingresos').locator('.stat-value')).toHaveClass(/income-blurred/);
+    await expect(this.statCard('Ahorro').locator('.stat-value')).toHaveClass(/income-blurred/);
     if (await this.page.locator('body.desktop-mode').count()) {
-      await expect(this.statCard('Gastos netos').locator('.stat-value')).toHaveClass(/income-blurred/);
+      await expect(this.statCard('Gastos').locator('.stat-value')).toHaveClass(/income-blurred/);
     }
   }
 
   async expectValuesNotBlurred(): Promise<void> {
-    await expect(this.statCard('Ingresos reales').locator('.stat-value')).not.toHaveClass(/income-blurred/);
-    await expect(this.statCard('Ahorro real').locator('.stat-value')).not.toHaveClass(/income-blurred/);
+    await expect(this.statCard('Ingresos').locator('.stat-value')).not.toHaveClass(/income-blurred/);
+    await expect(this.statCard('Ahorro').locator('.stat-value')).not.toHaveClass(/income-blurred/);
     if (await this.page.locator('body.desktop-mode').count()) {
-      await expect(this.statCard('Gastos netos').locator('.stat-value')).not.toHaveClass(/income-blurred/);
+      await expect(this.statCard('Gastos').locator('.stat-value')).not.toHaveClass(/income-blurred/);
     }
   }
 
@@ -146,7 +146,7 @@ export class HomePage extends BasePage {
 
   async expectCategoryBreakdownIsNotFavoritable(): Promise<void> {
     const breakdown = this.page.locator('.desktop-home-analytics-scroll .summary-section');
-    await expect(breakdown).toContainText('Desglose por categoría');
+    await expect(breakdown).toContainText('Gastos por categoría');
     await expect(breakdown.locator('.analytics-favorite-toggle')).toHaveCount(0);
   }
 
@@ -156,7 +156,7 @@ export class HomePage extends BasePage {
 
   async expectNoPersistedCategoryBreakdownFavorite(): Promise<void> {
     await expect(this.page.locator(this.selectors.favoriteCard)).toHaveCount(0);
-    await this.expectFivePrimaryCards();
+    await this.expectThreePrimaryCards();
     expect(await this.page.evaluate(() => localStorage.getItem('pate_home_favorite'))).toBeNull();
   }
 
@@ -188,14 +188,14 @@ export class HomePage extends BasePage {
     });
     expect(metrics.height).toBeLessThanOrEqual(110);
     expect(metrics.rowHeight).toBeLessThanOrEqual(237);
-    expect(metrics.slotIndex).toBe(5);
-    expect(metrics.savingsIndex).toBe(4);
+    expect(metrics.slotIndex).toBe(3);
+    expect(metrics.savingsIndex).toBe(2);
     expect(metrics.favoriteLeft).toBeGreaterThanOrEqual(metrics.savingsRight);
     expect(metrics.overflowY).toBe('visible');
     expect(metrics.overflowX).toBe('visible');
     expect(metrics.scrollHeight).toBeLessThanOrEqual(metrics.clientHeight + 1);
     expect(metrics.canvasHeight).toBeLessThanOrEqual(66);
-    expect(metrics.primaryCardHeights).toEqual([110, 110, 110, 110, 110]);
+    expect(metrics.primaryCardHeights).toEqual([110, 110, 110]);
   }
 
   async expectFavoriteLegendContains(...values: string[]): Promise<void> {
@@ -224,8 +224,7 @@ export class HomePage extends BasePage {
 
   async expectIvaFavoriteStarInsideChartCard(): Promise<void> {
     const source = this.page.locator('.desktop-favorite-source[data-favorite-type="trend-iva"]');
-    await expect(source).toContainText('IVA acumulado por mes');
-    await expect(source.locator('canvas')).toBeVisible();
+    await expect(source).toContainText('IVA mensual por titular');
     const star = source.locator('.analytics-favorite-toggle');
     await expect(star).toBeVisible();
     const metrics = await source.evaluate(element => {
@@ -269,18 +268,16 @@ export class HomePage extends BasePage {
 
   async expectFixedMetricsHaveNoStars(): Promise<void> {
     await expect(this.page.locator('.desktop-home-stats > .desktop-stat-card .analytics-favorite-toggle')).toHaveCount(0);
-    await this.expectFivePrimaryCards();
+    await this.expectThreePrimaryCards();
   }
 
-  async expectFivePrimaryCards(): Promise<void> {
+  async expectThreePrimaryCards(): Promise<void> {
     const cards = this.page.locator('.desktop-home-stats > .desktop-stat-card:not(.desktop-favorite-card)');
-    await expect(cards).toHaveCount(5);
+    await expect(cards).toHaveCount(3);
     await expect(cards.locator('.stat-label')).toHaveText([
-      'Ingresos reales',
-      'Gastos brutos',
-      'Reembolsos',
-      'Gastos netos',
-      'Ahorro real',
+      'Ingresos',
+      'Gastos',
+      'Ahorro',
     ]);
   }
 
@@ -357,7 +354,7 @@ export class HomePage extends BasePage {
     await this.page.evaluate(() => localStorage.setItem('pate_home_favorite', JSON.stringify({
       type: 'category-breakdown',
       key: 'category-breakdown',
-      label: 'Desglose por categoría',
+      label: 'Gastos por categoría',
     })));
     await this.page.reload();
     await this.page.waitForSelector('.desktop-home-workspace', { state: 'visible' });
@@ -423,12 +420,12 @@ export class HomePage extends BasePage {
     expect(order).toEqual(['Nueva transacción,Privacidad,Filtro', 'Mes']);
   }
 
-  async expectFivePrimaryMetrics(): Promise<void> {
-    await this.expectFivePrimaryCards();
+  async expectThreePrimaryMetrics(): Promise<void> {
+    await this.expectThreePrimaryCards();
   }
 
   async expectDesktopMetricIconsAndTransactionLabel(): Promise<void> {
-    for (const id of ['ingresos', 'gastos', 'reembolsos', 'neto', 'ahorro']) {
+    for (const id of ['ingresos', 'gastosNetos', 'ahorro']) {
       const icon = this.page.locator(`.desktop-stat-${id} .desktop-stat-icon svg`);
       await expect(icon).toHaveCount(1);
       await expect(icon).toHaveAttribute('aria-hidden', 'true');

@@ -11,8 +11,8 @@ Característica: Resumen mensual
     Y registro por API un ingreso Mixto de 1000 con A 700, B 300 e IVA 10%
     Y registro por API un ingreso B de 500
     Y abro la página de inicio
-    Entonces veo el gráfico en el resumen "IVA acumulado por mes"
-    Y el gráfico "IVA acumulado por mes" tiene un canvas
+    Entonces veo el gráfico en el resumen "IVA mensual por titular"
+    Y los contadores mensuales de IVA estan visibles
     Y no hay errores críticos en la consola
 
   Escenario: Distribución Fijo vs Variable
@@ -23,8 +23,8 @@ Característica: Resumen mensual
     Y registro por API un gasto variable de 400 en "Variables UI"
     Y abro la página de inicio
     Entonces veo el gráfico en el resumen "Fijo vs Variable"
-    Y la leyenda Fijo vs Variable contiene "Fijo: EUR 600,00"
-    Y la leyenda Fijo vs Variable contiene "Variable: EUR 400,00"
+    Y la leyenda Fijo vs Variable contiene "Fijo: $ 600,00"
+    Y la leyenda Fijo vs Variable contiene "Variable: $ 400,00"
     Y no hay errores críticos en la consola
 
   Escenario: Ingresos A vs B
@@ -33,8 +33,8 @@ Característica: Resumen mensual
     Y registro por API un ingreso B de 300
     Y abro la página de inicio
     Entonces veo el gráfico en el resumen "Ingresos A vs B"
-    Y la leyenda A vs B contiene "A: EUR 700,00"
-    Y la leyenda A vs B contiene "B: EUR 300,00"
+    Y la leyenda A vs B contiene "A: $ 700,00"
+    Y la leyenda A vs B contiene "B: $ 300,00"
     Y no hay errores críticos en la consola
 
   Escenario: Barras de desglose por categoría
@@ -44,7 +44,7 @@ Característica: Resumen mensual
     Cuando registro por API un gasto variable de 250 en "Transporte UI"
     Y registro por API un gasto variable de 150 en "Ocio UI"
     Y abro la página de inicio
-    Entonces el desglose muestra la barra "Transporte UI" con "EUR 250,00"
-    Y el desglose muestra la barra "Ocio UI" con "EUR 150,00"
+    Entonces el desglose muestra la barra "Transporte UI" con "$ 250,00"
+    Y el desglose muestra la barra "Ocio UI" con "$ 150,00"
     Y no hay errores críticos en la consola
 

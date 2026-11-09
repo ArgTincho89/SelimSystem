@@ -19,15 +19,21 @@ export class SummaryPage extends BasePage {
   }
 
   async expectSummaryLoaded(): Promise<void> {
-    await expect(this.metricCard('Ingresos reales')).toBeVisible();
-    await expect(this.metricCard('Gastos netos')).toBeVisible();
-    await expect(this.metricCard('Ahorro real')).toBeVisible();
+    await expect(this.metricCard('Ingresos')).toBeVisible();
+    await expect(this.metricCard('Gastos')).toBeVisible();
+    await expect(this.metricCard('Ahorro')).toBeVisible();
   }
 
   private metricCard(label: string): Locator {
     return this.page.locator(this.selectors.statCard).filter({
       has: this.page.getByText(label, { exact: true }),
     }).first();
+  }
+
+  async expectIvaMonthlyCounters(): Promise<void> {
+    const card = this.page.locator('.chart-container').filter({ hasText: 'IVA mensual por titular' });
+    await expect(card).toBeVisible();
+    await expect(card.locator('.account-alert-row')).not.toHaveCount(0);
   }
 
   async expectIvaBadge(amountText: string): Promise<void> {

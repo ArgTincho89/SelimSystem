@@ -12,16 +12,14 @@ Característica: Dashboard de inicio
   Escenario: Los stats se actualizan tras ingreso, gasto y reembolso
     Cuando abro la página de inicio
     Y creo un ingreso "Sueldo" de 2000 con clasificación "A"
-    Entonces el stat "Ingresos reales" muestra "EUR 2.000,00"
-    Y el stat "Ahorro real" muestra "+EUR 2.000,00"
+    Entonces el stat "Ingresos" muestra "ARS 2.000,00"
+    Y el stat "Ahorro" muestra "+ARS 2.000,00"
     Cuando creo un gasto en "Dashboard UI" llamado "Compra" por 500
-    Entonces el stat "Gastos netos" muestra "EUR 500,00"
-    Y el stat "Ahorro real" muestra "+EUR 1.500,00"
+    Entonces el stat "Gastos" muestra "ARS 500,00"
+    Y el stat "Ahorro" muestra "+ARS 1.500,00"
     Cuando creo un reembolso en "Dashboard UI" llamado "Reembolso" por 100
-    Entonces el stat "Gastos brutos" muestra "EUR 500,00"
-    Y el stat "Reembolsos" muestra "EUR 100,00"
-    Y el stat "Gastos netos" muestra "EUR 400,00"
-    Y el stat "Ahorro real" muestra "+EUR 1.600,00"
+    Y el stat "Gastos" muestra "ARS 400,00"
+    Y el stat "Ahorro" muestra "+ARS 1.600,00"
     Y no hay errores críticos en la consola
 
   Escenario: Navegación prev/next actualiza mes y lista
@@ -63,9 +61,9 @@ Característica: Dashboard de inicio
     Y redimensiono el inicio al ancho de escritorio 1280
     Entonces el selector muestra mes y año completos sin preposición
     Cuando guardo el desglose por categoría como favorito heredado y recargo
-    Entonces aparecen cinco métricas principales
+    Entonces aparecen tres métricas principales
     Y el favorito heredado de desglose por categoría se descarta
-    Y las cinco métricas principales no tienen estrellas
+    Y las tres métricas principales no tienen estrellas
     Y las métricas tienen iconos decorativos y el botón dice Nueva transacción
     Y los controles de inicio aparecen en el orden requerido
     Y no hay accesos a secciones analíticas retiradas
@@ -73,7 +71,7 @@ Característica: Dashboard de inicio
     Cuando creo un ingreso "Favorito sueldo" de 2100 con clasificación "A" y con IVA cero
     Y creo un gasto en "Dashboard UI" llamado "Favorito compra" por 500
     Entonces veo el gráfico en el resumen "Ingresos A vs B"
-    Y el gráfico "IVA acumulado por mes" tiene un canvas
+    Y los contadores mensuales de IVA estan visibles
     Y el tooltip del gráfico "Distribución de gastos" muestra datos de euros y porcentajes
     Entonces el desglose por categoría sigue en analítica sin estrella
     Y el desglose por categoría está contraído y se abre y cierra con teclado
@@ -96,18 +94,18 @@ Característica: Dashboard de inicio
     Entonces el favorito analítico de inicio es "Fijo vs Variable"
     Y la réplica favorita contiene un gráfico interactivo
     Y la réplica favorita es compacta, sin desplazamiento interno y la fila KPI ocupa como máximo dos filas
-    Y la leyenda de la réplica favorita contiene "Fijo: EUR 300,00"
-    Y la leyenda de la réplica favorita contiene "Variable: EUR 500,00"
+    Y la leyenda de la réplica favorita contiene "Fijo: $ 300,00"
+    Y la leyenda de la réplica favorita contiene "Variable: $ 500,00"
     Cuando redimensiono el inicio al ancho de escritorio 768
     Entonces la réplica favorita es compacta, sin desplazamiento interno y la fila KPI ocupa como máximo dos filas
     Y la página no tiene desbordamiento horizontal
     Cuando redimensiono el inicio al ancho de escritorio 1280
     Cuando quito el favorito analítico "Fijo vs Variable"
     Entonces no hay tarjeta de favorito en inicio
-    Cuando marco "IVA acumulado por mes" como favorito analítico
-    Entonces el favorito analítico de inicio es "IVA acumulado por mes"
+    Cuando marco "IVA mensual por titular" como favorito analítico
+    Entonces el favorito analítico de inicio es "IVA mensual por titular"
     Y la estrella del gráfico de IVA queda dentro de la tarjeta sin tapar el título
-    Cuando quito el favorito analítico "IVA acumulado por mes"
+    Cuando quito el favorito analítico "IVA mensual por titular"
     Entonces no hay tarjeta de favorito en inicio
     Cuando hago clic en el botón de ojo
     Entonces los valores de ingresos y ahorro aparecen difuminados

@@ -7,6 +7,7 @@ describe('Account-aware financial routes', () => {
   let agent;
   let primaryAccount;
   let categoryId;
+  let userId;
   let userSequence = 0;
 
   beforeEach(async () => {
@@ -14,11 +15,15 @@ describe('Account-aware financial routes', () => {
     app.locals.db = db;
     agent = request.agent(app);
     userSequence += 1;
-    await agent.post('/api/auth/register').send({
+    const register = await agent.post('/api/auth/register').send({
       email: `account-routes-${userSequence}@example.com`, password: '123456', nombre: 'Account Routes'
     });
+    userId = register.body.id;
     const setup = await agent.get('/api/accounts/setup');
     primaryAccount = setup.body.accounts.find(account => account.primary);
+    await agent.put(`/api/accounts/${primaryAccount.id}`).send({ currency: 'EUR' });
+    await agent.patch('/api/accounts/settings').send({ appCurrency: 'EUR' });
+    primaryAccount.currency = 'EUR';
     const category = await agent.post('/api/categories').send({ nombre: 'Route Test', color: '#FF6B6B' });
     categoryId = category.body.id;
   });
@@ -100,7 +105,7 @@ describe('Account-aware financial routes', () => {
 
   it('reassigns an amount without conversion and rejects unknown, inactive, and unrepresentable accounts', async () => {
     const usd = (await agent.post('/api/accounts').send({ name: 'USD', currency: 'USD' })).body;
-    const jpy = (await agent.post('/api/accounts').send({ name: 'JPY', currency: 'JPY' })).body;
+    const jpy = db.create('accounts', { nombre: 'JPY legacy', currency: 'JPY', activo: true, primary: false }, userId);
     const inactive = (await agent.post('/api/accounts').send({ name: 'Archived EUR', currency: 'EUR' })).body;
     await agent.post(`/api/accounts/${inactive.id}/archive`).send({});
     const original = await createTransaction({ tipo: 'income', monto: 100.5, titulo: 'Reassignable' });

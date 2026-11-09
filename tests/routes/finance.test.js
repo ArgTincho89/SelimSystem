@@ -24,7 +24,7 @@ describe('General finance associations and recoveries', () => {
     userId = db.findUserByName('Finance User').id;
     today = ledger.localDateForUser(db, userId);
     await agent.get('/api/accounts/setup');
-    accountId = db.findAll('accounts', userId).find(item => item.currency === 'EUR').id;
+    accountId = (await agent.post('/api/accounts').send({ name: 'Finance EUR account', currency: 'EUR' })).body.id;
     categoryId = (await agent.post('/api/categories').send({ nombre: 'Finance tests', color: '#123456' })).body.id;
     assetId = (await agent.post('/api/assets').send({ type: 'movable', name: 'Finance asset' })).body.id;
   });

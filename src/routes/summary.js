@@ -2,6 +2,7 @@ const express = require('express');
 const { requireAuth } = require('../middleware/auth');
 const { getIncomeBreakdown, getIncomePercentages, getIncomeIva, roundCents, percentOf } = require('../utils/income');
 const ledger = require('../services/account-ledger');
+const incomeAttribution = require('../services/income-attribution');
 
 const router = express.Router();
 
@@ -19,13 +20,14 @@ router.get('/', (req, res) => {
   const transactions = db.findAll('transactions', userId);
   ledger.ensureSetup(db, userId);
   const settings = ledger.getSettings(db, userId);
-  const appCurrency = settings?.appCurrency || 'EUR';
+  const appCurrency = settings?.appCurrency || 'ARS';
   const today = ledger.localDateForUser(db, userId);
   const monthTransactions = ledger.getMonthMovements(db, userId, transactions, month).filter(transaction =>
     (!transaction.isRecurringInstance || transaction.occurrenceStatus === 'posted') &&
     (!transaction.recurrente || transaction.fecha <= today)
   );
   const currencyTransactions = monthTransactions.filter(transaction => ledger.accountForMovement(db, userId, transaction)?.currency === appCurrency);
+  const incomeBreakdownByHolder = incomeAttribution.holderTotals(db, userId, monthTransactions);
 
   let totalIngresos = 0;
   let totalIngresosA = 0;
@@ -159,7 +161,7 @@ router.get('/', (req, res) => {
   });
 
   const goals = db.findAll('goals', userId).filter(g =>
-    g.meses && g.meses.includes(month) && (g.currencyCode || 'EUR') === appCurrency
+     g.meses && g.meses.includes(month) && (g.currencyCode || 'EUR') === appCurrency
   );
   const metas = goals.map(g => {
     let meta = 0;
@@ -206,6 +208,8 @@ router.get('/', (req, res) => {
       porcentajeB: incomePercentages.porcentajeB
     },
     ivaAcumulado: ledger.fromMinorUnits(totalIvaMinor, appCurrency),
+    incomeBreakdownByHolder,
+    ivaByHolder: incomeBreakdownByHolder.map(({ ownerId, ownerName, currency, iva }) => ({ ownerId, ownerName, currency, amount: iva })),
     gastos: totalGastos,
     reembolsos: totalReembolsos,
     gastosNetos,
@@ -278,7 +282,7 @@ router.get('/burn-rate', (req, res) => {
 
   const allTransactions = db.findAll('transactions', userId);
   ledger.ensureSetup(db, userId);
-  const appCurrency = ledger.getSettings(db, userId).appCurrency || 'EUR';
+  const appCurrency = ledger.getSettings(db, userId).appCurrency || 'ARS';
   const today = ledger.localDateForUser(db, userId);
   const onlyActiveCurrency = list => list.filter(tx =>
     (!tx.isRecurringInstance || tx.occurrenceStatus === 'posted') &&

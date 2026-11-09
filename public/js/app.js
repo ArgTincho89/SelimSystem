@@ -40,7 +40,7 @@ const App = {
       this.user = await API.auth.me();
       try {
         const preferences = await API.accounts.settings();
-        localStorage.setItem('pate_app_currency', preferences.appCurrency || 'EUR');
+        localStorage.setItem('pate_app_currency', preferences.appCurrency || 'ARS');
         localStorage.setItem('pate_locale', preferences.locale || 'es-AR');
         localStorage.setItem('pate_timezone', preferences.timezone || 'Europe/Madrid');
       } catch (error) {

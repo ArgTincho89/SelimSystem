@@ -33,7 +33,7 @@ describe('Account configuration API', () => {
 
     expect(first.status).toBe(200);
     expect(first.body.migration).toMatchObject({ reversible: true, transactionCount: 1 });
-    expect(first.body.accounts[0]).toMatchObject({ currency: 'EUR', primary: true, balanceStatus: 'needs_reconciliation' });
+    expect(first.body.accounts[0]).toMatchObject({ currency: 'ARS', primary: true, balanceStatus: 'needs_reconciliation' });
     expect(repeated.body.accounts).toHaveLength(1);
     expect(repeated.body.migration.checksum).toBe(first.body.migration.checksum);
     expect(db.findById('transactions', legacy.id, userId)).toEqual(original);
@@ -88,8 +88,8 @@ describe('Account configuration API', () => {
   });
 
   it('keeps monthly income separated by account currency and does not rewrite records when the primary currency changes', async () => {
-    const setup = await agent.get('/api/accounts/setup');
-    const eur = setup.body.accounts.find(item => item.primary);
+    await agent.get('/api/accounts/setup');
+    const eur = (await agent.post('/api/accounts').send({ name: 'EUR wallet', currency: 'EUR' })).body;
     const usdResponse = await agent.post('/api/accounts').send({ name: 'USD wallet', currency: 'USD' });
     const usd = usdResponse.body;
     const date = ledger.localDateForUser(db, userId);
@@ -119,10 +119,157 @@ describe('Account configuration API', () => {
     const summary = await agent.get(`/api/summary?month=${month}`);
     const goals = await agent.get('/api/goals');
 
-    expect(goal.body.currencyCode).toBe('EUR');
+    expect(goal.body.currencyCode).toBe('ARS');
     expect(summary.body.activeCurrency).toBe('USD');
     expect(summary.body.metas).toEqual([]);
-    expect(goals.body.find(item => item.id === goal.body.id).currencyCode).toBe('EUR');
+    expect(goals.body.find(item => item.id === goal.body.id).currencyCode).toBe('ARS');
+  });
+
+  it('defaults new accounts to ARS without changing the existing app currency', async () => {
+    await agent.get('/api/accounts/setup');
+    await agent.patch('/api/accounts/settings').send({ appCurrency: 'EUR' });
+    const created = await agent.post('/api/accounts').send({ name: 'Default currency account' });
+
+    expect(created.status).toBe(201);
+    expect(created.body.currency).toBe('ARS');
+    expect((await agent.get('/api/accounts/settings')).body.appCurrency).toBe('EUR');
+  });
+
+  it('accepts only selectable currencies and a user-owned owner role when creating accounts', async () => {
+    await agent.get('/api/accounts/setup');
+    const legacyAccount = db.findAll('accounts', userId)[0];
+    const unsupportedCreate = await agent.post('/api/accounts').send({ name: 'Unsupported', currency: 'JPY' });
+    const unsupportedUpdate = await agent.put(`/api/accounts/${legacyAccount.id}`).send({ currency: 'JPY' });
+    const unsupportedSetting = await agent.patch('/api/accounts/settings').send({ appCurrency: 'JPY' });
+    const owner = await agent.post('/api/owners').send({ name: 'Create owner', roles: ['owner'] });
+    const tenant = await agent.post('/api/owners').send({ name: 'Create tenant', roles: ['tenant'] });
+    const foreignAgent = request.agent(app);
+    await foreignAgent.post('/api/auth/register').send({ email: `foreign-create-owner-${emailCounter}@example.com`, password: '123456', nombre: 'Foreign Create Owner' });
+    const foreignOwner = await foreignAgent.post('/api/owners').send({ name: 'Foreign create owner', roles: ['owner'] });
+    const validCreate = await agent.post('/api/accounts').send({ name: 'Owned EUR', currency: 'EUR', ownerId: owner.body.id });
+    const tenantCreate = await agent.post('/api/accounts').send({ name: 'Tenant owned', currency: 'EUR', ownerId: tenant.body.id });
+    const foreignCreate = await agent.post('/api/accounts').send({ name: 'Foreign owned', currency: 'EUR', ownerId: foreignOwner.body.id });
+
+    expect(unsupportedCreate.status).toBe(400);
+    expect(unsupportedUpdate.status).toBe(400);
+    expect(unsupportedSetting.status).toBe(400);
+    expect(validCreate.status).toBe(201);
+    expect(validCreate.body.ownerId).toBe(owner.body.id);
+    expect(tenantCreate.status).toBe(400);
+    expect(foreignCreate.status).toBe(400);
+  });
+
+  it('assigns only a user-owned legal owner with the owner role to an account', async () => {
+    await agent.get('/api/accounts/setup');
+    const account = db.findAll('accounts', userId)[0];
+    const owner = await agent.post('/api/owners').send({ name: 'Synthetic owner', roles: ['owner'] });
+    const tenant = await agent.post('/api/owners').send({ name: 'Synthetic tenant', roles: ['tenant'] });
+    const foreignAgent = request.agent(app);
+    await foreignAgent.post('/api/auth/register').send({ email: `foreign-owner-${emailCounter}@example.com`, password: '123456', nombre: 'Foreign Owner User' });
+    const foreignOwner = await foreignAgent.post('/api/owners').send({ name: 'Foreign synthetic owner', roles: ['owner'] });
+
+    expect((await agent.put(`/api/accounts/${account.id}`).send({ ownerId: owner.body.id })).status).toBe(200);
+    expect(db.findById('accounts', account.id, userId).ownerId).toBe(owner.body.id);
+    expect((await agent.put(`/api/accounts/${account.id}`).send({ ownerId: tenant.body.id })).status).toBe(400);
+    expect((await agent.put(`/api/accounts/${account.id}`).send({ ownerId: foreignOwner.body.id })).status).toBe(400);
+    expect((await agent.put(`/api/accounts/${account.id}`).send({ ownerId: null })).body.ownerId).toBeNull();
+  });
+
+  it('retains holder-scoped A/B and VAT history across holder changes and separates currencies', async () => {
+    await agent.get('/api/accounts/setup');
+    const arsAccount = db.findAll('accounts', userId)[0];
+    const firstOwner = (await agent.post('/api/owners').send({ name: 'Owner A', roles: ['owner'] })).body;
+    const secondOwner = (await agent.post('/api/owners').send({ name: 'Owner B', roles: ['owner'] })).body;
+    await agent.put(`/api/accounts/${arsAccount.id}`).send({ ownerId: firstOwner.id });
+    const usdAccount = (await agent.post('/api/accounts').send({ name: 'USD holder account', currency: 'USD', ownerId: secondOwner.id })).body;
+    const unassignedAccount = (await agent.post('/api/accounts').send({ name: 'Unassigned account', currency: 'ARS' })).body;
+    const today = ledger.localDateForUser(db, userId);
+    const mixed = await agent.post('/api/transactions').send({
+      tipo: 'income', monto: 100, titulo: 'Synthetic mixed income', clasificacion: 'Mixto', montoA: 40, montoB: 60,
+      ivaPorcentaje: 21, fecha: today, accountId: arsAccount.id
+    });
+    await agent.put(`/api/accounts/${arsAccount.id}`).send({ ownerId: secondOwner.id });
+    await agent.post('/api/transactions').send({
+      tipo: 'income', monto: 50, titulo: 'Synthetic owner B income', clasificacion: 'A', ivaPorcentaje: 10,
+      fecha: today, accountId: arsAccount.id
+    });
+    await agent.post('/api/transactions').send({
+      tipo: 'income', monto: 30, titulo: 'Synthetic USD B income', clasificacion: 'B', ivaPorcentaje: 21,
+      fecha: today, accountId: usdAccount.id
+    });
+    await agent.post('/api/transactions').send({
+      tipo: 'income', monto: 12, titulo: 'Synthetic unassigned income', clasificacion: 'B',
+      fecha: today, accountId: unassignedAccount.id
+    });
+
+    const month = today.slice(0, 7);
+    const summary = await agent.get(`/api/summary?month=${month}`);
+    const trends = await agent.get(`/api/trends?from=${month}&to=${month}`);
+    const firstOwnerGroup = summary.body.incomeBreakdownByHolder.find(item => item.ownerId === firstOwner.id && item.currency === 'ARS');
+    const secondOwnerArs = summary.body.incomeBreakdownByHolder.find(item => item.ownerId === secondOwner.id && item.currency === 'ARS');
+    const secondOwnerUsd = summary.body.incomeBreakdownByHolder.find(item => item.ownerId === secondOwner.id && item.currency === 'USD');
+    const unassigned = summary.body.incomeBreakdownByHolder.find(item => item.ownerId === null && item.currency === 'ARS');
+    const monthlyIva = trends.body.monthlyData[0].ivaByHolder;
+
+    expect(mixed.body.incomeHolderId).toBe(firstOwner.id);
+    expect(firstOwnerGroup).toMatchObject({ A: 40, B: 60, iva: 8.4 });
+    expect(secondOwnerArs).toMatchObject({ A: 50, B: 0, iva: 5 });
+    expect(secondOwnerUsd).toMatchObject({ currency: 'USD', A: 0, B: 30, iva: 0 });
+    expect(unassigned).toMatchObject({ ownerName: 'Sin titular asignado', A: 0, B: 12 });
+    expect(summary.body.currencyTotals.find(item => item.currency === 'ARS').income).toBe(162);
+    expect(monthlyIva).toEqual(expect.arrayContaining([
+      expect.objectContaining({ ownerId: firstOwner.id, currency: 'ARS', amount: 8.4 }),
+      expect.objectContaining({ ownerId: secondOwner.id, currency: 'ARS', amount: 5 }),
+      expect.objectContaining({ ownerId: secondOwner.id, currency: 'USD', amount: 0 })
+    ]));
+  });
+
+  it('includes unassigned secondary-account expenses and refunds in global totals without FX', async () => {
+    const setup = await agent.get('/api/accounts/setup');
+    const account = (await agent.post('/api/accounts').send({ name: 'Unassigned USD test account', currency: 'USD' })).body;
+    const category = await agent.post('/api/categories').send({ nombre: 'Synthetic expense category' });
+    const today = ledger.localDateForUser(db, userId);
+    await agent.post(`/api/accounts/${account.id}/reconcile`).send({ openingBalance: 200, openingDate: today, includedMovementIds: [] });
+    await agent.post('/api/transactions').send({ tipo: 'income', monto: 100, titulo: 'Synthetic income', fecha: today, accountId: account.id });
+    const expense = await agent.post('/api/transactions').send({
+      tipo: 'expense', monto: 35, titulo: 'Synthetic posted expense', categoryId: category.body.id, fecha: today, accountId: account.id
+    });
+    await agent.post('/api/transactions').send({
+      tipo: 'refund', monto: 5, titulo: 'Synthetic refund', categoryId: category.body.id, fecha: today,
+      accountId: account.id, refundSourceId: expense.body.id
+    });
+
+    const balances = await agent.get('/api/accounts');
+    const summary = await agent.get(`/api/summary?month=${today.slice(0, 7)}`);
+    const overview = await agent.get(`/api/finance/overview?month=${today.slice(0, 7)}`);
+    const usdSummary = summary.body.currencyTotals.find(item => item.currency === 'USD');
+    const usdOverview = overview.body.currencies.find(item => item.currency === 'USD');
+
+    expect(balances.body.find(item => item.id === account.id).balance).toBe(270);
+    expect(usdSummary).toMatchObject({ income: 100, expenses: 35, refunds: 5, savings: 70 });
+    expect(usdOverview).toMatchObject({ income: 100, expenses: 35, refunds: 5, netExpenses: 30, savings: 70 });
+    expect(overview.body.movements).toEqual(expect.arrayContaining([
+      expect.objectContaining({ transactionId: expense.body.id, type: 'expense', amount: 35, currency: 'USD' })
+    ]));
+    expect(overview.body.currencies.some(item => item.currency === setup.body.settings.appCurrency)).toBe(true);
+  });
+
+  it('preserves legacy account and movement currencies instead of rewriting them', async () => {
+    const today = ledger.localDateForUser(db, userId);
+    const account = db.create('accounts', { nombre: 'Historical GBP account', currency: 'GBP', activo: true, primary: false }, userId);
+    const movement = db.create('transactions', {
+      userId, tipo: 'income', monto: 123.45, amountMinor: 12345, accountId: account.id,
+      currencyCode: 'GBP', fecha: today, titulo: 'Historical GBP income'
+    }, userId);
+    const original = db.findById('transactions', movement.id, userId);
+
+    const summary = await agent.get(`/api/summary?month=${today.slice(0, 7)}`);
+
+    expect(summary.body.currencyTotals).toEqual(expect.arrayContaining([
+      expect.objectContaining({ currency: 'GBP', income: 123.45 })
+    ]));
+    expect(db.findById('transactions', movement.id, userId)).toEqual(original);
+    expect(db.findById('accounts', account.id, userId).currency).toBe('GBP');
   });
 
   it('updates both posted transfer balances while excluding the transfer from income and expenses', async () => {
@@ -150,8 +297,8 @@ describe('Account configuration API', () => {
   });
 
   it('normalizes partial income allocations in their source period and counts an explicit fee once', async () => {
-    const setup = await agent.get('/api/accounts/setup');
-    const eur = setup.body.accounts[0];
+    await agent.get('/api/accounts/setup');
+    const eur = (await agent.post('/api/accounts').send({ name: 'EUR wallet', currency: 'EUR' })).body;
     const usd = (await agent.post('/api/accounts').send({ name: 'USD wallet', currency: 'USD' })).body;
     const category = await agent.post('/api/categories').send({ nombre: 'Bank fees', color: '#F00' });
     const date = ledger.localDateForUser(db, userId);

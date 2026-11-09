@@ -12,43 +12,41 @@ Característica: Gestión de transacciones desde la home
   Escenario: Crear ingreso A y verificar resumen
     Cuando abro la página de inicio
     Y creo un ingreso "Sueldo A" de 1500 con clasificación "A"
-    Entonces el stat "Ingresos reales" muestra "EUR 1.500,00"
+    Entonces el stat "Ingresos" muestra "ARS 1.500,00"
     Y veo la transacción "Sueldo A"
     Y no hay errores críticos en la consola
 
   Escenario: Crear ingreso B y verificar resumen
     Cuando abro la página de inicio
     Y creo un ingreso "Sueldo B" de 800 con clasificación "B"
-    Entonces el stat "Ingresos reales" muestra "EUR 800,00"
+    Entonces el stat "Ingresos" muestra "ARS 800,00"
     Y veo la transacción "Sueldo B"
     Y no hay errores críticos en la consola
 
   Escenario: Crear ingreso Mixto y verificar resumen
     Cuando abro la página de inicio
     Y creo un ingreso "Mixto UI" de 1000 con clasificación "Mixto" desglosado 700 en A y 300 en B
-    Entonces el stat "Ingresos reales" muestra "EUR 1.000,00"
+    Entonces el stat "Ingresos" muestra "ARS 1.000,00"
     Y veo la transacción "Mixto UI"
     Y no hay errores críticos en la consola
 
   Escenario: Crear gasto fijo y verificar gráfico
     Cuando abro la página de inicio
     Y creo un gasto fijo en "Gastos UI" llamado "Alquiler" por 600
-    Entonces el stat "Gastos netos" muestra "EUR 600,00"
+    Entonces el stat "Gastos" muestra "ARS 600,00"
     Y no hay errores críticos en la consola
 
   Escenario: Crear gasto variable y verificar gráfico
     Cuando abro la página de inicio
     Y creo un gasto variable en "Gastos UI" llamado "Cena" por 150
-    Entonces el stat "Gastos netos" muestra "EUR 150,00"
+    Entonces el stat "Gastos" muestra "ARS 150,00"
     Y no hay errores críticos en la consola
 
   Escenario: Crear reembolso y verificar reducción de gastos
     Cuando abro la página de inicio
     Y creo un gasto en "Gastos UI" llamado "Compra" por 200
     Y creo un reembolso en "Gastos UI" llamado "Devolución" por 50
-    Entonces el stat "Gastos brutos" muestra "EUR 200,00"
-    Y el stat "Reembolsos" muestra "EUR 50,00"
-    Y el stat "Gastos netos" muestra "EUR 150,00"
+    Entonces el stat "Gastos" muestra "ARS 150,00"
     Y veo la transacción "Devolución"
     Y no hay errores críticos en la consola
 

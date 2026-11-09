@@ -34,7 +34,7 @@ const HomePage = {
         API.finance.overview(this.currentMonth)
       ]);
 
-      localStorage.setItem('pate_app_currency', summary.activeCurrency || 'EUR');
+      localStorage.setItem('pate_app_currency', summary.activeCurrency || 'ARS');
       this.renderContent(content, summary, transactions, categories, { desktop, accounts, trends, overview });
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
@@ -72,21 +72,15 @@ const HomePage = {
     const statsRow = create('div', { className: 'stats-row home-stats' });
 
     const overview = options.overview || { currencies: [], movements: [], transfers: [], pending: { obligations: [], rents: [] } };
-    const incomeCard = this.createStat('Ingresos reales', this.overviewMetricCurrencyRows(overview, 'income'), 'var(--income-color)');
+    const incomeCard = this.createStat('Ingresos', this.overviewMetricCurrencyRows(overview, 'income'), 'var(--income-color)');
     this.attachEconomicDrilldown(incomeCard, overview, 'income');
     statsRow.appendChild(incomeCard);
-    const expenseCard = this.createStat('Gastos brutos', this.overviewMetricCurrencyRows(overview, 'expenses'), 'var(--expense-color)');
-    this.attachEconomicDrilldown(expenseCard, overview, 'expense');
+    const expenseCard = this.createStat('Gastos', this.overviewMetricCurrencyRows(overview, 'netExpenses'), 'var(--expense-color)');
+    this.attachEconomicDrilldown(expenseCard, overview, 'net-expense');
     statsRow.appendChild(expenseCard);
-    const refundCard = this.createStat('Reembolsos', this.overviewMetricCurrencyRows(overview, 'refunds'), 'var(--refund-color)');
-    this.attachEconomicDrilldown(refundCard, overview, 'refund');
-    statsRow.appendChild(refundCard);
-    const netExpenseCard = this.createStat('Gastos netos', this.overviewMetricCurrencyRows(overview, 'netExpenses'), 'var(--expense-color)');
-    this.attachEconomicDrilldown(netExpenseCard, overview, 'net-expense');
-    statsRow.appendChild(netExpenseCard);
     const activeSavings = overview.currencies?.find(total => total.currency === overview.activeCurrency)?.savings || 0;
     const savingsColor = activeSavings >= 0 ? 'var(--success)' : 'var(--danger)';
-    const savingsCard = this.createStat('Ahorro real', this.overviewMetricCurrencyRows(overview, 'savings'), savingsColor);
+    const savingsCard = this.createStat('Ahorro', this.overviewMetricCurrencyRows(overview, 'savings'), savingsColor);
     this.attachEconomicDrilldown(savingsCard, overview, 'savings');
     statsRow.appendChild(savingsCard);
 
@@ -253,20 +247,16 @@ const HomePage = {
     const activeSavings = overview.currencies?.find(total => total.currency === overview.activeCurrency)?.savings || 0;
     const values = {
       ingresos: this.overviewMetricCurrencyRows(overview, 'income'),
-      gastos: this.overviewMetricCurrencyRows(overview, 'expenses'),
-      reembolsos: this.overviewMetricCurrencyRows(overview, 'refunds'),
-      neto: this.overviewMetricCurrencyRows(overview, 'netExpenses'),
+      gastosNetos: this.overviewMetricCurrencyRows(overview, 'netExpenses'),
       ahorro: this.overviewMetricCurrencyRows(overview, 'savings')
     };
 
     const statsRow = create('div', { className: 'stats-row desktop-home-stats home-stats', 'aria-label': 'Resumen del mes' });
     this.desktopStatsRow = statsRow;
     const descriptors = [
-      { id: 'ingresos', label: 'Ingresos reales', color: 'var(--income-color)', type: 'income' },
-      { id: 'gastos', label: 'Gastos brutos', color: 'var(--expense-color)', type: 'expense' },
-      { id: 'reembolsos', label: 'Reembolsos', color: 'var(--refund-color)', type: 'refund' },
-      { id: 'neto', label: 'Gastos netos', color: 'var(--expense-color)', type: 'net-expense' },
-      { id: 'ahorro', label: 'Ahorro real', color: activeSavings > 0 ? 'var(--success)' : activeSavings < 0 ? 'var(--danger)' : 'var(--text-primary)', type: 'savings' }
+      { id: 'ingresos', label: 'Ingresos', color: 'var(--income-color)', type: 'income' },
+      { id: 'gastosNetos', label: 'Gastos', color: 'var(--expense-color)', type: 'net-expense' },
+      { id: 'ahorro', label: 'Ahorro', color: activeSavings > 0 ? 'var(--success)' : activeSavings < 0 ? 'var(--danger)' : 'var(--text-primary)', type: 'savings' }
     ];
 
     this.renderDesktopStats(statsRow, descriptors, values, hidden, overview);
@@ -369,8 +359,7 @@ const HomePage = {
     const metricIcons = {
       ingresos: '<path d="M12 19V5M5 12l7-7 7 7"/>',
       gastos: '<path d="M12 5v14m-7-7 7 7 7-7"/>',
-      reembolsos: '<path d="M9 14l-4-4 4-4M5 10h9a5 5 0 010 10h-2"/>',
-      neto: '<path d="M4 7h16M4 12h10M4 17h6"/>',
+      gastosNetos: '<path d="M4 7h16M4 12h10M4 17h6"/>',
       ahorro: '<circle cx="12" cy="12" r="9"/><path d="M15 9.5c0-1.1-1.3-2-3-2s-3 .9-3 2 1.3 2 3 2 3 .9 3 2-1.3 2-3 2-3-.9-3-2M12 6v12"/>'
     };
     descriptors.forEach(({ id, label, color, type }) => {
@@ -426,7 +415,8 @@ const HomePage = {
         'income-split:income-ab',
         'trend-iva:trend-iva'
       ]);
-      if (allowedFavorites.has(`${favorite?.type}:${favorite?.key}`)) return favorite;
+      if (allowedFavorites.has(`${favorite?.type}:${favorite?.key}`)
+        || favorite?.type === 'income-split' && String(favorite?.key || '').startsWith('income-ab:')) return favorite;
     } catch {
       // Legacy metric-only favorites are intentionally discarded.
     }
@@ -636,7 +626,7 @@ const HomePage = {
   },
 
   overviewMetricCurrencyRows(overview, metric) {
-    const active = overview?.activeCurrency || 'EUR';
+    const active = overview?.activeCurrency || 'ARS';
     const values = { income: 'income', expenses: 'expenses', refunds: 'refunds', netExpenses: 'netExpenses', savings: 'savings' };
     let rows = (overview?.currencies || []).map(total => ({ currency: total.currency, amount: total[values[metric]] || 0 }))
       .filter(row => row.currency && Number.isFinite(row.amount));
@@ -662,7 +652,7 @@ const HomePage = {
   showEconomicMovements(overview, type = null) {
     const rows = type === 'transfer'
       ? (overview?.transfers || [])
-      : (overview?.movements || []).filter(item => type === 'savings' || !type || item.type === type || type === 'net-expense' && item.type === 'refund');
+      : (overview?.movements || []).filter(item => type === 'savings' || !type || item.type === type || type === 'net-expense' && ['expense', 'refund'].includes(item.type));
     const body = create('div', { style: { maxHeight: '60vh', overflowY: 'auto', display: 'grid', gap: '8px' } });
     body.appendChild(create('p', { className: 'text-muted', textContent: `Movimientos reales de ${overview?.month || ''}. Las monedas se muestran por separado, sin conversión.` }));
     if (!rows.length) body.appendChild(create('div', { className: 'empty-state', textContent: 'No hay movimientos para este detalle.' }));
@@ -712,7 +702,7 @@ const HomePage = {
   // zero value are omitted, so a card only lists the currencies that actually
   // contribute to that metric. The active currency always comes first.
   metricCurrencyRows(summary, metric, fallback = 0) {
-    const active = summary?.activeCurrency || localStorage.getItem('pate_app_currency') || 'EUR';
+    const active = summary?.activeCurrency || localStorage.getItem('pate_app_currency') || 'ARS';
     const totals = Array.isArray(summary?.currencyTotals) ? summary.currencyTotals : [];
     const amountFor = total => {
       if (metric === 'expenses') return (total.expenses || 0) - (total.refunds || 0);

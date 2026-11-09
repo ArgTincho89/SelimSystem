@@ -1,9 +1,9 @@
 function formatearEuro(cantidad) {
-  const currency = localStorage.getItem('pate_app_currency') || 'EUR';
+  const currency = localStorage.getItem('pate_app_currency') || 'ARS';
   return formatearMoneda(cantidad, currency);
 }
 
-function formatearMoneda(cantidad, currency = 'EUR', locale = null) {
+function formatearMoneda(cantidad, currency = 'ARS', locale = null) {
   const language = locale || localStorage.getItem('pate_locale') || 'es-AR';
   try {
     const zeroDecimalCurrencies = ['JPY', 'KRW', 'CLP', 'PYG', 'BIF', 'DJF', 'GNF', 'KMF', 'RWF', 'UGX', 'VND', 'VUV', 'XAF', 'XOF', 'XPF'];
@@ -15,7 +15,7 @@ function formatearMoneda(cantidad, currency = 'EUR', locale = null) {
 
 // Formats an amount as "<CODE> <number>", e.g. "EUR 2.500,00". Used where
 // several currencies are shown together and a symbol would be ambiguous.
-function formatearMonedaConCodigo(cantidad, currency = 'EUR', locale = null) {
+function formatearMonedaConCodigo(cantidad, currency = 'ARS', locale = null) {
   const language = locale || localStorage.getItem('pate_locale') || 'es-AR';
   const zeroDecimalCurrencies = ['JPY', 'KRW', 'CLP', 'PYG', 'BIF', 'DJF', 'GNF', 'KMF', 'RWF', 'UGX', 'VND', 'VUV', 'XAF', 'XOF', 'XPF'];
   const digits = zeroDecimalCurrencies.includes(currency) ? 0 : 2;

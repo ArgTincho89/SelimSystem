@@ -2,7 +2,8 @@ const SettingsPage = {
   section: 'accounts',
   settings: null,
   accounts: [],
-  currencies: ['EUR', 'USD', 'ARS', 'GBP', 'CAD', 'AUD', 'CHF', 'JPY', 'BRL', 'CLP', 'MXN', 'CNY', 'UYU', 'PYG', 'COP', 'PEN', 'BOB', 'CRC', 'DOP', 'PLN', 'SEK', 'NOK', 'DKK', 'NZD', 'INR', 'ZAR', 'KRW'],
+  owners: [],
+  currencies: ['ARS', 'EUR', 'USD'],
 
   async render(params = {}) {
     this.section = ['accounts', 'alerts'].includes(params.section) ? params.section : this.section;
@@ -11,10 +12,11 @@ const SettingsPage = {
     content.style.paddingBottom = '';
     content.innerHTML = '<div class="loading">Cargando configuración…</div>';
     try {
-      const [setup, accounts] = await Promise.all([API.accounts.setup(), API.accounts.list()]);
+      const [setup, accounts, owners] = await Promise.all([API.accounts.setup(), API.accounts.list(), API.owners.list()]);
       this.settings = setup.settings;
       this.accounts = accounts;
-      localStorage.setItem('pate_app_currency', this.settings.appCurrency || 'EUR');
+      this.owners = owners;
+      localStorage.setItem('pate_app_currency', this.settings.appCurrency || 'ARS');
       localStorage.setItem('pate_locale', this.settings.locale || 'es-AR');
       this.renderContent(content);
       if (typeof App !== 'undefined' && App.refreshAlertIndicator) App.refreshAlertIndicator();
@@ -87,6 +89,8 @@ const SettingsPage = {
     heading.appendChild(create('h3', { textContent: title }));
     heading.appendChild(create('span', { className: 'account-card-currency', textContent: account.currency }));
     card.appendChild(heading);
+    const accountOwner = this.owners.find(owner => owner.id === account.ownerId);
+    card.appendChild(create('p', { className: 'account-status-note', textContent: `Titular: ${accountOwner?.name || 'Sin titular asignado'}` }));
     if (account.balanceStatus === 'verified') {
       const balance = create('p', { className: 'account-card-balance sensitive-value' });
       this.setSensitive(balance, formatearMoneda(account.balance, account.currency));
@@ -294,7 +298,7 @@ const SettingsPage = {
     const form = create('form');
     const name = create('input', { id: 'account-name', className: 'form-control', type: 'text', maxlength: '80', required: 'required', value: account?.nombre || '' });
     form.appendChild(this.field('Nombre de cuenta', name));
-    let currencyValue = account?.currency || this.settings.appCurrency || 'EUR';
+    let currencyValue = account?.currency || 'ARS';
     const currencySelect = create('div', { className: 'currency-select' });
     const currencyTrigger = create('button', {
       id: 'account-currency', className: 'form-control', type: 'button',
@@ -352,6 +356,13 @@ const SettingsPage = {
     const currencyGroup = this.field('Moneda', currencySelect);
     currencyGroup.querySelector('label').setAttribute('for', 'account-currency');
     form.appendChild(currencyGroup);
+    const ownerOptions = [['', 'Sin titular asignado'], ...this.owners
+      .filter(owner => (owner.roles || ['owner']).includes('owner'))
+      .map(owner => [owner.id, owner.name])];
+    const owner = create('select', { id: 'account-owner', className: 'form-control' });
+    ownerOptions.forEach(([value, label]) => owner.appendChild(create('option', { value, textContent: label })));
+    owner.value = account?.ownerId || '';
+    form.appendChild(this.field('Titular de la cuenta', owner));
     const primaryLabel = create('label', { className: 'checkbox-label' });
     const primary = create('input', { type: 'checkbox', className: 'form-checkbox' });
     primary.checked = account?.primary || false;
@@ -365,8 +376,8 @@ const SettingsPage = {
     on(form, 'submit', async event => {
       event.preventDefault();
       try {
-        if (account) await API.accounts.update(account.id, { name: name.value.trim(), currency: currencyValue, primary: primary.checked });
-        else await API.accounts.create({ name: name.value.trim(), currency: currencyValue, primary: primary.checked });
+        if (account) await API.accounts.update(account.id, { name: name.value.trim(), currency: currencyValue, primary: primary.checked, ownerId: owner.value || null });
+        else await API.accounts.create({ name: name.value.trim(), currency: currencyValue, primary: primary.checked, ownerId: owner.value || null });
         Modal.hide();
         await this.render();
       } catch (error) { this.showError(form, error.message); }

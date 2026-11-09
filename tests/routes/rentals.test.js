@@ -12,6 +12,7 @@ describe('Rental contracts, expected rent periods, and collections', () => {
   let tenantId;
   let assetId;
   let userId;
+  let eurAccountId;
 
   beforeAll(async () => {
     db = setupTestDb();
@@ -28,6 +29,8 @@ describe('Rental contracts, expected rent periods, and collections', () => {
     const asset = await agent.post('/api/assets').send({ type: 'immovable', name: 'Rental Home', propertyType: 'Apartment', usageStatus: 'vacant' });
     assetId = asset.body.id;
     ledger.ensureSetup(db, userId);
+    eurAccountId = (await agent.post('/api/accounts').send({ name: 'Rent EUR account', currency: 'EUR' })).body.id;
+    await agent.patch('/api/accounts/settings').send({ appCurrency: 'EUR' });
   });
 
   afterAll(() => cleanupTestDb());
@@ -77,9 +80,8 @@ describe('Rental contracts, expected rent periods, and collections', () => {
     expect(db.findById('rentOccurrences', firstOccurrence.id, userId).rentMinor).toBe(10000);
     expect((await agent.get('/api/transactions').query({ month: '2025-02' })).body.filter(item => item.tipo === 'income')).toHaveLength(0);
 
-    const account = db.findAll('accounts', userId)[0];
     const collectionInput = {
-      amount: 150, accountId: account.id, date: '2025-03-02', method: 'Bank transfer',
+      amount: 150, accountId: eurAccountId, date: '2025-03-02', method: 'Bank transfer',
       idempotencyKey: 'multi-month-rent-2025-03',
       allocations: [
         { occurrenceId: created.body.occurrences.find(item => item.date === '2025-02-01').id, amount: 100 },
@@ -206,9 +208,8 @@ describe('Rental contracts, expected rent periods, and collections', () => {
     const created = await createContract({ startDate, endDate: firstOfMonth(startDate, 24) });
     const occurrence = created.body.occurrences.find(item => item.date === effectiveDate);
     expect(occurrence).toBeDefined();
-    const account = db.findAll('accounts', userId).find(item => item.currency === 'EUR' && item.activo);
     const collection = await agent.post('/api/rentals/collections').send({
-      amount: 100, accountId: account.id, date: today, method: 'Bank transfer',
+      amount: 100, accountId: eurAccountId, date: today, method: 'Bank transfer',
       idempotencyKey: 'paid-future-rent-period-0001', allocations: [{ occurrenceId: occurrence.id, amount: 100 }]
     });
     expect(collection.status).toBe(201);

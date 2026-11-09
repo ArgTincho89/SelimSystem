@@ -2,6 +2,7 @@ const express = require('express');
 const { v4: uuidv4 } = require('uuid');
 const { requireAuth } = require('../middleware/auth');
 const ledger = require('../services/account-ledger');
+const incomeAttribution = require('../services/income-attribution');
 const rentals = require('../services/rentals');
 
 const router = express.Router();
@@ -206,6 +207,7 @@ router.post('/collections', (req, res) => {
     transaction = db.create('transactions', {
       userId, tipo: 'income', monto: ledger.fromMinorUnits(amountMinor, account.currency), amountMinor,
       accountId: account.id, currencyCode: account.currency, titulo: 'Cobro de alquiler',
+      ...incomeAttribution.incomeHolderSnapshot(db, userId, account),
       categoryId: null, refundSourceId: null, fecha: date, recurrente: false, frecuencia: null, fechaFin: null,
       clasificacion: null, montoA: null, montoB: null, ivaPorcentaje: null,
       rentCollectionId: collectionId, rentCollectionIdempotencyKey: keyHash,

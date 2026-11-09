@@ -23,7 +23,6 @@ const AssetsPage = {
     content.replaceChildren();
     const header = create('div', { className: 'page-header' }, [
       create('h2', { className: 'page-title', textContent: 'Bienes' }),
-      create('button', { className: 'btn btn-secondary btn-sm', textContent: 'Obligaciones', onClick: () => Router.navigate('/obligations') }),
       create('button', { className: 'btn btn-primary btn-sm', textContent: '+ Nuevo bien', onClick: () => this.showAssetModal() })
     ]);
     content.appendChild(header);
@@ -121,7 +120,7 @@ const AssetsPage = {
   showAssetModal(asset = null) {
     const editing = Boolean(asset);
     const form = create('div', { style: { maxHeight: '65vh', overflowY: 'auto', paddingRight: '4px' } });
-    const typeControl = this.select([['movable', 'Mueble / bien mueble'], ['immovable', 'Inmueble']], asset?.type || 'movable');
+    const typeControl = this.select([['movable', 'Mueble'], ['immovable', 'Inmueble']], asset?.type || 'movable');
     if (editing) typeControl.disabled = true;
     const typeGroup = create('div', { className: 'form-group' }, [create('label', { textContent: 'Clasificación' }), typeControl]);
     form.appendChild(typeGroup);
@@ -134,16 +133,10 @@ const AssetsPage = {
     const notes = this.addField(form, 'Notas', { value: asset?.notes || '', multiline: true });
     const kindFields = create('div');
     form.appendChild(kindFields);
-    let detailsControl;
     const renderKind = () => {
       kindFields.replaceChildren();
       if (typeControl.value === 'movable') {
         this.addField(kindFields, 'Subtipo', { value: asset?.type === 'movable' ? asset.subtype || '' : '', placeholder: 'Por ejemplo: vehículo, mobiliario, equipo' }).dataset.field = 'subtype';
-        const detailsGroup = create('div', { className: 'form-group' }, [create('label', { textContent: 'Detalles extensibles (JSON)' })]);
-        detailsControl = create('textarea', { className: 'form-control', rows: 3 });
-        detailsControl.value = JSON.stringify(asset?.type === 'movable' ? asset.details || {} : {}, null, 2);
-        detailsGroup.append(detailsControl, create('small', { textContent: 'No incluyas claves, credenciales ni números completos de cuentas o tarjetas.' }));
-        kindFields.appendChild(detailsGroup);
         this.addField(kindFields, 'Ubicación', { value: asset?.location || '' }).dataset.field = 'location';
       } else {
         this.addField(kindFields, 'Tipo de inmueble', { value: asset?.type === 'immovable' ? asset.propertyType || '' : '', placeholder: 'Casa, departamento, terreno...' }).dataset.field = 'propertyType';
@@ -207,12 +200,6 @@ const AssetsPage = {
       create('button', { className: 'btn btn-primary', type: 'button', textContent: editing ? 'Guardar cambios' : 'Crear bien' })
     ]);
     on(footer.lastChild, 'click', async () => {
-      let details = {};
-      if (typeControl.value === 'movable') {
-        try { details = JSON.parse(detailsControl.value || '{}'); }
-        catch { return showToast('Los detalles deben tener formato JSON válido', 'error'); }
-        if (details === null || Array.isArray(details) || typeof details !== 'object') return showToast('Los detalles deben ser un objeto JSON', 'error');
-      }
       const data = {
         type: typeControl.value, name: name.value.trim(), description: description.value.trim(),
         acquisitionDate: acquisitionDate.value || null, acquisitionValue: acquisitionValue.value === '' ? null : Number(acquisitionValue.value),
@@ -221,7 +208,6 @@ const AssetsPage = {
       if (typeControl.value === 'movable') {
         data.subtype = $('[data-field="subtype"]', kindFields).value.trim();
         data.location = $('[data-field="location"]', kindFields).value.trim();
-        data.details = details;
       } else {
         data.propertyType = $('[data-field="propertyType"]', kindFields).value.trim();
         ['address', 'locality', 'province', 'country'].forEach(key => data[key] = $(`[data-field="${key}"]`, kindFields).value.trim());
@@ -591,7 +577,7 @@ const AssetsPage = {
       const startDate = this.rentalField(body, 'Inicio', { type: 'date', value: new Date().toISOString().slice(0, 10) });
       const endDate = this.rentalField(body, 'Fin (opcional)', { type: 'date' });
       const rent = this.rentalField(body, 'Alquiler inicial', { type: 'number', min: '0.01', step: '0.01' });
-      const currency = this.select(['EUR', 'USD', 'ARS', 'GBP', 'CAD', 'AUD', 'CHF', 'JPY', 'BRL', 'CLP', 'MXN', 'UYU', 'PYG', 'COP', 'PEN', 'BOB', 'CRC', 'DOP', 'PLN', 'SEK', 'NOK', 'DKK', 'NZD', 'INR', 'ZAR', 'KRW', 'CNY'].map(code => [code, code]), localStorage.getItem('pate_app_currency') || 'EUR');
+      const currency = this.select(['ARS', 'EUR', 'USD'].map(code => [code, code]), localStorage.getItem('pate_app_currency') || 'ARS');
       body.append(create('label', { className: 'form-group' }, [create('span', { textContent: 'Moneda' }), currency]));
       const periodicity = this.select([['monthly', 'Mensual'], ['bimonthly', 'Cada dos meses'], ['quarterly', 'Trimestral'], ['semiannual', 'Semestral'], ['annual', 'Anual']]);
       body.append(create('label', { className: 'form-group' }, [create('span', { textContent: 'Periodicidad' }), periodicity]));

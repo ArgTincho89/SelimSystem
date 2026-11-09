@@ -1,6 +1,7 @@
 const { generateRecurringInstances, addDaysDateOnly, dateOnlyDaysBetween } = require('../utils/recurring');
 
 const CURRENCIES = new Set(['EUR', 'USD', 'ARS', 'GBP', 'CAD', 'AUD', 'CHF', 'JPY', 'BRL', 'CLP', 'MXN', 'CNY', 'UYU', 'PYG', 'COP', 'PEN', 'BOB', 'CRC', 'DOP', 'PLN', 'SEK', 'NOK', 'DKK', 'NZD', 'INR', 'ZAR', 'KRW']);
+const SELECTABLE_CURRENCIES = new Set(['ARS', 'EUR', 'USD']);
 const FREQUENCIES = new Set(['monthly', 'bimonthly', 'quarterly', 'semiannual', 'annual']);
 const ZERO_DECIMAL_CURRENCIES = new Set(['JPY', 'KRW', 'CLP', 'PYG', 'BIF', 'DJF', 'GNF', 'KMF', 'RWF', 'UGX', 'VND', 'VUV', 'XAF', 'XOF', 'XPF']);
 
@@ -63,7 +64,7 @@ function getSettings(db, userId, initialize = true) {
   let settings = db.findAll('accountSettings', userId)[0] || null;
   if (!settings && initialize) {
     settings = db.create('accountSettings', {
-      appCurrency: 'EUR', locale: 'es-AR', timezone: 'Europe/Madrid',
+      appCurrency: 'ARS', locale: 'es-AR', timezone: 'Europe/Madrid',
       alertLeadDays: 5, forecastHorizonDays: 30, dailyReview: true
     }, userId);
   }
@@ -83,7 +84,7 @@ function getLegacyAccount(db, userId, initialize = true) {
   if (!legacyAccount && initialize) {
     const now = new Date().toISOString();
     legacyAccount = db.create('accounts', {
-      nombre: 'Cuenta principal', currency: 'EUR', primary: true, legacyPrimary: true,
+      nombre: 'Cuenta principal', currency: 'ARS', primary: true, legacyPrimary: true,
       activo: true, archivedAt: null, order: 0, openingBalanceMinor: null,
       openingDate: null, reconciled: false, presentation: 'default', createdAt: now
     }, userId);
@@ -141,8 +142,8 @@ function rollbackSetup(db, userId) {
     }
     const account = accounts[0];
     const preferences = settings[0];
-    if (!account.legacyPrimary || !account.primary || !account.activo || account.nombre !== 'Cuenta principal' || account.currency !== 'EUR' || account.presentation !== 'default' || account.order !== 0 || account.reconciled || account.openingBalanceMinor !== null ||
-        preferences.appCurrency !== 'EUR' || preferences.legacyAccountId !== account.id ||
+    if (!account.legacyPrimary || !account.primary || !account.activo || account.nombre !== 'Cuenta principal' || !['EUR', 'ARS'].includes(account.currency) || preferences.appCurrency !== account.currency || account.presentation !== 'default' || account.order !== 0 || account.reconciled || account.openingBalanceMinor !== null ||
+        preferences.legacyAccountId !== account.id ||
         preferences.locale !== 'es-AR' || preferences.timezone !== 'Europe/Madrid' ||
         preferences.alertLeadDays !== 5 || preferences.forecastHorizonDays !== 30 || preferences.dailyReview !== true) {
       return { error: 'No se puede revertir: hay preferencias o conciliaciones personalizadas que primero deben resolverse' };
@@ -558,7 +559,7 @@ function reviewDueAlerts(db, now = new Date()) {
 }
 
 module.exports = {
-  CURRENCIES, FREQUENCIES, currencyPrecision, toMinorUnits, fromMinorUnits, moneyInput, mulDivFloor, mulDivRound,
+  CURRENCIES, SELECTABLE_CURRENCIES, FREQUENCIES, currencyPrecision, toMinorUnits, fromMinorUnits, moneyInput, mulDivFloor, mulDivRound,
   getSettings, getLegacyAccount, ensureSetup, rollbackSetup, reapplySetup, accountsForUser, accountForMovement,
   localDateForUser, hasMovement, getAccountBalances, getMonthMovements, createTransferRecord, validateAllocations,
   incomeByCurrency, forecastAccount, refreshAlerts, reviewDueAlerts

@@ -198,9 +198,9 @@ Then('los controles de inicio aparecen en el orden requerido', async function (t
   await homePage.expectDesktopControlOrder();
 });
 
-Then('aparecen cinco métricas principales', async function (this: SelimSystemWorld) {
+Then('aparecen tres métricas principales', async function (this: SelimSystemWorld) {
   const homePage = new HomePage(this.page!);
-  await homePage.expectFivePrimaryMetrics();
+  await homePage.expectThreePrimaryMetrics();
 });
 
 Then('las métricas tienen iconos decorativos y el botón dice Nueva transacción', async function (this: SelimSystemWorld) {
@@ -208,7 +208,7 @@ Then('las métricas tienen iconos decorativos y el botón dice Nueva transacció
   await homePage.expectDesktopMetricIconsAndTransactionLabel();
 });
 
-Then('las cinco métricas principales no tienen estrellas', async function (this: SelimSystemWorld) {
+Then('las tres métricas principales no tienen estrellas', async function (this: SelimSystemWorld) {
   const homePage = new HomePage(this.page!);
   await homePage.expectFixedMetricsHaveNoStars();
 });
@@ -276,14 +276,14 @@ Then('la página no tiene desbordamiento horizontal', async function (this: Seli
 Then('el tooltip del gráfico {string} muestra datos de euros y porcentajes', async function (this: SelimSystemWorld, label: string) {
   const homePage = new HomePage(this.page!);
   const tooltip = await homePage.hoverChartPoint(label);
-  expect(tooltip).toMatch(/(?:[A-Z]{3}\s?\d[\d.,]*|\d[\d.,]*\s?€)/);
+  expect(tooltip).toMatch(/(?:[A-Z]{3}|\$)\s?\d[\d.,]*/);
   expect(tooltip).toMatch(/\d[\d.,]*%/);
 });
 
 Then('el tooltip del gráfico {string} muestra un valor en euros', async function (this: SelimSystemWorld, label: string) {
   const homePage = new HomePage(this.page!);
   const tooltip = await homePage.hoverChartPoint(label);
-  expect(tooltip).toMatch(/(?:[A-Z]{3}\s?\d[\d.,]*|\d[\d.,]*\s?€)/);
+  expect(tooltip).toMatch(/(?:[A-Z]{3}|\$)\s?\d[\d.,]*/);
 });
 
 Then('el tooltip del gráfico {string} muestra porcentajes', async function (this: SelimSystemWorld, label: string) {

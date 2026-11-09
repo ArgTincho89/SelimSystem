@@ -43,7 +43,7 @@ describe('Obligations', () => {
     userId = db.findUserByName('Obligations User').id;
     today = ledger.localDateForUser(db, userId);
     await agent.get('/api/accounts/setup');
-    accountId = (await agent.get('/api/accounts')).body.find(account => account.activo).id;
+    accountId = (await agent.post('/api/accounts').send({ name: 'Obligations EUR account', currency: 'EUR' })).body.id;
     categoryId = (await agent.post('/api/categories').send({ nombre: 'Household' })).body.id;
     providerId = (await agent.post('/api/owners').send({ name: 'Utility Provider', roles: ['provider'] })).body.id;
     assetId = (await agent.post('/api/assets').send({ type: 'immovable', name: 'Home' })).body.id;

@@ -17,6 +17,7 @@ describe('economic overview service', () => {
     const settings = ledger.getSettings(db, user.id);
     db.update('accountSettings', settings.id, { timezone: 'UTC', appCurrency: 'EUR' }, user.id);
     eurAccount = ledger.accountsForUser(db, user.id).find(item => item.legacyPrimary);
+    eurAccount = db.update('accounts', eurAccount.id, { currency: 'EUR' }, user.id);
     usdAccount = db.create('accounts', {
       nombre: 'USD account', currency: 'USD', primary: false, legacyPrimary: false,
       activo: true, archivedAt: null, order: 1, createdAt: new Date().toISOString()

@@ -61,12 +61,15 @@ describe('Assets and legal owners routes', () => {
     expect(crossUser.status).toBe(400);
   });
 
-  it('keeps movable details extensible while rejecting sensitive detail keys', async () => {
+  it('preserves movable details through API updates while rejecting sensitive detail keys', async () => {
     const created = await agent.post('/api/assets').send({
       type: 'movable', name: 'Camera', subtype: 'camera', details: { brand: 'Example', lensCount: 2 }
     });
     expect(created.status).toBe(201);
     expect(created.body.details.brand).toBe('Example');
+    const updated = await agent.put(`/api/assets/${created.body.id}`).send({ name: 'Camera updated' });
+    expect(updated.status).toBe(200);
+    expect(updated.body.details).toEqual({ brand: 'Example', lensCount: 2 });
     const rejected = await agent.post('/api/assets').send({
       type: 'movable', name: 'Sensitive Details', details: { cardNumber: '1234' }
     });

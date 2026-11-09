@@ -3,6 +3,7 @@ const { requireAuth } = require('../middleware/auth');
 const ledger = require('../services/account-ledger');
 const finance = require('../services/finance');
 const economicOverview = require('../services/economic-overview');
+const incomeAttribution = require('../services/income-attribution');
 
 const router = express.Router();
 router.use(requireAuth);
@@ -164,6 +165,7 @@ router.post('/claims/:id/recoveries', (req, res) => {
     transaction = db.create('transactions', {
       userId, tipo: 'income', monto: ledger.fromMinorUnits(amountMinor, claim.currencyCode), amountMinor,
       accountId: account.id, currencyCode: claim.currencyCode, titulo: 'Reintegro de gasto',
+      ...incomeAttribution.incomeHolderSnapshot(db, userId, account),
       categoryId: null, refundSourceId: null, fecha: recoveryDate, recurrente: false,
       frecuencia: null, fechaFin: null, clasificacion: null, montoA: null, montoB: null,
       ivaPorcentaje: null, recoverableExpenseClaimId: claim.id, recoveryIdempotencyKey: keyHash

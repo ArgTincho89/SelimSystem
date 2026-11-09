@@ -55,7 +55,7 @@ describe('Transaction validation branches', () => {
     expect(missingSplit.status).toBe(400);
     expect(badExpenseClass.status).toBe(400);
     expect(validSplit.status).toBe(201);
-    expect(validSplit.body).toMatchObject({ monto: 100, montoA: 60, montoB: 40, currencyCode: 'EUR' });
+    expect(validSplit.body).toMatchObject({ monto: 100, montoA: 60, montoB: 40, currencyCode: 'ARS' });
   });
 
   it('clears a refund source when the movement stops being a refund', async () => {

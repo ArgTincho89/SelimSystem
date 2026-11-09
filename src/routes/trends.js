@@ -2,6 +2,7 @@ const express = require('express');
 const { requireAuth } = require('../middleware/auth');
 const { getIncomeBreakdown, getIncomePercentages, getIncomeIva, roundCents } = require('../utils/income');
 const ledger = require('../services/account-ledger');
+const incomeAttribution = require('../services/income-attribution');
 
 const router = express.Router();
 
@@ -18,7 +19,7 @@ router.get('/', (req, res) => {
 
   const transactions = db.findAll('transactions', userId);
   ledger.ensureSetup(db, userId);
-  const activeCurrency = ledger.getSettings(db, userId).appCurrency || 'EUR';
+  const activeCurrency = ledger.getSettings(db, userId).appCurrency || 'ARS';
   const today = ledger.localDateForUser(db, userId);
   const categories = db.findAll('categories', userId);
 
@@ -45,6 +46,7 @@ router.get('/', (req, res) => {
       (!tx.isRecurringInstance || tx.occurrenceStatus === 'posted') && (!tx.recurrente || tx.fecha <= today)
     );
     const monthTx = allMonthTx.filter(tx => ledger.accountForMovement(db, userId, tx)?.currency === activeCurrency);
+    const incomeBreakdownByHolder = incomeAttribution.holderTotals(db, userId, allMonthTx);
     const currencyTotals = ledger.incomeByCurrency(db, userId, transactions, month);
     const selectedTotals = currencyTotals[activeCurrency] || { incomeMinor: 0, expensesMinor: 0, refundsMinor: 0, savingsMinor: 0 };
     const factor = 10 ** ledger.currencyPrecision(activeCurrency);
@@ -124,6 +126,8 @@ router.get('/', (req, res) => {
          porcentajeB: incomePercentages.porcentajeB
        },
         ivaAcumulado: ledger.fromMinorUnits(ivaAcumuladoMinor, activeCurrency),
+        incomeBreakdownByHolder,
+        ivaByHolder: incomeBreakdownByHolder.map(({ ownerId, ownerName, currency, iva }) => ({ ownerId, ownerName, currency, amount: iva })),
        gastos: Math.round(gastos * 100) / 100,
        reembolsos: Math.round(reembolsos * 100) / 100,
        gastosNetos: Math.round(gastosNetosSeleccionados * 100) / 100,

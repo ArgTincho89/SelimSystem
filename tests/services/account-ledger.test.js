@@ -40,14 +40,14 @@ describe('Account ledger service', () => {
     expect(first.backup.transactionCount).toBe(1);
     expect(second.backup.id).toBe(first.backup.id);
     expect(second.accounts.filter(account => account.primary && account.activo)).toHaveLength(1);
-    expect(second.accounts[0].currency).toBe('EUR');
+    expect(second.accounts[0].currency).toBe('ARS');
     expect(db.findById('transactions', legacy.id, userId)).toEqual(before);
     expect(first.backup.collections.transactions[0]).toEqual(before);
   });
 
   it('normalizes only explicitly allocated income and retains original amounts by currency', () => {
-    const { accounts } = ledger.ensureSetup(db, userId);
-    const eur = accounts.find(account => account.primary);
+    ledger.ensureSetup(db, userId);
+    const eur = db.create('accounts', { nombre: 'EUR', currency: 'EUR', primary: false, activo: true, openingBalanceMinor: null, reconciled: false }, userId);
     const usd = db.create('accounts', { nombre: 'USD', currency: 'USD', primary: false, activo: true, openingBalanceMinor: null, reconciled: false }, userId);
     const income = db.create('transactions', { userId, tipo: 'income', monto: 1000, amountMinor: 100000, accountId: usd.id, currencyCode: 'USD', fecha: '2026-01-01', titulo: 'USD salary' }, userId);
     db.create('transactions', { userId, tipo: 'income', monto: 2500, amountMinor: 250000, accountId: eur.id, currencyCode: 'EUR', fecha: '2026-01-02', titulo: 'EUR salary' }, userId);
@@ -76,8 +76,8 @@ describe('Account ledger service', () => {
   });
 
   it('supports traceable chained conversions and rejects reusing more than the remaining allocation', () => {
-    const { accounts } = ledger.ensureSetup(db, userId);
-    const eur = accounts.find(account => account.primary);
+    ledger.ensureSetup(db, userId);
+    const eur = db.create('accounts', { nombre: 'EUR', currency: 'EUR', activo: true, openingBalanceMinor: null, reconciled: false }, userId);
     const usd = db.create('accounts', { nombre: 'USD', currency: 'USD', activo: true, openingBalanceMinor: null, reconciled: false }, userId);
     const income = db.create('transactions', { userId, tipo: 'income', monto: 1000, amountMinor: 100000, accountId: usd.id, currencyCode: 'USD', fecha: '2025-03-01' }, userId);
     const first = ledger.createTransferRecord(db, userId, {
@@ -103,8 +103,8 @@ describe('Account ledger service', () => {
   });
 
   it('adds independently allocated USD and ARS conversions without summing unlike currencies', () => {
-    const { accounts } = ledger.ensureSetup(db, userId);
-    const eur = accounts.find(account => account.primary);
+    ledger.ensureSetup(db, userId);
+    const eur = db.create('accounts', { nombre: 'EUR', currency: 'EUR', activo: true }, userId);
     const usd = db.create('accounts', { nombre: 'USD', currency: 'USD', activo: true }, userId);
     const ars = db.create('accounts', { nombre: 'ARS', currency: 'ARS', activo: true }, userId);
     const eurIncome = db.create('transactions', { userId, tipo: 'income', monto: 2500, amountMinor: 250000, accountId: eur.id, currencyCode: 'EUR', fecha: '2025-08-01' }, userId);

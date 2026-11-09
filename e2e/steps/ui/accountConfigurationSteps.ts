@@ -50,7 +50,7 @@ Then('el menú de Configuración y las tarjetas EUR y USD están disponibles', a
   const settings = new AccountSettingsPage(this.page!);
   await settings.expectHomeAccountCards(['Cuenta principal', 'USD wallet']);
   await expect(this.page!.locator('.home-accounts .account-card')).toHaveCount(2);
-  await expect(this.page!.locator('.home-accounts')).toContainText('EUR');
+  await expect(this.page!.locator('.home-accounts')).toContainText('ARS');
   await expect(this.page!.locator('.home-accounts')).toContainText('USD');
 });
 
@@ -60,7 +60,7 @@ When('abro Cuentas desde Configuración', async function (this: SelimSystemWorld
 
 Then('Configuración muestra las dos cuentas conciliadas', async function (this: SelimSystemWorld) {
   const settings = new AccountSettingsPage(this.page!);
-  await settings.expectAccountCard('Cuenta principal', 'EUR');
+  await settings.expectAccountCard('Cuenta principal', 'ARS');
   await settings.expectAccountCard('USD wallet', 'USD');
 });
 
@@ -71,7 +71,7 @@ When('vuelvo a Inicio desde la navegación', async function (this: SelimSystemWo
 
 When('registro el ingreso EUR {string} de {float}', async function (this: SelimSystemWorld, title: string, amount: number) {
   await new HomePage(this.page!).createIncome(title, amount, 'A', {
-    fecha: businessDate(), accountName: 'Cuenta principal (EUR)'
+    fecha: businessDate(), accountName: 'Cuenta principal (ARS)'
   });
 });
 
@@ -98,7 +98,7 @@ When('guardo los totales mensuales antes de transferir', async function (this: S
 When('registro una conversión USD a EUR sin asignar ingresos', async function (this: SelimSystemWorld) {
   const settings = new AccountSettingsPage(this.page!);
   await settings.openFromNavigation('Cuentas');
-  await settings.createTransfer('USD wallet (USD)', 'Cuenta principal (EUR)', 100, 90, businessDate());
+  await settings.createTransfer('USD wallet (USD)', 'Cuenta principal (ARS)', 100, 90, businessDate());
 });
 
 Then('los saldos cambian y los totales de ingresos gastos y reembolsos no cambian', async function (this: SelimSystemWorld) {
@@ -134,7 +134,7 @@ When('programo un gasto recurrente USD de {float} para dentro de cinco días', a
 When('registro un gasto recurrente EUR de {float} para hoy', async function (this: SelimSystemWorld, amount: number) {
   await new HomePage(this.page!).navigate();
   await new HomePage(this.page!).createRecurringExpense(
-    'Account UI', 'Due today EUR rent', amount, businessDate(), 'fijo', 'Cuenta principal (EUR)'
+    'Account UI', 'Due today EUR rent', amount, businessDate(), 'fijo', 'Cuenta principal (ARS)'
   );
 });
 
