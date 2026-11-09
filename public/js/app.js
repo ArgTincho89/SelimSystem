@@ -127,7 +127,7 @@ const App = {
         </svg>
         <span>Inicio</span>
       </button>
-      <button class="navbar-item" data-route="/avisos">
+      <button class="navbar-item" data-route="/avisos" aria-label="Centro de avisos">
         <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M18 8a6 6 0 00-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 01-3.46 0"/>
         </svg>
