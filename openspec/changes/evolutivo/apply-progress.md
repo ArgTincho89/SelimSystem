@@ -47,4 +47,18 @@ Tests: tests/services/credit-card-installments.test.js, tests/routes/installment
 
 Notes: `card_installment_due` alerts belong to S6. Receipt: plan stores optional existing `documentId`; documents have no plan target, so no upload in the form yet. Scheduled installments are not in `/api/transactions` or summary totals.
 
-## Remaining: S4..S7, S9
+## S4 - Phase 2b backend (done; commit S4)
+
+- [x] 4.1 `occurrenceView` in `src/services/obligations.js` is portion-aware: when `portionsFor(...).tenant === 0` (and for cancelled) the legacy expression runs unchanged and the view has no new fields; otherwise status `resolved` (tenant-only settled) / `paid` (shared, both portions settled) / `overdue` / `partial` / `confirmed|expected`; `remainingAmount` is the owner portion remaining; adds `ownerDueAmount`, `tenantDueAmount`, `tenantRemainingAmount`, `resolution` (only on the tenant-portion path). `activeResolution(db, userId, occurrenceId)` exported.
+- [x] 4.2 `createResolution` / `voidResolution` / `listResolutions` using `obligationResolutions` (status `active|voided`). Guards: updateOccurrence returns 409 with an active resolution (series-wide updates skip resolved occurrences); payments are capped by owner `remainingAmount` (tenant-only rejects any payment with the existing 400); cancel returns 409; obligation PUT/DELETE loops skip resolved occurrences. Amount is informational for tenant-only (positive), capped to tenant portion for shared. Receipts must be linked to the occurrence OR the tenant.
+- [x] 4.3 Routes: `POST|DELETE /api/obligations/:id/occurrences/:occurrenceId/resolution` (201 / 200 with `{ resolution, occurrence }`; duplicate 409; DELETE without active resolution 404), `GET /api/obligations/resolutions?occurrenceId|obligationId|tenantEntityId|assetId|period` (active only).
+- [x] 4.4 No code change needed in `economic-overview.js`: `pendingForRange` already consumes `remainingAmount`, now owner-only. Regression asserted in the new route test (tenant-only excluded from pending, shared shows owner portion, summary/accounts/transactions/economics/overview unchanged by create and void).
+
+Consumers of `remainingAmount` audited: `routes/obligations.js` (nextDue/overdue actionable, payment cap), `getAlerts`, `economic-overview.pendingForRange`, UI payment prompt (`public/js/pages/obligations.js`). rentals/assets UI use rent occurrences (separate view). All become owner-only; tenant-only occurrences are never actionable.
+
+Tests: tests/services/obligation-status.test.js (legacy-equivalence matrix), tests/routes/obligation-resolutions.test.js.
+Results: `npm run test:coverage` 41 suites / 457 tests pass.
+
+Notes: a resolution persists after the obligation responsibility is later changed, but the view then follows the current responsibility (legacy path when tenant portion is 0); changing responsibility is not blocked.
+
+## Remaining: S5..S7, S9

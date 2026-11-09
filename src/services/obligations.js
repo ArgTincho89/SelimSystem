@@ -4,6 +4,7 @@ const ledger = require('./account-ledger');
 
 const COLLECTION = 'obligations';
 const OCCURRENCES = 'obligationOccurrences';
+const RESOLUTIONS = 'obligationResolutions';
 function validDate(value) {
   if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
   const parsed = new Date(`${value}T00:00:00.000Z`);
@@ -18,12 +19,38 @@ function paymentTransactions(db, userId, occurrenceId) {
   return db.findAll('transactions', userId).filter(tx => tx.obligationOccurrenceId === occurrenceId);
 }
 
+function activeResolution(db, userId, occurrenceId) {
+  return db.findAll(RESOLUTIONS, userId).find(item => item.occurrenceId === occurrenceId && item.status === 'active') || null;
+}
+
 function occurrenceView(db, userId, occurrence, today) {
-  const paidMinor = paymentTransactions(db, userId, occurrence.id)
+  const payments = paymentTransactions(db, userId, occurrence.id);
+  const paidMinor = payments
     .reduce((total, tx) => total + (Number.isSafeInteger(tx.amountMinor) ? tx.amountMinor : ledger.toMinorUnits(tx.monto, tx.currencyCode || occurrence.currencyCode) || 0), 0);
   const dueMinor = dueAmountFor(occurrence);
-  let status = occurrence.status === 'cancelled' ? 'cancelled' : paidMinor >= dueMinor && paidMinor > 0 ? 'paid' : occurrence.date < today ? 'overdue' : paidMinor > 0 ? 'partial' : occurrence.status === 'confirmed' ? 'confirmed' : 'expected';
-  return { ...occurrence, status, actualDueAmount: ledger.fromMinorUnits(dueMinor, occurrence.currencyCode), totalPaid: ledger.fromMinorUnits(paidMinor, occurrence.currencyCode), remainingAmount: ledger.fromMinorUnits(Math.max(0, dueMinor - paidMinor), occurrence.currencyCode), paymentIds: paymentTransactions(db, userId, occurrence.id).map(tx => tx.id) };
+  const obligation = occurrence.status === 'cancelled' ? null : db.findById(COLLECTION, occurrence.obligationId, userId);
+  const split = obligation ? portionsFor(obligation, dueMinor) : { owner: dueMinor, tenant: 0 };
+  const base = { ...occurrence, actualDueAmount: ledger.fromMinorUnits(dueMinor, occurrence.currencyCode), totalPaid: ledger.fromMinorUnits(paidMinor, occurrence.currencyCode), paymentIds: payments.map(tx => tx.id) };
+  if (split.tenant === 0) {
+    // Legacy path: owner/third/none obligations keep the original expression untouched.
+    const status = occurrence.status === 'cancelled' ? 'cancelled' : paidMinor >= dueMinor && paidMinor > 0 ? 'paid' : occurrence.date < today ? 'overdue' : paidMinor > 0 ? 'partial' : occurrence.status === 'confirmed' ? 'confirmed' : 'expected';
+    return { ...base, status, remainingAmount: ledger.fromMinorUnits(Math.max(0, dueMinor - paidMinor), occurrence.currencyCode) };
+  }
+  const resolution = activeResolution(db, userId, occurrence.id);
+  const ownerOk = split.owner === 0 || paidMinor >= split.owner;
+  let status;
+  if (ownerOk && resolution) status = split.owner === 0 ? 'resolved' : 'paid';
+  else if (occurrence.date < today) status = 'overdue';
+  else if (paidMinor > 0 || resolution) status = 'partial';
+  else status = occurrence.status === 'confirmed' ? 'confirmed' : 'expected';
+  return {
+    ...base, status,
+    remainingAmount: ledger.fromMinorUnits(Math.max(0, split.owner - paidMinor), occurrence.currencyCode),
+    ownerDueAmount: ledger.fromMinorUnits(split.owner, occurrence.currencyCode),
+    tenantDueAmount: ledger.fromMinorUnits(split.tenant, occurrence.currencyCode),
+    tenantRemainingAmount: resolution ? 0 : ledger.fromMinorUnits(split.tenant, occurrence.currencyCode),
+    resolution
+  };
 }
 
 function occurrenceIdFor(db, userId, obligationId, date) {
@@ -249,6 +276,7 @@ function createObligation(db, userId, body) {
 
 function updateOccurrence(db, userId, obligation, occurrence, body, scope = 'this') {
   if (occurrence.status === 'cancelled' || paymentTransactions(db, userId, occurrence.id).length) return { error: 'Una ocurrencia cancelada o pagada no se puede editar' };
+  if (activeResolution(db, userId, occurrence.id)) return { error: 'La ocurrencia tiene una resolución activa; anulala antes de editarla', status: 409 };
   const today = ledger.localDateForUser(db, userId);
   if (scope === 'future' && occurrence.date < today) return { error: 'No se puede cambiar la serie de forma retroactiva', status: 409 };
   if (!['this', 'future'].includes(scope)) return { error: 'El alcance debe ser this o future' };
@@ -288,13 +316,81 @@ function updateOccurrence(db, userId, obligation, occurrence, body, scope = 'thi
     }, userId);
   }
   const updated = db.update(COLLECTION, obligation.id, nextDefinition, userId);
-  db.findAll(OCCURRENCES, userId).filter(item => item.obligationId === obligation.id && item.date >= occurrence.date && !paymentTransactions(db, userId, item.id).length && item.status !== 'cancelled').forEach(item => {
+  db.findAll(OCCURRENCES, userId).filter(item => item.obligationId === obligation.id && item.date >= occurrence.date && !paymentTransactions(db, userId, item.id).length && item.status !== 'cancelled' && !activeResolution(db, userId, item.id)).forEach(item => {
     const changed = { ...updates };
     if (body.estimatedAmount !== undefined && !Object.prototype.hasOwnProperty.call(body, 'actualDueAmount')) changed.dueAmountMinor = ledger.toMinorUnits(body.estimatedAmount, obligation.currencyCode);
     if (body.title !== undefined) changed.title = nextDefinition.title;
     db.update(OCCURRENCES, item.id, changed, userId);
   });
   return { occurrence: db.findById(OCCURRENCES, occurrence.id, userId), obligation: updated };
+}
+
+const PERIOD_PATTERN = /^\d{4}-(0[1-9]|1[0-2])$/;
+
+function failure(error, status = 400) {
+  return { error, status };
+}
+
+function validateResolutionDocuments(db, userId, ids, occurrenceId, tenantEntityId) {
+  if (ids === undefined || ids === null) return { value: [] };
+  if (!Array.isArray(ids) || ids.length > 20 || ids.some(id => typeof id !== 'string' || !id)) return failure('Los comprobantes no son válidos');
+  const unique = [...new Set(ids)];
+  for (const id of unique) {
+    const document = db.findById('documents', id, userId);
+    if (!document) return failure('Un comprobante no existe');
+    if (document.occurrenceId !== occurrenceId && document.tenantEntityId !== tenantEntityId) return failure('Un comprobante no corresponde a la ocurrencia ni al inquilino');
+  }
+  return { value: unique };
+}
+
+// Records that the tenant settled (the tenant portion of) an occurrence.
+// Never touches transactions, accounts or any ledger aggregate.
+function createResolution(db, userId, obligation, occurrence, body = {}) {
+  if (occurrence.status === 'cancelled') return failure('La ocurrencia está cancelada', 409);
+  const dueMinor = dueAmountFor(occurrence);
+  const split = portionsFor(obligation, dueMinor);
+  if (!['tenant', 'shared'].includes(obligation.responsibilityType) || split.tenant <= 0) return failure('La obligación no tiene una parte a cargo del inquilino');
+  if (activeResolution(db, userId, occurrence.id)) return failure('La ocurrencia ya tiene una resolución activa', 409);
+  const tenant = typeof body.tenantEntityId === 'string' ? db.findById('legalOwners', body.tenantEntityId, userId) : null;
+  if (!tenant || !(tenant.roles || ['owner']).includes('tenant')) return failure('El inquilino no es válido');
+  let contractId = null;
+  if (obligation.rentalContractId) {
+    const contract = db.findById('rentalContracts', obligation.rentalContractId, userId);
+    if (!contract || !(contract.tenantIds || []).includes(tenant.id)) return failure('El inquilino no pertenece al contrato de alquiler');
+    contractId = contract.id;
+  }
+  if (typeof body.period !== 'string' || !PERIOD_PATTERN.test(body.period)) return failure('El período debe tener formato YYYY-MM');
+  if (body.currencyCode !== undefined && body.currencyCode !== occurrence.currencyCode) return failure('La moneda no coincide con la ocurrencia');
+  const amountMinor = typeof body.amount === 'number' ? ledger.moneyInput(body.amount, occurrence.currencyCode) : null;
+  if (amountMinor === null) return failure('El importe debe ser positivo y válido para la moneda');
+  if (obligation.responsibilityType === 'shared' && amountMinor > split.tenant) return failure('El importe supera la parte del inquilino');
+  const today = ledger.localDateForUser(db, userId);
+  const resolvedAt = body.resolvedAt === undefined || body.resolvedAt === null || body.resolvedAt === '' ? today : body.resolvedAt;
+  if (!validDate(resolvedAt)) return failure('La fecha de resolución no es válida');
+  if (body.notes !== undefined && body.notes !== null && (typeof body.notes !== 'string' || body.notes.length > 2000)) return failure('Las notas no son válidas');
+  const documents = validateResolutionDocuments(db, userId, body.documentIds, occurrence.id, tenant.id);
+  if (documents.error) return documents;
+  const resolution = db.create(RESOLUTIONS, {
+    occurrenceId: occurrence.id, obligationId: obligation.id, assetId: obligation.assetId || null,
+    tenantEntityId: tenant.id, contractId, period: body.period,
+    portion: obligation.responsibilityType === 'tenant' ? 'full' : 'tenant_portion',
+    amountMinor, currencyCode: occurrence.currencyCode, documentIds: documents.value,
+    resolvedAt, notes: typeof body.notes === 'string' ? body.notes.trim() : '', status: 'active'
+  }, userId);
+  return { resolution };
+}
+
+function voidResolution(db, userId, occurrence) {
+  const resolution = activeResolution(db, userId, occurrence.id);
+  if (!resolution) return failure('La ocurrencia no tiene una resolución activa', 404);
+  return { resolution: db.update(RESOLUTIONS, resolution.id, { status: 'voided', voidedAt: new Date().toISOString() }, userId) };
+}
+
+function listResolutions(db, userId, filters = {}) {
+  return db.findAll(RESOLUTIONS, userId)
+    .filter(item => item.status === 'active')
+    .filter(item => ['occurrenceId', 'obligationId', 'tenantEntityId', 'assetId', 'period'].every(key => !filters[key] || item[key] === filters[key]))
+    .sort((a, b) => b.resolvedAt.localeCompare(a.resolvedAt));
 }
 
 function getAlerts(db, userId) {
@@ -312,6 +408,6 @@ function idempotencyDigest(key) {
 }
 
 module.exports = {
-  COLLECTION, OCCURRENCES, validDate, occurrenceView, occurrencesFor,
+  COLLECTION, OCCURRENCES, RESOLUTIONS, validDate, occurrenceView, activeResolution, createResolution, voidResolution, listResolutions, occurrencesFor,
   validateDefinition, validateResponsibility, portionsFor, RESPONSIBILITY_TYPES, EXTERNAL_IDENTIFIER_TYPES, createObligation, updateOccurrence, paymentTransactions, getAlerts, idempotencyDigest, isScheduledOn
 };

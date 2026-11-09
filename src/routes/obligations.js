@@ -50,6 +50,19 @@ router.get('/', (req, res) => {
   res.json(rows);
 });
 
+router.get('/resolutions', (req, res) => {
+  const db = req.app.locals.db;
+  const userId = req.session.userId;
+  const filters = {};
+  for (const key of ['occurrenceId', 'obligationId', 'tenantEntityId', 'assetId', 'period']) {
+    if (req.query[key] === undefined || req.query[key] === '') continue;
+    if (typeof req.query[key] !== 'string') return res.status(400).json({ error: 'Los filtros no son válidos' });
+    filters[key] = req.query[key];
+  }
+  if (filters.period && !/^\d{4}-(0[1-9]|1[0-2])$/.test(filters.period)) return res.status(400).json({ error: 'El período debe tener formato YYYY-MM' });
+  res.json(obligations.listResolutions(db, userId, filters));
+});
+
 router.get('/alerts', (req, res) => res.json(obligations.getAlerts(req.app.locals.db, req.session.userId)));
 
 router.post('/', (req, res) => {
@@ -106,7 +119,7 @@ router.put('/:id', (req, res) => {
   const updated = db.update('obligations', existing.id, changes, userId);
   const affectedFrom = effectiveFromDate || (hasHistory ? null : existing.startDate);
   if (affectedFrom) {
-    db.findAll('obligationOccurrences', userId).filter(item => item.obligationId === existing.id && item.date >= affectedFrom && !obligations.paymentTransactions(db, userId, item.id).length && item.status !== 'cancelled').forEach(item => {
+    db.findAll('obligationOccurrences', userId).filter(item => item.obligationId === existing.id && item.date >= affectedFrom && !obligations.paymentTransactions(db, userId, item.id).length && item.status !== 'cancelled' && !obligations.activeResolution(db, userId, item.id)).forEach(item => {
       if (!hasHistory && !obligations.isScheduledOn(updated, item.date)) {
         db.update('obligationOccurrences', item.id, { status: 'cancelled' }, userId);
         return;
@@ -136,7 +149,7 @@ router.delete('/:id', (req, res) => {
   const obligation = db.findById('obligations', req.params.id, userId);
   if (!obligation) return res.status(404).json({ error: 'Obligación no encontrada' });
   db.update('obligations', obligation.id, { status: 'cancelled' }, userId);
-  db.findAll('obligationOccurrences', userId).filter(item => item.obligationId === obligation.id && !obligations.paymentTransactions(db, userId, item.id).length).forEach(item => {
+  db.findAll('obligationOccurrences', userId).filter(item => item.obligationId === obligation.id && !obligations.paymentTransactions(db, userId, item.id).length && !obligations.activeResolution(db, userId, item.id)).forEach(item => {
     db.update('obligationOccurrences', item.id, { status: 'cancelled' }, userId);
   });
   res.json({ ok: true });
@@ -161,6 +174,7 @@ router.post('/:id/occurrences/:occurrenceId/cancel', (req, res) => {
   const occurrence = db.findById('obligationOccurrences', req.params.occurrenceId, userId);
   if (!obligation || !occurrence || occurrence.obligationId !== obligation.id) return res.status(404).json({ error: 'Ocurrencia no encontrada' });
   if (obligations.paymentTransactions(db, userId, occurrence.id).length) return res.status(409).json({ error: 'Una ocurrencia con pagos no se puede cancelar' });
+  if (obligations.activeResolution(db, userId, occurrence.id)) return res.status(409).json({ error: 'Una ocurrencia con resolución activa no se puede cancelar' });
   const updated = db.update('obligationOccurrences', occurrence.id, { status: 'cancelled', cancelledAt: new Date().toISOString() }, userId);
   res.json(obligations.occurrenceView(db, userId, updated, ledger.localDateForUser(db, userId)));
 });
@@ -174,6 +188,28 @@ router.put('/:id/occurrences/:occurrenceId', (req, res) => {
   const result = obligations.updateOccurrence(db, userId, obligation, occurrence, req.body || {}, req.body.scope || 'this');
   if (result.error) return res.status(result.status || 400).json({ error: result.error });
   res.json(obligations.occurrenceView(db, userId, result.occurrence, ledger.localDateForUser(db, userId)));
+});
+
+router.post('/:id/occurrences/:occurrenceId/resolution', (req, res) => {
+  const db = req.app.locals.db;
+  const userId = req.session.userId;
+  const obligation = db.findById('obligations', req.params.id, userId);
+  const occurrence = db.findById('obligationOccurrences', req.params.occurrenceId, userId);
+  if (!obligation || !occurrence || occurrence.obligationId !== obligation.id) return res.status(404).json({ error: 'Ocurrencia no encontrada' });
+  const result = obligations.createResolution(db, userId, obligation, occurrence, req.body || {});
+  if (result.error) return res.status(result.status || 400).json({ error: result.error });
+  res.status(201).json({ resolution: result.resolution, occurrence: obligations.occurrenceView(db, userId, occurrence, ledger.localDateForUser(db, userId)) });
+});
+
+router.delete('/:id/occurrences/:occurrenceId/resolution', (req, res) => {
+  const db = req.app.locals.db;
+  const userId = req.session.userId;
+  const obligation = db.findById('obligations', req.params.id, userId);
+  const occurrence = db.findById('obligationOccurrences', req.params.occurrenceId, userId);
+  if (!obligation || !occurrence || occurrence.obligationId !== obligation.id) return res.status(404).json({ error: 'Ocurrencia no encontrada' });
+  const result = obligations.voidResolution(db, userId, occurrence);
+  if (result.error) return res.status(result.status || 400).json({ error: result.error });
+  res.json({ resolution: result.resolution, occurrence: obligations.occurrenceView(db, userId, occurrence, ledger.localDateForUser(db, userId)) });
 });
 
 router.post('/:id/occurrences/:occurrenceId/payments', (req, res) => {
