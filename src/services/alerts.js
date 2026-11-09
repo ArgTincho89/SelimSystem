@@ -89,7 +89,6 @@ function build(db, userId, today, filters) {
   };
 
   db.findAll(obligations.COLLECTION, userId).filter(item => item.status === 'active').forEach(obligation => {
-    const type = obligation.responsibilityType || 'owner';
     const lead = obligation.reminderLeadDays ?? 7;
     const horizon = addDaysDateOnly(today, lead);
     let occurrences;
@@ -114,7 +113,7 @@ function build(db, userId, today, filters) {
       const daysAway = dateOnlyDaysBetween(today, occurrence.date);
       const overdue = occurrence.date < today;
       const paid = occurrence.totalPaid > 0;
-      if (type !== 'none' && occurrence.status !== 'paid' && occurrence.remainingAmount > 0) {
+      if (obligations.responsibilityFor(obligation, occurrence).responsibilityType !== 'none' && occurrence.status !== 'paid' && occurrence.remainingAmount > 0) {
         const amountText = money(occurrence.remainingAmount, occurrence.currencyCode);
         if (paid) {
           push({
