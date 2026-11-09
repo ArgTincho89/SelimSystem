@@ -37,6 +37,58 @@ function safeDetails(value) {
   return Object.fromEntries(entries);
 }
 
+const VEHICLE_TYPES = new Set(['automovil']);
+const PROPERTY_KINDS = new Set(['departamento', 'casa', 'galpon', 'lote']);
+const CONDITIONS = new Set(['rented', 'not_rented', 'usufruct']);
+
+function pick(body, existing, field, fallback) {
+  if (body[field] !== undefined) return body[field];
+  return existing && existing[field] !== undefined ? existing[field] : fallback;
+}
+
+function validateMovableFields(body, existing) {
+  const vehicleType = pick(body, existing, 'vehicleType', 'automovil');
+  if (!VEHICLE_TYPES.has(vehicleType)) return { error: 'El tipo de mueble no es válido' };
+  const limits = { brand: 80, plate: 20, mileage: 20, color: 40 };
+  const value = { vehicleType };
+  for (const [field, max] of Object.entries(limits)) {
+    const raw = pick(body, existing, field, '');
+    if (!boundedString(raw, max)) return { error: `El campo ${field} no es válido` };
+    value[field] = (raw || '').trim();
+  }
+  value.plate = value.plate.toUpperCase();
+  return { value };
+}
+
+function nonNegativeInt(value, max) {
+  if (value === undefined || value === null || value === '') return { value: null };
+  if (typeof value !== 'number' || !Number.isInteger(value) || value < 0 || value > max) return { error: true };
+  return { value };
+}
+
+function validateImmovableFields(body, existing, usageStatus) {
+  const propertyKind = pick(body, existing, 'propertyKind', null);
+  if (propertyKind !== null && propertyKind !== '' && !PROPERTY_KINDS.has(propertyKind)) return { error: 'El tipo de inmueble no es válido' };
+  const characteristics = pick(body, existing, 'characteristics', '');
+  if (!boundedString(characteristics, 2000)) return { error: 'Las características no son válidas' };
+  const value = { propertyKind: propertyKind || null, characteristics: (characteristics || '').trim() };
+  const numeric = { coveredAreaM2: Infinity, freeAreaM2: Infinity, ageYears: 500 };
+  for (const [field, max] of Object.entries(numeric)) {
+    const parsed = nonNegativeInt(pick(body, existing, field, null), max);
+    if (parsed.error) return { error: `El campo ${field} debe ser un entero igual o mayor que cero` };
+    value[field] = parsed.value;
+  }
+  let condition = body.condition !== undefined ? body.condition : existing?.condition;
+  if (condition === undefined || condition === null) condition = usageStatus === 'rented' ? 'rented' : 'not_rented';
+  if (!CONDITIONS.has(condition)) return { error: 'La condición no es válida' };
+  value.condition = condition;
+  if (body.condition !== undefined) {
+    if (condition !== 'not_rented') value.usageStatus = 'rented';
+    else if (usageStatus === 'rented') value.usageStatus = 'vacant';
+  }
+  return { value };
+}
+
 function validateAsset(body, existing, db, userId) {
   const type = existing ? existing.type : body.type;
   if (!TYPES.has(type)) return { error: 'El tipo debe ser mueble o inmueble' };
@@ -45,7 +97,8 @@ function validateAsset(body, existing, db, userId) {
   if (!boundedString(name, 160, true)) return { error: 'El nombre debe tener entre 1 y 160 caracteres' };
   const fields = ['description', 'subtype', 'propertyType', 'notes', 'location', 'address', 'locality', 'province', 'country'];
   for (const field of fields) {
-    if (body[field] !== undefined && !boundedString(body[field], field === 'description' || field === 'notes' ? 4000 : 160)) {
+    const max = field === 'description' || field === 'notes' ? 4000 : (field === 'location' ? 300 : 160);
+    if (body[field] !== undefined && !boundedString(body[field], max)) {
       return { error: `El campo ${field} no es válido` };
     }
   }
@@ -70,6 +123,9 @@ function validateAsset(body, existing, db, userId) {
     if (!details) return { error: 'Los detalles no son válidos o contienen campos sensibles' };
     result.subtype = body.subtype === undefined ? (existing?.subtype || '') : body.subtype.trim();
     result.details = details;
+    const typed = validateMovableFields(body, existing);
+    if (typed.error) return { error: typed.error };
+    Object.assign(result, typed.value);
   } else {
     const propertyType = body.propertyType === undefined ? existing?.propertyType : body.propertyType;
     const usageStatus = body.usageStatus === undefined ? (existing?.usageStatus || 'vacant') : body.usageStatus;
@@ -83,6 +139,9 @@ function validateAsset(body, existing, db, userId) {
     result.propertyType = propertyType || '';
     result.area = area == null ? null : area;
     result.usageStatus = usageStatus;
+    const typed = validateImmovableFields(body, existing, usageStatus);
+    if (typed.error) return { error: typed.error };
+    Object.assign(result, typed.value);
   }
   if (body.status === undefined && existing) result.status = existing.status;
   if (body.statusNotes !== undefined && !boundedString(body.statusNotes, 2000)) return { error: 'La nota del cambio de estado no es válida' };
@@ -119,12 +178,14 @@ function matchesFilter(asset, query, owners, assetOwnerships) {
   const ownerIds = assetOwnerships.filter(item => item.assetId === asset.id).map(item => item.ownerId);
   const locationText = [asset.location, asset.address, asset.locality, asset.province, asset.country].join(' ').toLocaleLowerCase();
   const ownerNames = owners.filter(owner => ownerIds.includes(owner.id)).map(owner => owner.name.toLocaleLowerCase()).join(' ');
-  const searchText = [asset.name, asset.description, asset.subtype, asset.propertyType, asset.status, asset.usageStatus, locationText, ownerNames].join(' ').toLocaleLowerCase();
+  const searchText = [asset.name, asset.description, asset.subtype, asset.propertyType, asset.status, asset.usageStatus, asset.plate, asset.brand, locationText, ownerNames].join(' ').toLocaleLowerCase();
   return (!query.q || searchText.includes(query.q.toLocaleLowerCase()))
     && (!query.type || asset.type === query.type)
     && (!query.ownerId || ownerIds.includes(query.ownerId))
     && (!query.status || asset.status === query.status)
     && (!query.usage || asset.usageStatus === query.usage)
+    && (!query.condition || asset.condition === query.condition)
+    && (!query.propertyKind || asset.propertyKind === query.propertyKind)
     && (!query.location || locationText.includes(query.location.toLocaleLowerCase()));
 }
 
@@ -133,7 +194,7 @@ router.get('/', (req, res) => {
   const userId = req.session.userId;
   const filters = {
     q: String(req.query.q || '').trim(), type: req.query.type, ownerId: req.query.ownerId,
-    status: req.query.status, usage: req.query.usage, location: String(req.query.location || '').trim()
+    status: req.query.status, usage: req.query.usage, condition: req.query.condition, propertyKind: req.query.propertyKind, location: String(req.query.location || '').trim()
   };
   const assets = db.findAll('assets', userId);
   const owners = db.findAll('legalOwners', userId);

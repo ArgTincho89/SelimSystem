@@ -45,8 +45,50 @@ function migrateEvolutivo2(db) {
       return { ...item, ...patch };
     });
     if (changed) db.replace('legalOwners', user.id, next);
+    updated += migrateAssetsAndContracts(db, user.id);
   }
   return { updated };
+}
+
+const PROPERTY_KIND_TABLE = [
+  [/depart|dpto|flat|apartment/, 'departamento'],
+  [/casa|house/, 'casa'],
+  [/galp|warehouse/, 'galpon'],
+  [/lote|terreno|lot/, 'lote']
+];
+
+function propertyKindFrom(propertyType) {
+  const text = String(propertyType || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+  const hit = PROPERTY_KIND_TABLE.find(([regex]) => regex.test(text));
+  return hit ? hit[1] : null;
+}
+
+function migrateAssetsAndContracts(db, userId) {
+  let updated = 0;
+  const contracts = db.findAll('rentalContracts', userId);
+  const activeAssetIds = new Set(contracts.filter(item => item.status === 'active').map(item => item.assetId));
+  const assets = db.findAll('assets', userId);
+  const fill = (item, defaults) => {
+    const patch = {};
+    for (const [key, value] of Object.entries(defaults)) if (item[key] === undefined) patch[key] = value;
+    if (!Object.keys(patch).length) return item;
+    updated += 1;
+    return { ...item, ...patch };
+  };
+  const nextAssets = assets.map(asset => {
+    if (asset.type === 'movable') return fill(asset, { vehicleType: 'automovil', brand: '', plate: '', mileage: '', color: '' });
+    if (asset.type !== 'immovable') return asset;
+    return fill(asset, {
+      condition: asset.usageStatus === 'rented' || activeAssetIds.has(asset.id) ? 'rented' : 'not_rented',
+      propertyKind: propertyKindFrom(asset.propertyType),
+      coveredAreaM2: typeof asset.area === 'number' && Number.isFinite(asset.area) ? Math.round(asset.area) : null,
+      freeAreaM2: null, ageYears: null, characteristics: ''
+    });
+  });
+  const nextContracts = contracts.map(item => fill(item, { adjustmentFrequencyMonths: null, adjustmentCriterion: null, contractKind: 'rental' }));
+  if (nextAssets.some((item, index) => item !== assets[index])) db.replace('assets', userId, nextAssets);
+  if (nextContracts.some((item, index) => item !== contracts[index])) db.replace('rentalContracts', userId, nextContracts);
+  return updated;
 }
 
 module.exports = { migrateEvolutivo, migrateEvolutivo2 };

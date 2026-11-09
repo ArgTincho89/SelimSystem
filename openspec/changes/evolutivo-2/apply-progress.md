@@ -13,3 +13,10 @@ Notes: legacy `kind` default is `entity`; backfill only touches `kind === 'perso
 - [x] 2.4 tests/ui/evolutivo2-s2-contract.test.js (existing S1 contract test needed no change)
 
 Notes: e2e has no references to Contactos or /entities. Roles checkboxes keep the five legacy roles so payment_responsible/other stay editable.
+
+## Slice S3 (asset backend) - done
+- [x] 3.1 assets.js typed movable/immovable fields, condition/usageStatus sync, filters condition/propertyKind, search plate/brand
+- [x] 3.2 src/services/asset-holders.js `validateHolders` (used by S4 composite form; not applied to legacy POST /api/assets)
+- [x] 3.3 migrateEvolutivo2 extended (assets and contracts), add-only/idempotent
+
+Notes: when `condition` is omitted it is derived from `usageStatus` (rented -> rented) so legacy posts keep their usage status; the sync only runs when `condition` is sent explicitly.
