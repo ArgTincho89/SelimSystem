@@ -156,14 +156,20 @@ const API = {
 
   documents: {
     list(targetType, targetId) {
-      const field = ({ asset: 'assetId', obligation: 'obligationId', contract: 'contractId' })[targetType] || 'entityId';
+      const field = ({ asset: 'assetId', obligation: 'obligationId', contract: 'contractId', occurrence: 'occurrenceId', rentOccurrence: 'rentOccurrenceId', transaction: 'transactionId', tenant: 'tenantEntityId' })[targetType] || 'entityId';
       const query = new URLSearchParams({ [field]: targetId });
       return API.get(`/documents?${query}`);
     },
-    async upload(targetType, targetId, file) {
+    listBy(targets) {
+      return API.get(`/documents?${new URLSearchParams(targets)}`);
+    },
+    upload(targetType, targetId, file) {
+      const field = ({ asset: 'assetId', obligation: 'obligationId', contract: 'contractId', occurrence: 'occurrenceId', rentOccurrence: 'rentOccurrenceId', transaction: 'transactionId', tenant: 'tenantEntityId' })[targetType] || 'entityId';
+      return API.documents.uploadTargets({ [field]: targetId }, file);
+    },
+    async uploadTargets(targets, file) {
       const form = new FormData();
-        const field = ({ asset: 'assetId', obligation: 'obligationId', contract: 'contractId' })[targetType] || 'entityId';
-        form.append(field, targetId);
+      Object.entries(targets).forEach(([field, value]) => { if (value) form.append(field, value); });
       form.append('file', file);
       const response = await fetch('/api/documents', { method: 'POST', credentials: 'same-origin', body: form });
       const data = await response.json();

@@ -20,7 +20,7 @@ describe('Evolutivo S1 UI contract', () => {
 
   it('bumps the service worker cache name', () => {
     const source = read('sw.js');
-    expect(source).toContain("CACHE_NAME = 'selimsystem-v19'");
+    expect(source).toMatch(/CACHE_NAME = 'selimsystem-v(19|[2-9]\d)'/);
     expect(source).not.toContain('selimsystem-v18');
   });
 });

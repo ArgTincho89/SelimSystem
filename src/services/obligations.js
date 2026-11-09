@@ -139,8 +139,83 @@ function normalizeExternalIdentifier(rawIdentifier, rawType) {
   return { externalIdentifier, externalIdentifierType };
 }
 
+const RESPONSIBILITY_TYPES = new Set(['owner', 'tenant', 'shared', 'third', 'none']);
+const SPLIT_TYPES = new Set(['percentage', 'fixed', 'other']);
+
+function minorOrNull(value) {
+  return Number.isSafeInteger(value) && value >= 0 ? value : null;
+}
+
+function validateSplit(split) {
+  if (!split || typeof split !== 'object' || Array.isArray(split) || !SPLIT_TYPES.has(split.type)) return { error: 'El reparto de responsabilidad no es válido' };
+  if (split.type === 'percentage') {
+    const { ownerPercent, tenantPercent } = split;
+    const valid = [ownerPercent, tenantPercent].every(item => typeof item === 'number' && Number.isFinite(item) && item >= 0 && item <= 100);
+    if (!valid || Math.abs(ownerPercent + tenantPercent - 100) > 1e-9) return { error: 'Los porcentajes del reparto deben sumar 100' };
+    return { value: { type: 'percentage', ownerPercent, tenantPercent } };
+  }
+  if (split.type === 'fixed') {
+    const value = { type: 'fixed' };
+    for (const key of ['ownerFixedMinor', 'tenantFixedMinor']) {
+      if (split[key] === undefined || split[key] === null) continue;
+      if (minorOrNull(split[key]) === null) return { error: 'Los importes fijos del reparto deben ser enteros no negativos en unidades menores' };
+      value[key] = split[key];
+    }
+    if (value.ownerFixedMinor === undefined && value.tenantFixedMinor === undefined) return { error: 'El reparto fijo requiere al menos un importe' };
+    return { value };
+  }
+  if (typeof split.ruleText !== 'string' || !split.ruleText.trim() || split.ruleText.trim().length > 500) return { error: 'La regla acordada debe tener entre 1 y 500 caracteres' };
+  return { value: { type: 'other', ruleText: split.ruleText.trim() } };
+}
+
+// Splits an occurrence due amount (minor units) between owner and tenant.
+// Percentage/fixed splits only apply to `shared`; the owner always absorbs the remainder.
+function portionsFor(obligation, dueMinor) {
+  const due = Number.isSafeInteger(dueMinor) && dueMinor > 0 ? dueMinor : 0;
+  const type = obligation?.responsibilityType || 'owner';
+  if (type === 'tenant') return { owner: 0, tenant: due };
+  if (type !== 'shared') return { owner: due, tenant: 0 };
+  const split = obligation.responsibilitySplit;
+  if (split?.type === 'percentage') {
+    const tenant = Math.min(due, Math.round(due * split.tenantPercent / 100));
+    return { owner: due - tenant, tenant };
+  }
+  if (split?.type === 'fixed') {
+    const tenant = split.tenantFixedMinor !== undefined
+      ? Math.min(due, split.tenantFixedMinor)
+      : due - Math.min(due, split.ownerFixedMinor || 0);
+    return { owner: due - tenant, tenant };
+  }
+  return { owner: due, tenant: 0 };
+}
+
+function validateResponsibility(db, userId, body, existing = null) {
+  const merged = { ...existing, ...body };
+  const type = merged.responsibilityType === undefined || merged.responsibilityType === null ? 'owner' : merged.responsibilityType;
+  if (!RESPONSIBILITY_TYPES.has(type)) return { error: 'El tipo de responsabilidad no es válido' };
+  let responsibilitySplit = null;
+  if (type === 'shared') {
+    const split = validateSplit(merged.responsibilitySplit);
+    if (split.error) return split;
+    responsibilitySplit = split.value;
+  }
+  let responsibleThirdEntityId = null;
+  if (type === 'third') {
+    const id = merged.responsibleThirdEntityId;
+    if (typeof id !== 'string' || !id || !db.findById('legalOwners', id, userId)) return { error: 'El tercero responsable no es válido' };
+    responsibleThirdEntityId = id;
+  }
+  let rentalContractId = null;
+  if (merged.rentalContractId !== undefined && merged.rentalContractId !== null && merged.rentalContractId !== '') {
+    const contract = typeof merged.rentalContractId === 'string' ? db.findById('rentalContracts', merged.rentalContractId, userId) : null;
+    if (!contract || !merged.assetId || contract.assetId !== merged.assetId) return { error: 'El contrato de alquiler debe pertenecer al mismo bien' };
+    rentalContractId = contract.id;
+  }
+  return { value: { responsibilityType: type, responsibilitySplit, responsibleThirdEntityId, rentalContractId } };
+}
+
 function validateDefinition(db, userId, body, existing = null) {
-  const fields = ['title', 'type', 'assetId', 'providerEntityId', 'responsibleEntityId', 'accountId', 'categoryId', 'paymentMethodId', 'currencyCode', 'estimatedAmount', 'paymentMethod', 'startDate', 'recurrenceFrequency', 'endDate', 'reminderLeadDays', 'notes', 'externalIdentifier', 'externalIdentifierType'];
+  const fields = ['title', 'type', 'assetId', 'providerEntityId', 'responsibleEntityId', 'accountId', 'categoryId', 'paymentMethodId', 'currencyCode', 'estimatedAmount', 'paymentMethod', 'startDate', 'recurrenceFrequency', 'endDate', 'reminderLeadDays', 'notes', 'externalIdentifier', 'externalIdentifierType', 'responsibilityType', 'responsibilitySplit', 'responsibleThirdEntityId', 'rentalContractId'];
   const value = {};
   fields.forEach(field => { if (body[field] !== undefined) value[field] = body[field]; });
   const merged = { ...existing, ...value };
@@ -157,13 +232,16 @@ function validateDefinition(db, userId, body, existing = null) {
   if (identifier.error) return identifier;
   merged.externalIdentifier = identifier.externalIdentifier;
   merged.externalIdentifierType = identifier.externalIdentifierType;
+  const responsibility = validateResponsibility(db, userId, merged);
+  if (responsibility.error) return responsibility;
+  Object.assign(merged, responsibility.value);
   const links = validateLinks(db, userId, { ...merged, title: merged.title.trim(), paymentMethod: merged.paymentMethod.trim(), notes: merged.notes.trim() }, existing);
   if (links.error) return links;
   return { value: { ...links.value, type: merged.type.trim(), status: existing?.status || 'active' } };
 }
 
 function createObligation(db, userId, body) {
-  const parsed = validateDefinition(db, userId, { recurrenceFrequency: null, endDate: null, reminderLeadDays: 7, paymentMethod: '', notes: '', ...body });
+  const parsed = validateDefinition(db, userId, { recurrenceFrequency: null, endDate: null, reminderLeadDays: 7, paymentMethod: '', notes: '', responsibilityType: 'owner', ...body });
   if (parsed.error) return parsed;
   const obligation = db.create(COLLECTION, parsed.value, userId);
   return { obligation };
@@ -235,5 +313,5 @@ function idempotencyDigest(key) {
 
 module.exports = {
   COLLECTION, OCCURRENCES, validDate, occurrenceView, occurrencesFor,
-  validateDefinition, EXTERNAL_IDENTIFIER_TYPES, createObligation, updateOccurrence, paymentTransactions, getAlerts, idempotencyDigest, isScheduledOn
+  validateDefinition, validateResponsibility, portionsFor, RESPONSIBILITY_TYPES, EXTERNAL_IDENTIFIER_TYPES, createObligation, updateOccurrence, paymentTransactions, getAlerts, idempotencyDigest, isScheduledOn
 };

@@ -65,6 +65,20 @@ const ObligationsPage = {
     content.appendChild(list);
   },
 
+  RESPONSIBILITY_TYPES: [['owner', 'Propietario'], ['tenant', 'Inquilino'], ['shared', 'Compartida'], ['third', 'Tercero'], ['none', 'Sin responsable']],
+
+  responsibilityLabel(item) {
+    const label = this.RESPONSIBILITY_TYPES.find(([value]) => value === (item.responsibilityType || 'owner'))?.[1] || 'Propietario';
+    if (item.responsibilityType === 'third') {
+      const third = this.owners.find(record => record.id === item.responsibleThirdEntityId)?.name;
+      return third ? `${label}: ${third}` : label;
+    }
+    const split = item.responsibilitySplit;
+    if (item.responsibilityType === 'shared' && split?.type === 'percentage') return `${label} (${split.ownerPercent}% / ${split.tenantPercent}%)`;
+    if (item.responsibilityType === 'shared' && split?.type === 'fixed') return `${label} (importes fijos)`;
+    return label;
+  },
+
   IDENTIFIER_TYPES: [['account', 'Cuenta'], ['contract', 'Contrato'], ['meter', 'Medidor'], ['policy', 'Póliza'], ['client', 'Cliente'], ['other', 'Otro']],
 
   identifierTypeLabel(type) {
@@ -77,6 +91,7 @@ const ObligationsPage = {
     const details = create('div', {}, [
       create('h3', { textContent: item.title, style: { marginBottom: '4px' } }),
       create('div', { className: 'text-muted', textContent: [item.type, asset, provider, item.paymentMethod].filter(Boolean).join(' · ') }),
+      create('div', { className: 'text-muted', textContent: `Responsabilidad: ${this.responsibilityLabel(item)}` }),
       ...(item.externalIdentifier ? [create('div', { className: 'text-muted', textContent: `${this.identifierTypeLabel(item.externalIdentifierType)}: ${item.externalIdentifier}` })] : []),
       create('div', { className: 'text-muted', textContent: `${item.estimatedAmount} ${item.currencyCode} estimado · ${item.recurrenceFrequency ? this.frequencyLabel(item.recurrenceFrequency) : 'Única vez'} · Aviso ${item.reminderLeadDays} días` })
     ]);
@@ -170,6 +185,31 @@ const ObligationsPage = {
     const externalIdentifierType = this.select([['', 'Sin tipo de identificador'], ...this.IDENTIFIER_TYPES], existing?.externalIdentifierType || '');
     this.fieldWrap(form, 'Tipo de identificador externo', externalIdentifierType);
     const externalIdentifier = this.field(form, 'Identificador externo (cuenta, contrato, medidor, póliza...)', { value: existing?.externalIdentifier || '' });
+    const responsibilityType = this.select(this.RESPONSIBILITY_TYPES, existing?.responsibilityType || 'owner');
+    this.fieldWrap(form, 'Responsabilidad de pago', responsibilityType);
+    const split = existing?.responsibilitySplit || {};
+    const splitType = this.select([['percentage', 'Porcentajes'], ['fixed', 'Importes fijos'], ['other', 'Regla acordada']], split.type || 'percentage');
+    const splitTypeWrap = this.fieldWrap(form, 'Tipo de reparto', splitType);
+    const ownerPercent = this.field(form, 'Porcentaje del propietario', { type: 'number', min: '0', max: '100', step: '0.01', value: split.ownerPercent ?? 50 });
+    const tenantPercent = this.field(form, 'Porcentaje del inquilino', { type: 'number', min: '0', max: '100', step: '0.01', value: split.tenantPercent ?? 50 });
+    const ownerFixed = this.field(form, 'Importe fijo del propietario', { type: 'number', min: '0', step: '0.01', value: split.ownerFixedMinor === undefined ? '' : split.ownerFixedMinor / 100 });
+    const tenantFixed = this.field(form, 'Importe fijo del inquilino', { type: 'number', min: '0', step: '0.01', value: split.tenantFixedMinor === undefined ? '' : split.tenantFixedMinor / 100 });
+    const ruleText = this.field(form, 'Regla acordada', { value: split.ruleText || '' });
+    const third = this.select([['', 'Seleccioná un tercero'], ...this.owners.map(item => [item.id, item.name])], existing?.responsibleThirdEntityId || '');
+    const thirdWrap = this.fieldWrap(form, 'Tercero responsable', third);
+    const rentalContract = this.select([['', 'Sin contrato de alquiler']], '');
+    this.fieldWrap(form, 'Contrato de alquiler (opcional)', rentalContract);
+    this.loadRentalContracts(rentalContract, asset, existing?.rentalContractId || '');
+    const splitControls = [[splitType, null], [ownerPercent, 'percentage'], [tenantPercent, 'percentage'], [ownerFixed, 'fixed'], [tenantFixed, 'fixed'], [ruleText, 'other']];
+    const syncResponsibility = () => {
+      splitControls.forEach(([control, kind]) => {
+        control.closest('.form-group').style.display = responsibilityType.value === 'shared' && (!kind || kind === splitType.value) ? '' : 'none';
+      });
+      thirdWrap.style.display = responsibilityType.value === 'third' ? '' : 'none';
+    };
+    on(responsibilityType, 'change', syncResponsibility);
+    on(splitType, 'change', syncResponsibility);
+    syncResponsibility();
     const notes = this.field(form, 'Notas', { multiline: true, value: existing?.notes || '' });
     on(reminder, 'change', () => { customLead.disabled = reminder.value !== 'custom'; });
     customLead.disabled = reminder.value !== 'custom';
@@ -186,8 +226,17 @@ const ObligationsPage = {
           currencyCode: currency.value, estimatedAmount: Number(amount.value), paymentMethod: paymentMethod.value, paymentMethodId: paymentMethodId.value || null,
           startDate: date.value, endDate: endDate.value || null, recurrenceFrequency: frequency.value || null,
           reminderLeadDays: Number(reminder.value === 'custom' ? customLead.value : reminder.value), notes: notes.value,
-          externalIdentifier: externalIdentifier.value.trim() || null, externalIdentifierType: externalIdentifierType.value || null
+          externalIdentifier: externalIdentifier.value.trim() || null, externalIdentifierType: externalIdentifierType.value || null,
+          responsibilityType: responsibilityType.value, responsibilitySplit: null,
+          responsibleThirdEntityId: responsibilityType.value === 'third' ? third.value || null : null,
+          rentalContractId: rentalContract.value || null
         };
+        if (responsibilityType.value === 'shared') {
+          const minor = input => (input.value === '' ? undefined : Math.round(Number(input.value) * 100));
+          if (splitType.value === 'percentage') data.responsibilitySplit = { type: 'percentage', ownerPercent: Number(ownerPercent.value), tenantPercent: Number(tenantPercent.value) };
+          else if (splitType.value === 'fixed') data.responsibilitySplit = { type: 'fixed', ownerFixedMinor: minor(ownerFixed), tenantFixedMinor: minor(tenantFixed) };
+          else data.responsibilitySplit = { type: 'other', ruleText: ruleText.value };
+        }
         if (existing && effectiveFromDate.value) {
           data.effectiveFromDate = effectiveFromDate.value;
           if (frequency.value !== (existing.recurrenceFrequency || '') && date.value === existing.startDate) {
@@ -274,7 +323,25 @@ const ObligationsPage = {
   },
 
   fieldWrap(container, label, control) {
-    container.appendChild(create('div', { className: 'form-group' }, [create('label', { textContent: label }), control]));
+    const wrap = create('div', { className: 'form-group' }, [create('label', { textContent: label }), control]);
+    container.appendChild(wrap);
+    return wrap;
+  },
+
+  async loadRentalContracts(select, assetSelect, selected) {
+    const fill = async () => {
+      select.replaceChildren(create('option', { value: '', textContent: 'Sin contrato de alquiler' }));
+      if (assetSelect.value) {
+        try {
+          const contracts = await API.get(`/rentals?assetId=${encodeURIComponent(assetSelect.value)}`);
+          contracts.forEach(contract => select.appendChild(create('option', { value: contract.id, textContent: `Contrato ${contract.startDate} a ${contract.endDate || 'sin fin'}` })));
+        } catch { /* contracts are optional; keep the empty choice */ }
+      }
+      select.value = [...select.options].some(option => option.value === selected) ? selected : '';
+      selected = '';
+    };
+    on(assetSelect, 'change', fill);
+    await fill();
   },
 
   select(options, selected = '') {

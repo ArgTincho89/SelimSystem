@@ -33,7 +33,7 @@ const storage = multer.diskStorage({
 
 const upload = multer({
   storage,
-  limits: { fileSize: MAX_FILE_SIZE, files: 1, fields: 2, parts: 3, fieldNameSize: 50, fieldSize: 512 }
+  limits: { fileSize: MAX_FILE_SIZE, files: 1, fields: 9, parts: 10, fieldNameSize: 50, fieldSize: 512 }
 });
 
 function cleanDisplayName(originalName) {
@@ -82,18 +82,56 @@ async function inspectFile(file) {
   return { bytes: bytes.length, contentType: definition.contentType, displayName, type };
 }
 
-function targetFor(db, userId, body) {
-  const assetId = typeof body.assetId === 'string' && body.assetId ? body.assetId : null;
-  const entityId = typeof body.entityId === 'string' && body.entityId ? body.entityId : null;
-  const obligationId = typeof body.obligationId === 'string' && body.obligationId ? body.obligationId : null;
-  const contractId = typeof body.contractId === 'string' && body.contractId ? body.contractId : null;
-  if ([assetId, entityId, obligationId, contractId].filter(Boolean).length !== 1) return null;
-  if (assetId) {
-    return db.findById('assets', assetId, userId) ? { assetId, entityId: null, obligationId: null, contractId: null } : null;
+const TARGET_FIELDS = ['assetId', 'entityId', 'obligationId', 'contractId', 'occurrenceId', 'rentOccurrenceId', 'transactionId', 'tenantEntityId'];
+const TARGET_ERROR = 'Indica un destino válido: bien, persona u organización, obligación, contrato, vencimiento, período de alquiler, movimiento o inquilino';
+
+function idOf(body, field) {
+  return typeof body[field] === 'string' && body[field] ? body[field] : null;
+}
+
+// Validates every provided target, derives parent links and checks consistency.
+// Returns { target } or { error }. Legacy single-target documents keep the same shape.
+function resolveTargets(db, userId, body) {
+  const given = {};
+  TARGET_FIELDS.forEach(field => { given[field] = idOf(body, field); });
+  if (!TARGET_FIELDS.some(field => given[field])) return { error: TARGET_ERROR };
+  const target = { ...given };
+  if (given.assetId && !db.findById('assets', given.assetId, userId)) return { error: TARGET_ERROR };
+  if (given.entityId && !db.findById('legalOwners', given.entityId, userId)) return { error: TARGET_ERROR };
+  if (given.transactionId && !db.findById('transactions', given.transactionId, userId)) return { error: 'El movimiento no es válido' };
+  if (given.tenantEntityId) {
+    const tenant = db.findById('legalOwners', given.tenantEntityId, userId);
+    if (!tenant || !(tenant.roles || ['owner']).includes('tenant')) return { error: 'El inquilino no es válido' };
   }
-  if (entityId) return db.findById('legalOwners', entityId, userId) ? { assetId: null, entityId, obligationId: null, contractId: null } : null;
-  if (obligationId) return db.findById('obligations', obligationId, userId) ? { assetId: null, entityId: null, obligationId, contractId: null } : null;
-  return db.findById('rentalContracts', contractId, userId) ? { assetId: null, entityId: null, obligationId: null, contractId } : null;
+  let derivedAssetId = null;
+  let obligation = given.obligationId ? db.findById('obligations', given.obligationId, userId) : null;
+  if (given.obligationId && !obligation) return { error: TARGET_ERROR };
+  let contract = given.contractId ? db.findById('rentalContracts', given.contractId, userId) : null;
+  if (given.contractId && !contract) return { error: TARGET_ERROR };
+  if (given.occurrenceId) {
+    const occurrence = db.findById('obligationOccurrences', given.occurrenceId, userId);
+    if (!occurrence) return { error: 'El vencimiento no es válido' };
+    if (obligation && occurrence.obligationId !== obligation.id) return { error: 'El vencimiento no corresponde a la obligación indicada' };
+    obligation = obligation || db.findById('obligations', occurrence.obligationId, userId);
+    if (!obligation) return { error: 'El vencimiento no es válido' };
+    target.obligationId = obligation.id;
+  }
+  if (obligation) derivedAssetId = obligation.assetId || null;
+  if (given.rentOccurrenceId) {
+    const rent = db.findById('rentOccurrences', given.rentOccurrenceId, userId);
+    if (!rent) return { error: 'El período de alquiler no es válido' };
+    if (contract && rent.contractId !== contract.id) return { error: 'El período de alquiler no corresponde al contrato indicado' };
+    contract = contract || db.findById('rentalContracts', rent.contractId, userId);
+    if (!contract) return { error: 'El período de alquiler no es válido' };
+    target.contractId = contract.id;
+  }
+  if (contract) {
+    if (derivedAssetId && contract.assetId && derivedAssetId !== contract.assetId) return { error: 'Los destinos del documento pertenecen a bienes distintos' };
+    derivedAssetId = derivedAssetId || contract.assetId || null;
+  }
+  if (derivedAssetId && given.assetId && given.assetId !== derivedAssetId) return { error: 'El bien indicado no coincide con el destino del documento' };
+  if (derivedAssetId) target.assetId = derivedAssetId;
+  return { target };
 }
 
 function publicMetadata(document) {
@@ -113,10 +151,17 @@ function uploadMiddleware(req, res, next) {
 }
 
 router.get('/', (req, res) => {
-  const target = targetFor(req.app.locals.db, req.session.userId, req.query);
-  if (!target) return res.status(400).json({ error: 'Indica un bien, una persona u organización, una obligación o un contrato válido' });
-  const documents = req.app.locals.db.findAll('documents', req.session.userId)
-    .filter(item => item.assetId === target.assetId && item.entityId === target.entityId && (item.obligationId || null) === target.obligationId && (item.contractId || null) === target.contractId)
+  const db = req.app.locals.db;
+  const userId = req.session.userId;
+  const filters = TARGET_FIELDS.filter(field => idOf(req.query, field));
+  if (!filters.length) return res.status(400).json({ error: TARGET_ERROR });
+  // Legacy targets must exist and belong to the user; newer links may dangle and simply match nothing.
+  const legacy = { assetId: 'assets', entityId: 'legalOwners', obligationId: 'obligations', contractId: 'rentalContracts' };
+  for (const field of filters) {
+    if (legacy[field] && !db.findById(legacy[field], idOf(req.query, field), userId)) return res.status(400).json({ error: TARGET_ERROR });
+  }
+  const documents = db.findAll('documents', userId)
+    .filter(item => filters.every(field => (item[field] || null) === idOf(req.query, field)))
     .sort((a, b) => b.uploadedAt.localeCompare(a.uploadedAt));
   res.json(documents.map(publicMetadata));
 });
@@ -134,11 +179,12 @@ router.post('/', uploadMiddleware, async (req, res) => {
     try { req.app.locals.documentStorage.remove(userId, file.filename); } catch {}
   };
   if (!file) return res.status(400).json({ error: 'Selecciona un archivo' });
-  const target = targetFor(db, userId, req.body || {});
-   if (!target) {
+  const resolved = resolveTargets(db, userId, req.body || {});
+  if (resolved.error) {
     discardUpload();
-      return res.status(400).json({ error: 'Indica un bien, una persona u organización, una obligación o un contrato válido' });
+    return res.status(400).json({ error: resolved.error });
   }
+  const target = resolved.target;
 
   try {
     const inspected = await inspectFile(file);
@@ -203,4 +249,4 @@ router.get('/:id', (req, res) => {
   res.json(publicMetadata(document));
 });
 
-module.exports = { router, MAX_FILE_SIZE, detectFileType, inspectFile, targetFor };
+module.exports = { router, MAX_FILE_SIZE, detectFileType, inspectFile, resolveTargets, TARGET_FIELDS };

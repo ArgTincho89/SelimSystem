@@ -14,4 +14,16 @@ Results: `npm run test:coverage` 30 suites / 370 tests pass, thresholds met.
 
 Notes: identifier tests live in a new file instead of extending obligations.test.js (separate temp-db lifecycle). Migration does not set `responsibilityType` on newly created obligations (S2 wires it, default `owner`).
 
-## Remaining: S2..S9
+## S2 - Phase 1b (done)
+
+- [x] 2.1 `portionsFor` / `validateResponsibility` (+ `validateSplit`) in `src/services/obligations.js`, wired into `validateDefinition`.
+- [x] 2.2 Responsibility fields flow through existing POST/PUT via `validateDefinition`; `createObligation` defaults `responsibilityType: 'owner'`. Non-shared types store `responsibilitySplit: null`; non-third store `responsibleThirdEntityId: null`. Edits only change the definition (occurrences unchanged; history is kept via existing revisions).
+- [x] 2.3 `src/routes/documents.js`: `resolveTargets` replaces `targetFor` (accepts occurrence/rentOccurrence/transaction/tenant plus legacy targets, derives obligation/contract/asset, 400 on mismatch); list filters by every provided target (AND); multer `fields` limit raised to 9.
+- [x] 2.4 Obligations form (responsibility selector, conditional split/third/contract fields), list shows responsibility; `API.documents.uploadTargets/listBy`; `public/sw.js` -> `selimsystem-v20`.
+
+Tests: tests/services/obligation-portions.test.js, tests/routes/obligation-responsibility.test.js, tests/routes/documents-targets.test.js, tests/ui/evolutivo-s2-contract.test.js (S1 UI test now accepts v19 or later).
+Results: `npm run test:coverage` 34 suites / 395 tests pass.
+
+Notes: `portionsFor` treats shared `other` rule as owner-only (informational). Percentage split rounds tenant portion, owner takes the remainder. Fixed split: tenant = min(tenantFixed, due); if only ownerFixed given, tenant = due - ownerFixed. Obligations are updated with PUT (no PATCH route exists).
+
+## Remaining: S3..S9
