@@ -7,7 +7,7 @@ const config = require('./config');
 const { version } = require('../package.json');
 const JsonDB = require('./db/jsondb');
 const DiskDocumentStorage = require('./services/document-storage');
-const { migrateEvolutivo } = require('./services/migrations');
+const { migrateEvolutivo, migrateEvolutivo2 } = require('./services/migrations');
 const { errorHandler } = require('./middleware/errorHandler');
 
 const authRoutes = require('./routes/auth');
@@ -35,6 +35,7 @@ function createApp(options = {}) {
   app.locals.db = new JsonDB(dataDir);
   app.locals.documentStorage = new DiskDocumentStorage(dataDir);
   migrateEvolutivo(app.locals.db);
+  migrateEvolutivo2(app.locals.db);
 
   app.use(helmet({ contentSecurityPolicy: false, crossOriginEmbedderPolicy: false }));
   app.use(cors({ origin: config.appUrl, credentials: true }));
