@@ -223,9 +223,6 @@ router.patch('/:id/ownerships/:ownershipId', (req, res) => {
   if (ownership.endDate) return res.status(409).json({ error: 'El período de titularidad ya está cerrado' });
   const endDate = req.body.endDate;
   if (!validDate(endDate, false) || endDate < ownership.startDate) return res.status(400).json({ error: 'La fecha de finalización no es válida' });
-  const others = ownershipsForAsset(db, userId, asset.id).filter(item => item.id !== ownership.id);
-  const overlap = validateOwnershipSet([...others, { ...ownership, endDate }]);
-  if (overlap.error) return res.status(400).json({ error: overlap.error });
   res.json(db.update('assetOwnerships', ownership.id, { endDate }, userId));
 });
 

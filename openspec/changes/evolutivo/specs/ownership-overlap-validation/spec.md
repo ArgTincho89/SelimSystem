@@ -78,7 +78,7 @@ When creating an asset with multiple ownerships, the system MUST apply both rule
 
 ### Requirement: Patch revalidation
 
-When a period's end date is patched, the system MUST revalidate both rules against the asset's other periods (excluding the patched one).
+Closing an open period (the only patch allowed) can only shrink it, so it can never introduce a violation. The system MUST NOT reject it on overlap grounds, so legacy data that already violates a rule can be fixed by closing a period.
 
 ## Data Contract
 

@@ -46,11 +46,20 @@ describe('Asset ownership overlap validation', () => {
     expect((await newAsset([{ ownerId: a, startDate: '2024-01-01', percentage: 50 }, { ownerId: b, startDate: '2024-01-01', percentage: 50 }])).status).toBe(201);
   });
 
-  it('revalidates on end-date patch', async () => {
+  it('allows closing a period without overlap rejection', async () => {
     const asset = (await newAsset([{ ownerId: a, startDate: '2024-01-01', percentage: 60 }])).body;
     const second = (await add(asset.id, { ownerId: b, startDate: '2024-06-01', percentage: 40 })).body;
     expect((await agent.patch(`/api/assets/${asset.id}/ownerships/${second.id}`).send({ endDate: '2024-12-31' })).status).toBe(200);
     const first = asset.ownerships[0];
     expect((await agent.patch(`/api/assets/${asset.id}/ownerships/${first.id}`).send({ endDate: '2024-12-31' })).status).toBe(200);
+  });
+
+  it('allows closing a period on legacy data that already violates a rule', async () => {
+    const asset = (await newAsset([{ ownerId: a, startDate: '2024-01-01', percentage: 80 }])).body;
+    const me = (await agent.get('/api/auth/me')).body;
+    const userId = me.id || me.user?.id;
+    // Legacy record written directly, bypassing validation: 80% + 80% concurrent.
+    const legacy = app.locals.db.create('assetOwnerships', { assetId: asset.id, ownerId: b, startDate: '2024-01-01', endDate: null, percentage: 80, notes: '' }, userId);
+    expect((await agent.patch(`/api/assets/${asset.id}/ownerships/${legacy.id}`).send({ endDate: '2024-03-31' })).status).toBe(200);
   });
 });
