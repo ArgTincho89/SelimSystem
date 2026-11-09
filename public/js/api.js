@@ -156,7 +156,8 @@ const API = {
   owners: {
     list() { return API.get('/owners'); },
     create(data) { return API.post('/owners', data); },
-    update(id, data) { return API.put(`/owners/${id}`, data); }
+    update(id, data) { return API.put(`/owners/${id}`, data); },
+    delete(id) { return API.delete(`/owners/${id}`); }
   },
 
   alerts: {

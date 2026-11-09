@@ -85,7 +85,7 @@ const App = {
     });
     Router.register('/entities', () => {
       if (!this.user) return Router.navigate('/login');
-      EntitiesPage.render();
+      Router.navigate('/settings?section=owners');
     });
     Router.register('/obligations', (params) => {
       if (!this.user) return Router.navigate('/login');
@@ -150,12 +150,6 @@ const App = {
           <rect x="3" y="4" width="18" height="17" rx="2"/><path d="M16 2v4M8 2v4M3 10h18M8 14h3M8 17h7"/>
         </svg>
         <span>Obligaciones</span>
-      </button>
-      <button class="navbar-item" data-route="/entities">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <circle cx="9" cy="8" r="4"/><path d="M2 21v-2a7 7 0 0114 0v2M18 8h4M20 6v4"/>
-        </svg>
-        <span>Contactos</span>
       </button>
       <button class="navbar-item" data-route="/profile">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">

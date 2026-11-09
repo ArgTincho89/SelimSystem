@@ -6,7 +6,7 @@ const SettingsPage = {
   currencies: ['ARS', 'EUR', 'USD'],
 
   async render(params = {}) {
-    this.section = ['accounts', 'alerts'].includes(params.section) ? params.section : this.section;
+    this.section = ['accounts', 'alerts', 'owners', 'tenants', 'providers'].includes(params.section) ? params.section : this.section;
     const content = $('#page-content');
     $('#navbar').style.display = '';
     content.style.paddingBottom = '';
@@ -45,7 +45,7 @@ const SettingsPage = {
     pageHeader.appendChild(privacy);
     content.replaceChildren(pageHeader);
     const navigation = create('nav', { className: 'settings-nav', 'aria-label': 'Secciones de configuración' });
-    [['accounts', 'Cuentas'], ['alerts', 'Avisos']].forEach(([id, label]) => {
+    [['accounts', 'Cuentas'], ['alerts', 'Avisos'], ['owners', 'Titular'], ['tenants', 'Inquilino'], ['providers', 'Proveedor']].forEach(([id, label]) => {
       const button = create('button', {
         className: `btn btn-ghost${this.section === id ? ' active' : ''}`,
         type: 'button', textContent: label,
@@ -57,7 +57,9 @@ const SettingsPage = {
     content.appendChild(navigation);
     const panel = create('section', { className: 'settings-panel', 'aria-label': `Configuración ${this.section}` });
     content.appendChild(panel);
+    const partyRoles = { owners: 'owner', tenants: 'tenant', providers: 'provider' };
     if (this.section === 'accounts') this.renderAccounts(panel);
+    else if (partyRoles[this.section]) EntitiesPage.renderPanel(panel, partyRoles[this.section]);
     else this.renderAlerts(panel);
   },
 
