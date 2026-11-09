@@ -142,6 +142,7 @@ const API = {
       const query = new URLSearchParams(Object.entries(filters).filter(([, value]) => value !== '' && value != null));
       return API.get(`/assets/${encodeURIComponent(id)}/economics${query.toString() ? `?${query}` : ''}`);
     },
+    file(id, horizonDays) { return API.get(`/assets/${encodeURIComponent(id)}/file${horizonDays ? `?horizonDays=${encodeURIComponent(horizonDays)}` : ''}`); },
     monthlyView(id, filters = {}) {
       const query = new URLSearchParams(Object.entries(filters).filter(([, value]) => value !== '' && value != null));
       return API.get(`/assets/${encodeURIComponent(id)}/monthly-view${query.toString() ? `?${query}` : ''}`);
@@ -167,6 +168,7 @@ const API = {
   },
 
   getAlerts(filters = {}) { return API.alerts.list(filters); },
+  getAssetFile(id, horizonDays) { return API.assets.file(id, horizonDays); },
 
   installments: {
     plans() { return API.get('/installments/plans'); },

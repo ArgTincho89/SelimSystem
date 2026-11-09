@@ -244,6 +244,7 @@ const AssetsPage = {
       const location = asset.type === 'immovable' ? [asset.address, asset.locality, asset.province, asset.country].filter(Boolean).join(', ') : asset.location;
       if (location) body.appendChild(create('p', { textContent: `Ubicación: ${location}` }));
       if (asset.notes) body.appendChild(create('p', { textContent: `Notas: ${asset.notes}` }));
+      await this.renderAssetFile(asset, body);
       await this.renderRecoveries(asset, body);
       await this.renderEconomicAnalysis(asset, body);
       this.renderMonthlyView(asset, body);
@@ -415,6 +416,40 @@ const AssetsPage = {
     };
     controls.appendChild(create('button', { className: 'btn btn-secondary btn-sm', type: 'button', textContent: 'Actualizar período', onClick: load }));
     await load();
+  },
+
+  async renderAssetFile(asset, container) {
+    const section = create('section', { style: { borderTop: '1px solid var(--border-color)', marginTop: '12px', paddingTop: '8px' } });
+    section.appendChild(create('h4', { textContent: 'Ficha del bien' }));
+    container.appendChild(section);
+    let file;
+    try { file = await API.getAssetFile(asset.id); } catch (error) {
+      section.appendChild(create('p', { className: 'text-muted', textContent: error.message || 'No se pudo cargar la ficha' }));
+      return;
+    }
+    const money = (minor, currency) => `${new Intl.NumberFormat('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(minor / 100)} ${currency || ''}`.trim();
+    const totals = map => Object.entries(map || {}).map(([currency, minor]) => money(minor, currency)).join(' · ') || 'Sin movimientos';
+    const responsibility = { owner: 'Propietario', tenant: 'Inquilino', shared: 'Compartido', third: 'Tercero', none: 'Sin responsable' };
+    const settled = { owner: 'pagó el propietario', tenant: 'resolvió el inquilino', third: 'pagó un tercero', shared: 'pago compartido' };
+    const resolution = { none: '', partial: ' · resolución parcial', resolved: ' · resuelto por el inquilino' };
+    const line = (label, text) => section.appendChild(create('p', { style: { margin: '4px 0' }, textContent: `${label}: ${text}` }));
+    const list = (title, items, render) => {
+      section.appendChild(create('strong', { textContent: title, style: { display: 'block', marginTop: '8px' } }));
+      if (!items.length) { section.appendChild(create('small', { className: 'text-muted', textContent: 'Sin elementos' })); return; }
+      const ul = create('ul', { style: { margin: '4px 0', paddingLeft: '18px' } });
+      items.forEach(item => ul.appendChild(create('li', { textContent: render(item) })));
+      section.appendChild(ul);
+    };
+    line('Titulares', (file.owners || []).map(item => `${item.name || 'Titular'}${item.percentage != null ? ` ${item.percentage}%` : ''}`).join(', ') || 'Sin titulares vigentes');
+    const contract = file.currentContract;
+    line('Inquilino actual', contract ? `${contract.tenantNames.join(', ') || 'Sin inquilino'} · contrato hasta ${contract.endDate || 'sin fecha de fin'}` : 'Sin contrato vigente');
+    line('Alquiler cobrado este mes', totals(file.rentCollectedThisMonthMinorByCurrency));
+    line('Costo de mantenimiento (últimos 12 meses)', totals(file.costLast12MonthsMinorByCurrency));
+    list('Próximos vencimientos', file.upcoming, item => `${item.date} · ${item.title}`);
+    list('Pendientes', file.pending, item => `${item.dueDate} · ${item.title}${item.type === 'document_pending' ? ' (falta comprobante)' : item.type === 'tenant_obligation_pending' ? ' (comprobante del inquilino pendiente)' : ''}`);
+    list('Obligaciones', file.obligations, item => `${item.title} · ${responsibility[item.responsibilityType] || item.responsibilityType}${item.responsibleParty?.name ? ` (${item.responsibleParty.name})` : ''} · ${item.nextDueDate ? `próximo ${item.nextDueDate}` : 'sin próximo vencimiento'}${item.settledBy ? ` · ${settled[item.settledBy]}` : ''}${resolution[item.resolutionStatus] || ''}`);
+    list('Documentos', file.documents, item => `${item.title} (${item.fileName})`);
+    list('Notas', file.notes, item => item.text);
   },
 
   renderMonthlyView(asset, container) {

@@ -87,4 +87,14 @@ Tests: tests/routes/monthly-view.test.js, tests/ui/evolutivo-s7-contract.test.js
 
 Notes: the frontend is a collapsible-on-demand section (button loads last 12 months), not a separate tab, to keep the slice small. Owner payments are expenses on their posting date, which can fall in a different month than the occurrence.
 
-## Remaining: S9
+## S9 - Phase 6 (done; commits S9a backend, S9b frontend)
+
+- [x] 9.1 `src/services/asset-file.js` `build(db,userId,asset,{horizonDays})` + `parseHorizon` (1-365, default 90): owners with %, current contract/tenants, obligations (responsibility, responsible party, next due, resolution status, `settledBy` owner|tenant|third|shared), upcoming (alerts.list for the asset plus obligation occurrences inside the horizon that the alert lead time would hide), pending (overdue/partial obligations, `tenant_obligation_pending`, `document_pending`, overdue rent; resolved excluded), documents (asset + obligation/occurrence/contract/rent occurrence/transaction/tenant targets, deduped), notes (asset, obligation, resolution), `costLast12MonthsMinorByCurrency` (posted attributed expenses via monthlyView, resolutions never counted), `rentCollectedThisMonthMinorByCurrency`. Runs on `alerts.readOnlyView`; nothing persisted.
+- [x] 9.2 `GET /api/assets/:id/file` in `src/routes/assets.js` (401/404/400).
+- [x] 9.3 "Ficha del bien" summary at the top of the asset detail (`renderAssetFile`), `API.getAssetFile` / `API.assets.file`, `public/sw.js` -> `selimsystem-v25`.
+
+Tests: tests/routes/asset-file.test.js, tests/ui/evolutivo-s9-contract.test.js.
+
+Notes: cost is expenses only (refunds/recoveries not netted). The file adds `owners`, `currentContract`, `horizonDays` beyond the data contract for the Ficha header.
+
+## Apply complete: S1-S9 all done.
