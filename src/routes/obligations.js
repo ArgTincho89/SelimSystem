@@ -35,7 +35,10 @@ router.get('/', (req, res) => {
     const provider = db.findById('legalOwners', req.query.providerEntityId, userId);
     if (!provider || !(provider.roles || ['owner']).includes('provider')) return res.status(400).json({ error: 'El proveedor no es válido' });
   }
+  const externalIdentifier = typeof req.query.externalIdentifier === 'string' ? req.query.externalIdentifier.trim() : '';
   const rows = db.findAll('obligations', userId).filter(item =>
+    (!externalIdentifier || item.externalIdentifier === externalIdentifier)
+    &&
     (!req.query.assetId || item.assetId === req.query.assetId)
     && (!req.query.providerEntityId || item.providerEntityId === req.query.providerEntityId)
     && (!req.query.type || item.type === req.query.type)

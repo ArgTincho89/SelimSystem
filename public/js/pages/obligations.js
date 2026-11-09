@@ -65,12 +65,19 @@ const ObligationsPage = {
     content.appendChild(list);
   },
 
+  IDENTIFIER_TYPES: [['account', 'Cuenta'], ['contract', 'Contrato'], ['meter', 'Medidor'], ['policy', 'Póliza'], ['client', 'Cliente'], ['other', 'Otro']],
+
+  identifierTypeLabel(type) {
+    return this.IDENTIFIER_TYPES.find(([value]) => value === type)?.[1] || 'Identificador';
+  },
+
   renderObligation(item) {
     const asset = this.assets.find(record => record.id === item.assetId)?.name;
     const provider = this.owners.find(record => record.id === item.providerEntityId)?.name;
     const details = create('div', {}, [
       create('h3', { textContent: item.title, style: { marginBottom: '4px' } }),
       create('div', { className: 'text-muted', textContent: [item.type, asset, provider, item.paymentMethod].filter(Boolean).join(' · ') }),
+      ...(item.externalIdentifier ? [create('div', { className: 'text-muted', textContent: `${this.identifierTypeLabel(item.externalIdentifierType)}: ${item.externalIdentifier}` })] : []),
       create('div', { className: 'text-muted', textContent: `${item.estimatedAmount} ${item.currencyCode} estimado · ${item.recurrenceFrequency ? this.frequencyLabel(item.recurrenceFrequency) : 'Única vez'} · Aviso ${item.reminderLeadDays} días` })
     ]);
     const card = create('article', { className: 'card', style: { display: 'grid', gap: '10px' } }, [details]);
@@ -160,6 +167,9 @@ const ObligationsPage = {
     const reminder = this.select([['0', 'El mismo día'], ['7', '7 días antes'], ['15', '15 días antes'], ['30', '30 días antes'], ['custom', 'Personalizado']], reminderValues.includes(String(existing?.reminderLeadDays ?? 7)) ? String(existing?.reminderLeadDays ?? 7) : 'custom');
     this.fieldWrap(form, 'Aviso', reminder);
     const customLead = this.field(form, 'Días de anticipación personalizados', { type: 'number', min: '0', max: '90', value: existing?.reminderLeadDays ?? 7 });
+    const externalIdentifierType = this.select([['', 'Sin tipo de identificador'], ...this.IDENTIFIER_TYPES], existing?.externalIdentifierType || '');
+    this.fieldWrap(form, 'Tipo de identificador externo', externalIdentifierType);
+    const externalIdentifier = this.field(form, 'Identificador externo (cuenta, contrato, medidor, póliza...)', { value: existing?.externalIdentifier || '' });
     const notes = this.field(form, 'Notas', { multiline: true, value: existing?.notes || '' });
     on(reminder, 'change', () => { customLead.disabled = reminder.value !== 'custom'; });
     customLead.disabled = reminder.value !== 'custom';
@@ -175,7 +185,8 @@ const ObligationsPage = {
           responsibleEntityId: responsible.value || null, accountId: account.value || null, categoryId: category.value || null,
           currencyCode: currency.value, estimatedAmount: Number(amount.value), paymentMethod: paymentMethod.value, paymentMethodId: paymentMethodId.value || null,
           startDate: date.value, endDate: endDate.value || null, recurrenceFrequency: frequency.value || null,
-          reminderLeadDays: Number(reminder.value === 'custom' ? customLead.value : reminder.value), notes: notes.value
+          reminderLeadDays: Number(reminder.value === 'custom' ? customLead.value : reminder.value), notes: notes.value,
+          externalIdentifier: externalIdentifier.value.trim() || null, externalIdentifierType: externalIdentifierType.value || null
         };
         if (existing && effectiveFromDate.value) {
           data.effectiveFromDate = effectiveFromDate.value;

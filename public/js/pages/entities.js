@@ -15,7 +15,7 @@ const EntitiesPage = {
   },
 
   roleLabels(roles = []) {
-    const labels = { owner: 'Propietario', tenant: 'Inquilino', provider: 'Proveedor' };
+    const labels = { owner: 'Propietario', tenant: 'Inquilino', provider: 'Proveedor', payment_responsible: 'Responsable de pago', other: 'Otro' };
     return roles.map(role => labels[role] || role).join(' · ');
   },
 
@@ -60,7 +60,7 @@ const EntitiesPage = {
     const roles = create('div', { style: { display: 'grid', gap: '6px', margin: '10px 0' } });
     roles.appendChild(create('strong', { textContent: 'Roles' }));
     const roleInputs = {};
-    [['owner', 'Propietario'], ['tenant', 'Inquilino'], ['provider', 'Proveedor']].forEach(([value, label]) => {
+    [['owner', 'Propietario'], ['tenant', 'Inquilino'], ['provider', 'Proveedor'], ['payment_responsible', 'Responsable de pago'], ['other', 'Otro']].forEach(([value, label]) => {
       const checkbox = create('input', { type: 'checkbox' });
       checkbox.checked = (entity?.roles || ['owner']).includes(value);
       roleInputs[value] = checkbox;

@@ -1,0 +1,26 @@
+const fs = require('fs');
+const path = require('path');
+
+const read = file => fs.readFileSync(path.join(__dirname, '../../public', file), 'utf8');
+
+describe('Evolutivo S1 UI contract', () => {
+  it('offers the new holder roles in the entities page', () => {
+    const source = read('js/pages/entities.js');
+    expect(source).toContain("['payment_responsible', 'Responsable de pago']");
+    expect(source).toContain("['other', 'Otro']");
+    expect(source).toContain('payment_responsible: ');
+  });
+
+  it('exposes external identifier fields on the obligations page', () => {
+    const source = read('js/pages/obligations.js');
+    expect(source).toContain('externalIdentifier: externalIdentifier.value');
+    expect(source).toContain('externalIdentifierType: externalIdentifierType.value');
+    expect(source).toContain("['policy', 'Póliza']");
+  });
+
+  it('bumps the service worker cache name', () => {
+    const source = read('sw.js');
+    expect(source).toContain("CACHE_NAME = 'selimsystem-v19'");
+    expect(source).not.toContain('selimsystem-v18');
+  });
+});

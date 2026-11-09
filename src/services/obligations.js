@@ -122,8 +122,25 @@ function validateLinks(db, userId, value, existing = null) {
   return { value: result };
 }
 
+const EXTERNAL_IDENTIFIER_TYPES = new Set(['account', 'contract', 'meter', 'policy', 'client', 'other']);
+
+function normalizeExternalIdentifier(rawIdentifier, rawType) {
+  let externalIdentifier = null;
+  if (rawIdentifier !== undefined && rawIdentifier !== null) {
+    if (typeof rawIdentifier !== 'string') return { error: 'El identificador externo no es válido' };
+    externalIdentifier = rawIdentifier.trim() || null;
+    if (externalIdentifier && externalIdentifier.length > 120) return { error: 'El identificador externo debe tener entre 1 y 120 caracteres' };
+  }
+  let externalIdentifierType = null;
+  if (rawType !== undefined && rawType !== null && rawType !== '') {
+    if (!EXTERNAL_IDENTIFIER_TYPES.has(rawType)) return { error: 'El tipo de identificador externo no es válido' };
+    externalIdentifierType = rawType;
+  }
+  return { externalIdentifier, externalIdentifierType };
+}
+
 function validateDefinition(db, userId, body, existing = null) {
-  const fields = ['title', 'type', 'assetId', 'providerEntityId', 'responsibleEntityId', 'accountId', 'categoryId', 'paymentMethodId', 'currencyCode', 'estimatedAmount', 'paymentMethod', 'startDate', 'recurrenceFrequency', 'endDate', 'reminderLeadDays', 'notes'];
+  const fields = ['title', 'type', 'assetId', 'providerEntityId', 'responsibleEntityId', 'accountId', 'categoryId', 'paymentMethodId', 'currencyCode', 'estimatedAmount', 'paymentMethod', 'startDate', 'recurrenceFrequency', 'endDate', 'reminderLeadDays', 'notes', 'externalIdentifier', 'externalIdentifierType'];
   const value = {};
   fields.forEach(field => { if (body[field] !== undefined) value[field] = body[field]; });
   const merged = { ...existing, ...value };
@@ -136,6 +153,10 @@ function validateDefinition(db, userId, body, existing = null) {
   if (typeof merged.paymentMethod !== 'string' || merged.paymentMethod.length > 120) return { error: 'El medio de pago no es válido' };
   if (typeof merged.notes !== 'string' || merged.notes.length > 4000) return { error: 'Las notas no son válidas' };
   if (!Number.isInteger(merged.reminderLeadDays) || merged.reminderLeadDays < 0 || merged.reminderLeadDays > 90) return { error: 'El aviso debe estar entre 0 y 90 días' };
+  const identifier = normalizeExternalIdentifier(merged.externalIdentifier, merged.externalIdentifierType);
+  if (identifier.error) return identifier;
+  merged.externalIdentifier = identifier.externalIdentifier;
+  merged.externalIdentifierType = identifier.externalIdentifierType;
   const links = validateLinks(db, userId, { ...merged, title: merged.title.trim(), paymentMethod: merged.paymentMethod.trim(), notes: merged.notes.trim() }, existing);
   if (links.error) return links;
   return { value: { ...links.value, type: merged.type.trim(), status: existing?.status || 'active' } };
@@ -214,5 +235,5 @@ function idempotencyDigest(key) {
 
 module.exports = {
   COLLECTION, OCCURRENCES, validDate, occurrenceView, occurrencesFor,
-  validateDefinition, createObligation, updateOccurrence, paymentTransactions, getAlerts, idempotencyDigest, isScheduledOn
+  validateDefinition, EXTERNAL_IDENTIFIER_TYPES, createObligation, updateOccurrence, paymentTransactions, getAlerts, idempotencyDigest, isScheduledOn
 };

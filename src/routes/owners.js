@@ -4,7 +4,7 @@ const { requireAuth } = require('../middleware/auth');
 const router = express.Router();
 router.use(requireAuth);
 
-const ROLES = new Set(['owner', 'tenant', 'provider']);
+const ROLES = new Set(['owner', 'tenant', 'provider', 'payment_responsible', 'other']);
 const CONTACT_FIELDS = { email: 254, phone: 80, address: 500, taxIdentification: 120 };
 
 function validateOwner(body, existing = null) {
@@ -13,10 +13,15 @@ function validateOwner(body, existing = null) {
   const kind = body.kind === undefined ? (existing?.kind || 'entity') : body.kind;
   if (!['person', 'entity'].includes(kind)) return { error: 'El tipo debe ser persona u organización' };
   const roles = body.roles === undefined ? (existing?.roles || ['owner']) : body.roles;
-  if (!Array.isArray(roles) || !roles.length || roles.some(role => !ROLES.has(role)) || new Set(roles).size !== roles.length) {
-    return { error: 'Los roles deben ser owner, tenant o provider, sin duplicados' };
+  if (!Array.isArray(roles) || !roles.length || roles.some(role => !ROLES.has(role))) {
+    return { error: 'Los roles deben ser owner, tenant, provider, payment_responsible u other' };
   }
-  const value = { name: name.trim(), kind, roles: [...roles] };
+  const value = { name: name.trim(), kind, roles: [...new Set(roles)] };
+  const roleLabel = body.roleLabel === undefined ? existing?.roleLabel : body.roleLabel;
+  if (roleLabel !== undefined && roleLabel !== null) {
+    if (typeof roleLabel !== 'string' || roleLabel.trim().length > 80) return { error: 'La etiqueta del rol no es válida' };
+    if (roleLabel.trim()) value.roleLabel = roleLabel.trim();
+  }
   for (const [field, max] of Object.entries(CONTACT_FIELDS)) {
     const valueForField = body[field] === undefined ? (existing?.[field] || '') : body[field];
     if (typeof valueForField !== 'string' || valueForField.trim().length > max) return { error: `El campo ${field} no es válido` };
