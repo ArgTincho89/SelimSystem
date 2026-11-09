@@ -171,8 +171,7 @@ function assetResponse(db, userId, asset) {
   return {
     ...asset,
     ownerships: ownershipsForAsset(db, userId, asset.id),
-    activeContract: null,
-    obligations: [],
+    ...assetForm.describe(db, userId, asset),
     statusHistory: db.findAll('assetStatusHistory', userId).filter(event => event.assetId === asset.id).sort((a, b) => a.changedAt.localeCompare(b.changedAt))
   };
 }
@@ -233,7 +232,7 @@ function saveForm(req, res, existing) {
   const db = req.app.locals.db;
   const userId = req.session.userId;
   const parsed = assetForm.validate(db, userId, req.body, existing, validateAsset);
-  if (parsed.error) return res.status(400).json({ error: parsed.error });
+  if (parsed.error) return res.status(parsed.status || 400).json({ error: parsed.error });
   let asset;
   try {
     asset = assetForm.apply(db, userId, existing, parsed.value);

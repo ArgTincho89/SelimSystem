@@ -1,5 +1,8 @@
 const { validateHolders } = require('./asset-holders');
 const { validateOwnershipSet } = require('../utils/ownership-overlap');
+const ledger = require('./account-ledger');
+const rentals = require('./rentals');
+const obligations = require('./obligations');
 
 function isoDay(offsetDays = 0) {
   const date = new Date();
@@ -68,16 +71,120 @@ function validate(db, userId, body, existing, validateAsset) {
     const owner = db.findById('legalOwners', holder.ownerId, userId);
     if (!owner || (Array.isArray(owner.roles) && !owner.roles.includes('owner'))) return { error: 'Titular legal no encontrado' };
   }
-  if (body.rental !== undefined && body.rental !== null) return { error: 'El alquiler todavía no se puede guardar desde el formulario' };
   if (body.obligationResponsibilities !== undefined && !Array.isArray(body.obligationResponsibilities)) {
     return { error: 'Las responsabilidades deben ser una lista' };
   }
+  const rental = planRental(db, userId, body.rental, existing, parsedAsset.value);
+  if (rental.error) return rental;
+  const responsibilities = planResponsibilities(db, userId, body.obligationResponsibilities, existing, rental.value);
+  if (responsibilities.error) return responsibilities;
   const today = isoDay();
   const current = existing ? db.findAll('assetOwnerships', userId).filter(record => record.assetId === existing.id) : [];
   const plan = diffHolders(current, holders.value, today);
   const overlap = validateOwnershipSet(plan.resulting);
   if (overlap.error) return { error: overlap.error };
-  return { value: { asset: parsedAsset.value, statusNotes: asset.statusNotes, plan } };
+  return { value: { asset: parsedAsset.value, statusNotes: asset.statusNotes, plan, rental: rental.value, responsibilities: responsibilities.value } };
+}
+
+const fail = (error, status = 400) => ({ error, status });
+const CONTRACT_TYPE_BY_KIND = { galpon: 'industrial', lote: 'other' };
+
+/**
+ * Decide what happens to the asset's contract without writing anything.
+ * Actions: create | update | end | none. Contracts with rent occurrences are locked.
+ */
+function planRental(db, userId, rental, existing, asset) {
+  const active = existing ? rentals.activeContractFor(db, userId, existing.id) : null;
+  if (!(asset.type === 'immovable' && ['rented', 'usufruct'].includes(asset.condition))) {
+    if (rental != null && asset.type !== 'immovable') return fail('Solo los inmuebles pueden tener un alquiler');
+    return { value: { action: active ? 'end' : 'none', contract: active } };
+  }
+  if (rental == null) {
+    if (active) return { value: { action: 'none', contract: active } };
+    return fail('Completá los datos del alquiler: inquilino, fechas y monto');
+  }
+  if (typeof rental !== 'object' || Array.isArray(rental)) return fail('Los datos del alquiler no son válidos');
+  if (typeof rental.tenantId !== 'string' || !rental.tenantId) return fail('Seleccioná un inquilino');
+  if (!Number.isInteger(rental.amount) || rental.amount <= 0) return fail('El monto debe ser un número entero positivo');
+  const input = {
+    tenantIds: [rental.tenantId], startDate: rental.startDate, endDate: rental.endDate || null, initialRent: rental.amount,
+    currencyCode: rental.currencyCode || 'ARS', adjustmentFrequencyMonths: rental.adjustmentFrequencyMonths ?? null,
+    adjustmentCriterion: rental.adjustmentCriterion ?? null, contractKind: asset.condition === 'usufruct' ? 'usufruct' : 'rental'
+  };
+  const dueDay = Number(String(rental.startDate).slice(8, 10));
+  if (active) {
+    const locked = rentals.hasOccurrences(db, userId, active.id);
+    if (locked && (JSON.stringify(input.tenantIds) !== JSON.stringify(active.tenantIds) || input.startDate !== active.startDate
+      || input.initialRent !== active.initialRent || input.currencyCode !== active.currencyCode)) {
+      return fail('El contrato ya tiene períodos generados; para cambiar inquilino, inicio o monto, marcá el bien como No alquilado y cargá el contrato de nuevo', 409);
+    }
+    if (!locked) input.dueDay = dueDay;
+    const parsed = rentals.validateContract(db, userId, input, active);
+    return parsed.error ? fail(parsed.error) : { value: { action: 'update', contract: active, contractValue: parsed.value } };
+  }
+  const parsed = rentals.validateContract(db, userId, {
+    ...input, type: CONTRACT_TYPE_BY_KIND[asset.propertyKind] || 'residential', periodicity: 'monthly', dueDay, status: 'active',
+    expenseResponsibility: {}, includedExpenses: [], depositAmount: 0
+  }, null, existing || { id: 'pending', type: 'immovable' });
+  return parsed.error ? fail(parsed.error) : { value: { action: 'create', contractValue: parsed.value } };
+}
+
+function planResponsibilities(db, userId, list, existing, rental) {
+  const hasTenant = rental.action === 'create' || rental.action === 'update' || (rental.action === 'none' && Boolean(rental.contract));
+  const items = [];
+  for (const item of list || []) {
+    if (!item || !['owner', 'tenant'].includes(item.responsibilityType)) return fail('La responsabilidad debe ser Titular o Inquilino');
+    const obligation = existing && typeof item.obligationId === 'string' ? db.findById('obligations', item.obligationId, userId) : null;
+    if (!obligation || obligation.assetId !== existing.id) return fail('Obligación no encontrada en este bien');
+    if (item.responsibilityType === 'tenant' && !hasTenant) return fail('La responsabilidad del inquilino requiere un inquilino con contrato activo');
+    items.push({ obligationId: obligation.id, responsibilityType: item.responsibilityType });
+  }
+  return { value: items };
+}
+
+function applyRental(db, userId, asset, plan) {
+  const { action, contract, contractValue } = plan;
+  if (action === 'create') {
+    rentals.afterContractWrite(db, userId, db.create('rentalContracts', { ...contractValue, assetId: asset.id }, userId));
+  } else if (action === 'update') {
+    const updated = db.update('rentalContracts', contract.id, contractValue, userId);
+    rentals.afterContractWrite(db, userId, updated);
+    if (updated.endDate && updated.endDate !== contract.endDate) rentals.cancelUnpaidOccurrences(db, userId, updated.id, updated.endDate);
+  } else if (action === 'end') {
+    const today = ledger.localDateForUser(db, userId);
+    const endDate = contract.endDate && contract.endDate < today ? contract.endDate : today;
+    db.update('rentalContracts', contract.id, { status: contract.startDate > today ? 'cancelled' : 'ended', endDate: contract.startDate > today ? contract.endDate : endDate }, userId);
+    rentals.cancelUnpaidOccurrences(db, userId, contract.id, contract.startDate > today ? null : endDate);
+    db.findAll('obligations', userId).filter(item => item.assetId === asset.id && item.responsibilityType === 'tenant')
+      .forEach(item => obligations.setResponsibility(db, userId, item, 'owner'));
+  }
+}
+
+function applyResponsibilities(db, userId, items) {
+  items.forEach(item => {
+    const obligation = db.findById('obligations', item.obligationId, userId);
+    if ((obligation.responsibilityType || 'owner') === item.responsibilityType) return;
+    const result = obligations.setResponsibility(db, userId, obligation, item.responsibilityType);
+    if (result.error) throw new Error(result.error);
+  });
+}
+
+/** Contract and obligation data appended to asset responses. */
+function describe(db, userId, asset) {
+  const contract = rentals.activeContractFor(db, userId, asset.id);
+  return {
+    activeContract: contract ? {
+      ...contract, adjustmentFrequencyMonths: contract.adjustmentFrequencyMonths ?? null,
+      adjustmentCriterion: contract.adjustmentCriterion ?? null, contractKind: contract.contractKind || 'rental',
+      locked: rentals.hasOccurrences(db, userId, contract.id),
+      tenants: (contract.tenantIds || []).map(id => db.findById('legalOwners', id, userId)).filter(Boolean)
+    } : null,
+    obligations: db.findAll('obligations', userId).filter(item => item.assetId === asset.id).map(item => ({
+      id: item.id, title: item.title, providerName: db.findById('legalOwners', item.providerEntityId, userId)?.name || null,
+      externalIdentifier: item.externalIdentifier || null, externalIdentifierType: item.externalIdentifierType || null,
+      responsibilityType: item.responsibilityType || 'owner'
+    }))
+  };
 }
 
 /** Write a validated payload. Throws on failure; the caller resets the cache. */
@@ -97,7 +204,9 @@ function apply(db, userId, existing, parsed) {
   plan.update.forEach(item => db.update('assetOwnerships', item.id, { percentage: item.percentage }, userId));
   plan.remove.forEach(id => db.remove('assetOwnerships', id, userId));
   plan.create.forEach(record => db.create('assetOwnerships', { ...record, assetId: asset.id }, userId));
+  applyRental(db, userId, asset, parsed.rental);
+  applyResponsibilities(db, userId, parsed.responsibilities);
   return asset;
 }
 
-module.exports = { validate, apply, diffHolders };
+module.exports = { validate, apply, diffHolders, describe };

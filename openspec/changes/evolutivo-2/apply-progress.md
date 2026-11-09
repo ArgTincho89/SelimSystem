@@ -32,3 +32,10 @@ Notes: validateAsset is injected into the service (no circular require). Holders
 - [x] 5.2 sw.js cache v28; tests/ui/evolutivo2-s5-contract.test.js; S2 contract test relaxed to a versioned cache name
 
 Notes: `documents.contentUrl` already existed. Single-titular edits resend the stored percentage (or null) so unchanged holders are not rewritten. `div[data-slot="rental-and-obligations"]` is the mount point for S7 (rental block + obligations). Condition Alquilado/Usufructo is sent with `rental: null` until S6/S7.
+
+## Slice S6 (rental inline and responsibility backend) - done
+- [x] 6.1 rentals service/route: adjustmentFrequencyMonths, adjustmentCriterion, contractKind; `afterContractWrite` sets usageStatus and condition on activation; `cancelUnpaidOccurrences` extracted
+- [x] 6.2 `responsibilityFor` + `setResponsibility` (pins past/settled occurrences first), PATCH /api/obligations/:id/responsibility; occurrenceView, createResolution and monthlyView use the helper
+- [x] 6.3 asset-form applies `rental` (create/update/end, locked -> 409) and `obligationResponsibilities`; assetResponse adds `activeContract` and `obligations` (also GET /api/assets/:id)
+
+Notes: rented/usufruct with no rental and no active contract returns 400 ("Completá los datos del alquiler..."); with an existing active contract and `rental: null` the contract is kept unchanged (S5 UI edits still work). not_rented ignores `rental`; rental on a movable is 400. validateContract takes an `assetHint` so a contract can be validated before the asset exists. alerts.js still reads the live obligation type (not part of the task).

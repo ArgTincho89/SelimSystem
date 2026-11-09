@@ -15,6 +15,9 @@ function contractResponse(db, userId, contract, throughDate) {
     : rentals.generateOccurrences(db, userId, contract, occurrenceEnd);
   return {
     ...contract,
+    adjustmentFrequencyMonths: contract.adjustmentFrequencyMonths ?? null,
+    adjustmentCriterion: contract.adjustmentCriterion ?? null,
+    contractKind: contract.contractKind || 'rental',
     asset: db.findById('assets', contract.assetId, userId),
     tenants: contract.tenantIds.map(id => db.findById('legalOwners', id, userId)).filter(Boolean),
     conditions: rentals.conditionsFor(db, userId, contract.id),
@@ -78,10 +81,7 @@ router.post('/', (req, res) => {
   const parsed = rentals.validateContract(db, userId, req.body || {});
   if (parsed.error) return res.status(400).json({ error: parsed.error });
   const contract = db.create('rentalContracts', parsed.value, userId);
-  if (contract.status === 'active') {
-    const asset = db.findById('assets', contract.assetId, userId);
-    if (asset && asset.usageStatus !== 'rented') db.update('assets', asset.id, { usageStatus: 'rented' }, userId);
-  }
+  rentals.afterContractWrite(db, userId, contract);
   const today = ledger.localDateForUser(db, userId);
   const until = new Date(`${today}T00:00:00.000Z`);
   until.setUTCMonth(until.getUTCMonth() + 12);
@@ -113,19 +113,11 @@ router.put('/:id', (req, res) => {
   const parsed = rentals.validateContract(db, userId, input, existing);
   if (parsed.error) return res.status(400).json({ error: parsed.error });
   const updated = db.update('rentalContracts', existing.id, parsed.value, userId);
-  if (updated.status === 'active') {
-    const asset = db.findById('assets', updated.assetId, userId);
-    if (asset && asset.usageStatus !== 'rented') db.update('assets', asset.id, { usageStatus: 'rented' }, userId);
-  }
+  rentals.afterContractWrite(db, userId, updated);
   if (updated.status === 'ended' || updated.status === 'cancelled' || (input.endDate !== undefined && input.endDate !== existing.endDate)) {
     const cancelled = updated.status === 'cancelled';
     const cutoff = cancelled ? null : (updated.endDate || (updated.status === 'ended' ? ledger.localDateForUser(db, userId) : null));
-    if (cancelled || cutoff) {
-      db.findAll('rentOccurrences', userId).filter(item => item.contractId === updated.id && (!cutoff || item.date > cutoff)).forEach(item => {
-        const paid = rentals.occurrenceView(db, userId, item, ledger.localDateForUser(db, userId)).paidMinor;
-        if (!paid) db.update('rentOccurrences', item.id, { cancelled: true, cancelledAt: new Date().toISOString() }, userId);
-      });
-    }
+    if (cancelled || cutoff) rentals.cancelUnpaidOccurrences(db, userId, updated.id, cutoff);
   }
   res.json(contractResponse(db, userId, updated, upperDate(db, userId)));
 });

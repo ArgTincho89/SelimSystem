@@ -500,7 +500,7 @@ function monthlyView(db, userId, asset, options = {}) {
       const state = resolutionState(item, item.resolution);
       bucket.obligations.push({
         occurrenceId: item.id, obligationId: obligation.id, title: item.title || obligation.title,
-        responsibilityType: obligation.responsibilityType || 'owner', date: item.date,
+        responsibilityType: obligations.responsibilityFor(obligation, item).responsibilityType, date: item.date,
         estimatedMinor: ledger.toMinorUnits(item.actualDueAmount, item.currencyCode),
         actualMinor: ledger.toMinorUnits(item.totalPaid, item.currencyCode),
         status: item.status, currencyCode: item.currencyCode,

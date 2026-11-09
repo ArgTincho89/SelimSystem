@@ -66,13 +66,23 @@ function occurrenceDates(contract, throughDate, conditions = []) {
   return dates;
 }
 
-function validateContract(db, userId, input, existing = null) {
+const CONTRACT_KINDS = new Set(['rental', 'usufruct']);
+
+// `assetHint` lets the composite asset form validate a contract before its asset exists.
+function validateContract(db, userId, input, existing = null, assetHint = null) {
   const value = { ...(existing || {}) };
-  const fields = ['assetId', 'type', 'startDate', 'endDate', 'initialRent', 'currencyCode', 'periodicity', 'dueDay', 'depositAmount', 'guarantee', 'includedExpenses', 'expenseResponsibility', 'notes', 'documentId', 'status', 'tenantIds'];
+  const fields = ['assetId', 'type', 'startDate', 'endDate', 'initialRent', 'currencyCode', 'periodicity', 'dueDay', 'depositAmount', 'guarantee', 'includedExpenses', 'expenseResponsibility', 'notes', 'documentId', 'status', 'tenantIds', 'adjustmentFrequencyMonths', 'adjustmentCriterion', 'contractKind'];
   fields.forEach(field => { if (input[field] !== undefined) value[field] = input[field]; });
-  const asset = db.findById('assets', value.assetId, userId);
+  if (assetHint) value.assetId = assetHint.id;
+  const asset = assetHint || db.findById('assets', value.assetId, userId);
   if (!asset || asset.type !== 'immovable') return { error: 'Seleccioná un inmueble válido' };
   if (!CONTRACT_TYPES.has(value.type)) return { error: 'El tipo de contrato no es válido' };
+  const frequency = value.adjustmentFrequencyMonths ?? null;
+  if (frequency !== null && (!Number.isInteger(frequency) || frequency < 1 || frequency > 120)) return { error: 'La frecuencia de ajuste debe ser un entero entre 1 y 120 meses' };
+  const criterion = value.adjustmentCriterion ?? null;
+  if (criterion !== null && (typeof criterion !== 'string' || criterion.trim().length > 120)) return { error: 'El criterio de ajuste no es válido' };
+  const contractKind = value.contractKind ?? 'rental';
+  if (!CONTRACT_KINDS.has(contractKind)) return { error: 'El tipo de contrato (alquiler o usufructo) no es válido' };
   if (!validDate(value.startDate) || !validDate(value.endDate, true) || (value.endDate && value.endDate < value.startDate)) return { error: 'El período del contrato no es válido' };
   if (!ledger.CURRENCIES.has(value.currencyCode)) return { error: 'La moneda del contrato no es válida' };
   if (!PERIODICITIES.has(value.periodicity)) return { error: 'La periodicidad no es válida' };
@@ -104,8 +114,37 @@ function validateContract(db, userId, input, existing = null) {
     depositAmount: ledger.fromMinorUnits(depositMinor, value.currencyCode), depositMinor,
     guarantee: value.guarantee || '', includedExpenses: (value.includedExpenses || []).map(item => item.trim()),
     expenseResponsibility: { ...value.expenseResponsibility }, notes: (value.notes || '').trim(),
-    documentId: value.documentId || null, tenantIds: [...value.tenantIds], status: value.status || 'active'
+    documentId: value.documentId || null, tenantIds: [...value.tenantIds], status: value.status || 'active',
+    adjustmentFrequencyMonths: frequency, adjustmentCriterion: criterion === null ? null : criterion.trim() || null, contractKind
   } };
+}
+
+function activeContractFor(db, userId, assetId) {
+  return db.findAll('rentalContracts', userId).find(item => item.assetId === assetId && item.status === 'active') || null;
+}
+
+function hasOccurrences(db, userId, contractId) {
+  return db.findAll('rentOccurrences', userId).some(item => item.contractId === contractId);
+}
+
+/** Keeps the asset in sync with an active contract (usage status and condition). */
+function afterContractWrite(db, userId, contract) {
+  if (contract.status !== 'active') return;
+  const asset = db.findById('assets', contract.assetId, userId);
+  if (!asset) return;
+  const condition = contract.contractKind === 'usufruct' ? 'usufruct' : 'rented';
+  const patch = {};
+  if (asset.usageStatus !== 'rented') patch.usageStatus = 'rented';
+  if (asset.condition !== condition) patch.condition = condition;
+  if (Object.keys(patch).length) db.update('assets', asset.id, patch, userId);
+}
+
+/** Cancels unpaid occurrences after `cutoff` (all of them when cutoff is null). */
+function cancelUnpaidOccurrences(db, userId, contractId, cutoff) {
+  const today = ledger.localDateForUser(db, userId);
+  db.findAll('rentOccurrences', userId).filter(item => item.contractId === contractId && (!cutoff || item.date > cutoff)).forEach(item => {
+    if (!occurrenceView(db, userId, item, today).paidMinor) db.update('rentOccurrences', item.id, { cancelled: true, cancelledAt: new Date().toISOString() }, userId);
+  });
 }
 
 function conditionsFor(db, userId, contractId) {
@@ -272,5 +311,6 @@ module.exports = {
   rentAlerts,
   CONTRACT_TYPES, CONTRACT_STATES, PERIODICITIES, CONDITION_METHODS, validDate, hash,
   validateContract, conditionsFor, applyCondition, generateOccurrences, occurrenceView,
-  validateAllocations, collectionView, intervalMonths
+  validateAllocations, collectionView, intervalMonths,
+  CONTRACT_KINDS, activeContractFor, hasOccurrences, afterContractWrite, cancelUnpaidOccurrences
 };

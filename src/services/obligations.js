@@ -1,6 +1,7 @@
 const crypto = require('crypto');
 const { generateRecurringInstances, addDaysDateOnly } = require('../utils/recurring');
 const ledger = require('./account-ledger');
+const rentals = require('./rentals');
 
 const COLLECTION = 'obligations';
 const OCCURRENCES = 'obligationOccurrences';
@@ -29,7 +30,7 @@ function occurrenceView(db, userId, occurrence, today) {
     .reduce((total, tx) => total + (Number.isSafeInteger(tx.amountMinor) ? tx.amountMinor : ledger.toMinorUnits(tx.monto, tx.currencyCode || occurrence.currencyCode) || 0), 0);
   const dueMinor = dueAmountFor(occurrence);
   const obligation = occurrence.status === 'cancelled' ? null : db.findById(COLLECTION, occurrence.obligationId, userId);
-  const split = obligation ? portionsFor(obligation, dueMinor) : { owner: dueMinor, tenant: 0 };
+  const split = obligation ? portionsFor(responsibilityFor(obligation, occurrence), dueMinor) : { owner: dueMinor, tenant: 0 };
   const base = { ...occurrence, actualDueAmount: ledger.fromMinorUnits(dueMinor, occurrence.currencyCode), totalPaid: ledger.fromMinorUnits(paidMinor, occurrence.currencyCode), paymentIds: payments.map(tx => tx.id) };
   if (split.tenant === 0) {
     // Legacy path: owner/third/none obligations keep the original expression untouched.
@@ -216,6 +217,35 @@ function portionsFor(obligation, dueMinor) {
   return { owner: due, tenant: 0 };
 }
 
+// A responsibility pinned on the occurrence wins over the live obligation, so changing the
+// obligation later never rewrites paid or past history.
+function responsibilityFor(obligation, occurrence) {
+  if (occurrence && occurrence.responsibilityType) {
+    return { responsibilityType: occurrence.responsibilityType, responsibilitySplit: occurrence.responsibilitySplit || null };
+  }
+  return { responsibilityType: obligation?.responsibilityType || 'owner', responsibilitySplit: obligation?.responsibilitySplit || null };
+}
+
+// Switches the live responsibility between owner and tenant. Past-dated or settled occurrences
+// are pinned to the previous responsibility first so their history does not change.
+function setResponsibility(db, userId, obligation, type) {
+  if (type !== 'owner' && type !== 'tenant') return failure('El tipo de responsabilidad no es válido');
+  let rentalContractId = obligation.rentalContractId || null;
+  if (type === 'tenant') {
+    const contract = obligation.assetId ? rentals.activeContractFor(db, userId, obligation.assetId) : null;
+    if (!contract) return failure('La responsabilidad del inquilino requiere un bien con contrato de alquiler activo');
+    rentalContractId = contract.id;
+  }
+  const today = ledger.localDateForUser(db, userId);
+  if (obligation.status !== 'cancelled') generateOccurrences(db, userId, obligation, null, addDaysDateOnly(today, -1));
+  db.findAll(OCCURRENCES, userId).filter(item => item.obligationId === obligation.id && !item.responsibilityType
+    && (item.date < today || paymentTransactions(db, userId, item.id).length || activeResolution(db, userId, item.id))).forEach(item => {
+    db.update(OCCURRENCES, item.id, { responsibilityType: obligation.responsibilityType || 'owner', responsibilitySplit: obligation.responsibilitySplit || null }, userId);
+  });
+  const updated = db.update(COLLECTION, obligation.id, { responsibilityType: type, responsibilitySplit: null, responsibleThirdEntityId: null, rentalContractId }, userId);
+  return { obligation: updated };
+}
+
 function validateResponsibility(db, userId, body, existing = null) {
   const merged = { ...existing, ...body };
   const type = merged.responsibilityType === undefined || merged.responsibilityType === null ? 'owner' : merged.responsibilityType;
@@ -348,8 +378,9 @@ function validateResolutionDocuments(db, userId, ids, occurrenceId, tenantEntity
 function createResolution(db, userId, obligation, occurrence, body = {}) {
   if (occurrence.status === 'cancelled') return failure('La ocurrencia está cancelada', 409);
   const dueMinor = dueAmountFor(occurrence);
-  const split = portionsFor(obligation, dueMinor);
-  if (!['tenant', 'shared'].includes(obligation.responsibilityType) || split.tenant <= 0) return failure('La obligación no tiene una parte a cargo del inquilino');
+  const responsibility = responsibilityFor(obligation, occurrence);
+  const split = portionsFor(responsibility, dueMinor);
+  if (!['tenant', 'shared'].includes(responsibility.responsibilityType) || split.tenant <= 0) return failure('La obligación no tiene una parte a cargo del inquilino');
   if (activeResolution(db, userId, occurrence.id)) return failure('La ocurrencia ya tiene una resolución activa', 409);
   const tenant = typeof body.tenantEntityId === 'string' ? db.findById('legalOwners', body.tenantEntityId, userId) : null;
   if (!tenant || !(tenant.roles || ['owner']).includes('tenant')) return failure('El inquilino no es válido');
@@ -363,7 +394,7 @@ function createResolution(db, userId, obligation, occurrence, body = {}) {
   if (body.currencyCode !== undefined && body.currencyCode !== occurrence.currencyCode) return failure('La moneda no coincide con la ocurrencia');
   const amountMinor = typeof body.amount === 'number' ? ledger.moneyInput(body.amount, occurrence.currencyCode) : null;
   if (amountMinor === null) return failure('El importe debe ser positivo y válido para la moneda');
-  if (obligation.responsibilityType === 'shared' && amountMinor > split.tenant) return failure('El importe supera la parte del inquilino');
+  if (responsibility.responsibilityType === 'shared' && amountMinor > split.tenant) return failure('El importe supera la parte del inquilino');
   const today = ledger.localDateForUser(db, userId);
   const resolvedAt = body.resolvedAt === undefined || body.resolvedAt === null || body.resolvedAt === '' ? today : body.resolvedAt;
   if (!validDate(resolvedAt)) return failure('La fecha de resolución no es válida');
@@ -373,7 +404,7 @@ function createResolution(db, userId, obligation, occurrence, body = {}) {
   const resolution = db.create(RESOLUTIONS, {
     occurrenceId: occurrence.id, obligationId: obligation.id, assetId: obligation.assetId || null,
     tenantEntityId: tenant.id, contractId, period: body.period,
-    portion: obligation.responsibilityType === 'tenant' ? 'full' : 'tenant_portion',
+    portion: responsibility.responsibilityType === 'tenant' ? 'full' : 'tenant_portion',
     amountMinor, currencyCode: occurrence.currencyCode, documentIds: documents.value,
     resolvedAt, notes: typeof body.notes === 'string' ? body.notes.trim() : '', status: 'active'
   }, userId);
@@ -409,5 +440,5 @@ function idempotencyDigest(key) {
 
 module.exports = {
   COLLECTION, OCCURRENCES, RESOLUTIONS, validDate, occurrenceView, activeResolution, createResolution, voidResolution, listResolutions, occurrencesFor,
-  validateDefinition, validateResponsibility, portionsFor, RESPONSIBILITY_TYPES, EXTERNAL_IDENTIFIER_TYPES, createObligation, updateOccurrence, paymentTransactions, getAlerts, idempotencyDigest, isScheduledOn
+  validateDefinition, validateResponsibility, portionsFor, responsibilityFor, setResponsibility, RESPONSIBILITY_TYPES, EXTERNAL_IDENTIFIER_TYPES, createObligation, updateOccurrence, paymentTransactions, getAlerts, idempotencyDigest, isScheduledOn
 };

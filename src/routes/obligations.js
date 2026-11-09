@@ -82,6 +82,16 @@ router.get('/:id', (req, res) => {
   res.json(responseFor(db, userId, obligation, options));
 });
 
+router.patch('/:id/responsibility', (req, res) => {
+  const db = req.app.locals.db;
+  const userId = req.session.userId;
+  const obligation = db.findById('obligations', req.params.id, userId);
+  if (!obligation) return res.status(404).json({ error: 'Obligación no encontrada' });
+  const result = obligations.setResponsibility(db, userId, obligation, (req.body || {}).responsibilityType);
+  if (result.error) return res.status(result.status || 400).json({ error: result.error });
+  res.json(responseFor(db, userId, result.obligation));
+});
+
 router.put('/:id', (req, res) => {
   const db = req.app.locals.db;
   const userId = req.session.userId;
