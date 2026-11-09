@@ -185,6 +185,16 @@ router.get('/:id/economics', (req, res) => {
   res.json(result);
 });
 
+router.get('/:id/monthly-view', (req, res) => {
+  const db = req.app.locals.db;
+  const userId = req.session.userId;
+  const asset = db.findById('assets', req.params.id, userId);
+  if (!asset) return res.status(404).json({ error: 'Bien no encontrado' });
+  const result = economicOverview.monthlyView(db, userId, asset, { from: req.query.from, to: req.query.to });
+  if (result.error) return res.status(400).json({ error: result.error });
+  res.json(result);
+});
+
 router.put('/:id', (req, res) => {
   const db = req.app.locals.db;
   const userId = req.session.userId;

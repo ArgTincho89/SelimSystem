@@ -1,6 +1,7 @@
 const ledger = require('./account-ledger');
 const obligations = require('./obligations');
 const rentals = require('./rentals');
+const alerts = require('./alerts');
 
 function validMonth(value) {
   return typeof value === 'string' && /^\d{4}-(0[1-9]|1[0-2])$/.test(value);
@@ -425,7 +426,139 @@ function assetEconomics(db, userId, asset, options = {}) {
   };
 }
 
+const MAX_MONTHLY_MONTHS = 120;
+
+function shiftMonth(month, delta) {
+  const date = new Date(Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5, 7)) - 1 + delta, 1));
+  return date.toISOString().slice(0, 7);
+}
+
+function addToMap(map, currency, minor) {
+  map[currency] = (map[currency] || 0) + minor;
+}
+
+function resolutionState(occurrence, resolution) {
+  if (!resolution) return { status: 'none', amountMinor: null };
+  const tenantDueMinor = ledger.toMinorUnits(occurrence.tenantDueAmount, occurrence.currencyCode);
+  const amountMinor = Number.isSafeInteger(resolution.amountMinor) ? resolution.amountMinor : null;
+  const partial = amountMinor !== null && tenantDueMinor && amountMinor < tenantDueMinor;
+  return { status: partial ? 'partial' : 'resolved', amountMinor };
+}
+
+/**
+ * Read-only month-by-month economic table for an asset. Lazily generated occurrences are kept in
+ * memory only (see alerts.readOnlyView); tenant resolutions are never added to expenses.
+ */
+function monthlyView(db, userId, asset, options = {}) {
+  const current = ledger.localDateForUser(db, userId).slice(0, 7);
+  const to = options.to === undefined || options.to === '' ? current : options.to;
+  const from = options.from === undefined || options.from === '' ? (validMonth(to) ? shiftMonth(to, -11) : to) : options.from;
+  if (!validMonth(from) || !validMonth(to)) return { error: 'Los meses deben tener formato YYYY-MM' };
+  if (from > to) return { error: 'El mes inicial no puede ser posterior al mes final' };
+  const months = monthsBetween(`${from}-01`, `${to}-01`);
+  if (months.length > MAX_MONTHLY_MONTHS) return { error: 'El rango no puede superar los 120 meses' };
+  const range = { from: `${from}-01`, to: monthRange(to).to };
+  const view = alerts.readOnlyView(db);
+  const byMonth = new Map(months.map(month => [month, {
+    month, rent: null, rentByCurrency: [], obligations: [], expensesMinorByCurrency: {}, incomeMinorByCurrency: {},
+    refundsMinorByCurrency: {}, recoveriesMinorByCurrency: {}, claims: [], documents: [], notes: []
+  }]));
+  const inRange = date => typeof date === 'string' && byMonth.has(date.slice(0, 7));
+  const dateOf = new Map();
+  const contracts = db.findAll('rentalContracts', userId).filter(contract => contract.assetId === asset.id);
+
+  const rentTotals = new Map();
+  contracts.forEach(contract => {
+    const until = contract.status === 'ended' && contract.endDate && contract.endDate < range.to ? contract.endDate : range.to;
+    rentals.generateOccurrences(view, userId, contract, until)
+      .filter(item => item.status !== 'cancelled' && inRange(item.date)).forEach(item => {
+        const key = `${item.date.slice(0, 7)}:${item.currencyCode}`;
+        const total = rentTotals.get(key) || { month: item.date.slice(0, 7), expectedMinor: 0, collectedMinor: 0, currencyCode: item.currencyCode };
+        total.expectedMinor += item.rentMinor;
+        total.collectedMinor += item.paidMinor;
+        rentTotals.set(key, total);
+        dateOf.set(`rentOccurrenceId:${item.id}`, item.date);
+      });
+  });
+  rentTotals.forEach(total => byMonth.get(total.month).rentByCurrency.push({
+    expectedMinor: total.expectedMinor, collectedMinor: total.collectedMinor,
+    differenceMinor: total.expectedMinor - total.collectedMinor, currencyCode: total.currencyCode
+  }));
+
+  const assetObligationIds = new Set();
+  db.findAll('obligations', userId).filter(obligation => obligation.assetId === asset.id).forEach(obligation => {
+    assetObligationIds.add(obligation.id);
+    let occurrences;
+    try {
+      occurrences = obligations.occurrencesFor(view, userId, obligation, range);
+    } catch {
+      return;
+    }
+    occurrences.filter(item => item.status !== 'cancelled' && inRange(item.date)).forEach(item => {
+      dateOf.set(`occurrenceId:${item.id}`, item.date);
+      const bucket = byMonth.get(item.date.slice(0, 7));
+      const state = resolutionState(item, item.resolution);
+      bucket.obligations.push({
+        occurrenceId: item.id, obligationId: obligation.id, title: item.title || obligation.title,
+        responsibilityType: obligation.responsibilityType || 'owner', date: item.date,
+        estimatedMinor: ledger.toMinorUnits(item.actualDueAmount, item.currencyCode),
+        actualMinor: ledger.toMinorUnits(item.totalPaid, item.currencyCode),
+        status: item.status, currencyCode: item.currencyCode,
+        documentIds: db.findAll('documents', userId).filter(doc => doc.occurrenceId === item.id).map(doc => doc.id),
+        resolutionStatus: state.status, resolutionAmountMinor: state.amountMinor
+      });
+      if (item.resolution?.notes) bucket.notes.push(`${item.title || obligation.title}: ${item.resolution.notes}`);
+    });
+  });
+
+  const economics = assetEconomics(view, userId, asset, { period: 'custom', from: range.from, to: range.to });
+  if (economics.error) return economics;
+  const recoveryTransactions = new Set(db.findAll('recoveries', userId).map(item => item.transactionId));
+  economics.movements.forEach(movement => {
+    const bucket = byMonth.get(movement.date.slice(0, 7));
+    if (!bucket) return;
+    dateOf.set(`transactionId:${movement.transactionId}`, movement.date);
+    if (movement.type === 'expense') addToMap(bucket.expensesMinorByCurrency, movement.currency, movement.amountMinor);
+    else if (movement.type === 'refund') addToMap(bucket.refundsMinorByCurrency, movement.currency, movement.amountMinor);
+    else if (recoveryTransactions.has(movement.transactionId)) addToMap(bucket.recoveriesMinorByCurrency, movement.currency, movement.amountMinor);
+    else addToMap(bucket.incomeMinorByCurrency, movement.currency, movement.amountMinor);
+  });
+
+  db.findAll('recoverableExpenseClaims', userId).filter(claim => claim.assetId === asset.id).forEach(claim => {
+    const source = db.findById('transactions', claim.transactionId, userId);
+    const bucket = source && byMonth.get(String(source.fecha).slice(0, 7));
+    if (!bucket) return;
+    const recovered = db.findAll('recoveries', userId).filter(item => item.claimId === claim.id).reduce((sum, item) => sum + item.amountMinor, 0);
+    bucket.claims.push({
+      claimId: claim.id, amountMinor: claim.recoverableMinor, currencyCode: claim.currencyCode,
+      recoveredMinor: recovered, status: recovered >= claim.recoverableMinor ? 'recovered' : recovered > 0 ? 'partial' : 'pending'
+    });
+  });
+
+  const contractIds = new Set(contracts.map(contract => contract.id));
+  db.findAll('documents', userId).forEach(doc => {
+    const linkedDate = dateOf.get(`occurrenceId:${doc.occurrenceId}`) || dateOf.get(`rentOccurrenceId:${doc.rentOccurrenceId}`)
+      || dateOf.get(`transactionId:${doc.transactionId}`);
+    const linked = linkedDate || doc.assetId === asset.id || assetObligationIds.has(doc.obligationId) || contractIds.has(doc.contractId);
+    const date = linkedDate || doc.uploadedAt;
+    if (!linked || !inRange(date)) return;
+    byMonth.get(date.slice(0, 7)).documents.push({ id: doc.id, title: doc.title, fileName: doc.fileName, contentType: doc.contentType, uploadedAt: doc.uploadedAt });
+  });
+
+  return {
+    assetId: asset.id, from, to,
+    months: months.map(month => {
+      const bucket = byMonth.get(month);
+      bucket.rent = bucket.rentByCurrency.length === 1 ? bucket.rentByCurrency[0]
+        : bucket.rentByCurrency.length === 0 ? { expectedMinor: 0, collectedMinor: 0, differenceMinor: 0, currencyCode: null } : null;
+      bucket.obligations.sort((a, b) => a.date.localeCompare(b.date) || String(a.title).localeCompare(String(b.title)));
+      return bucket;
+    })
+  };
+}
+
 module.exports = {
+  monthlyView,
   validMonth, monthRange, monthsBetween, postedMovements, actualMovements, globalOverview, allocationsForTransaction,
   movementAttributions, refundAllocations, periodForAsset, assetEconomics
 };
