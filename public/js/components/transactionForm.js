@@ -113,7 +113,7 @@ const TransactionForm = {
       create('label', { textContent: 'Interés % (opcional)', for: installmentInterestInput.id }), installmentInterestInput,
       create('small', { textContent: 'Con más de una cuota se crea una compra en cuotas: no se registra ningún gasto hasta contabilizar cada cuota.' })
     );
-    form.appendChild(installmentGroup);
+    // Appended after the date field (below) so "Monto" stays the first numeric input of the form.
     function creditCardSelected() {
       return paymentMethods.find(item => item.id === paymentMethodSelect.value)?.type === 'credit_card';
     }
@@ -316,6 +316,7 @@ const TransactionForm = {
     });
     dateGroup.appendChild(dateInput);
     form.appendChild(dateGroup);
+    form.appendChild(installmentGroup);
 
     const clasifGroup = create('div', { className: 'form-group' });
     clasifGroup.appendChild(create('label', { textContent: 'Clasificación' }));

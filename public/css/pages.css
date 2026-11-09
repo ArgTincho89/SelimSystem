@@ -486,6 +486,24 @@
   height: 22px;
 }
 
+/* Narrow screens: let every nav entry shrink so the whole bar fits the viewport.
+   Must live after the base .navbar-item rule above (min-width: 56px), which otherwise
+   overrides the equivalent rule in base.css and pushes the last entries off-screen. */
+@media (max-width: 540px) {
+  .navbar-item {
+    flex: 1 1 0;
+    min-width: 0;
+    padding-inline: 2px;
+  }
+
+  .navbar-item > span:not(.nav-badge) {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
 .account-card-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 180px), 1fr));
