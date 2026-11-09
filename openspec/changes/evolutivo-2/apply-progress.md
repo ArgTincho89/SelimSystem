@@ -26,3 +26,9 @@ Notes: when `condition` is omitted it is derived from `usageStatus` (rented -> r
 - [x] 4.2 POST /api/assets/form and PUT /api/assets/:id/form; non-null rental returns 400 until S6; assetResponse adds activeContract:null and obligations:[] placeholders
 
 Notes: validateAsset is injected into the service (no circular require). Holders starting today or later are edited/removed in place; older changed ones close at yesterday. obligationResponsibilities is only type-checked (S6 applies it). Tests in tests/routes/assets-form.test.js.
+
+## Slice S5 (asset form UI) - done
+- [x] 5.1 api.js `assets.saveForm(id|null, payload)`; assets.js "Nuevo bien" rewritten per request.md (Titular rows with "Agregar titular" and % when >1, Titulo, per-type fields, Notas); edit prefills open holders; list/detail show new fields; "Datos anteriores" read-only section only when legacy values exist
+- [x] 5.2 sw.js cache v28; tests/ui/evolutivo2-s5-contract.test.js; S2 contract test relaxed to a versioned cache name
+
+Notes: `documents.contentUrl` already existed. Single-titular edits resend the stored percentage (or null) so unchanged holders are not rewritten. `div[data-slot="rental-and-obligations"]` is the mount point for S7 (rental block + obligations). Condition Alquilado/Usufructo is sent with `rental: null` until S6/S7.

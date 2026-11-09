@@ -149,6 +149,7 @@ const API = {
     },
     create(data) { return API.post('/assets', data); },
     update(id, data) { return API.put(`/assets/${id}`, data); },
+    saveForm(id, payload) { return id ? API.put(`/assets/${encodeURIComponent(id)}/form`, payload) : API.post('/assets/form', payload); },
     addOwnership(id, data) { return API.post(`/assets/${id}/ownerships`, data); },
     closeOwnership(id, ownershipId, endDate) { return API.patch(`/assets/${id}/ownerships/${ownershipId}`, { endDate }); }
   },

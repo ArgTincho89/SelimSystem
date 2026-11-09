@@ -44,7 +44,7 @@ describe('Evolutivo 2 S2 party UI contract', () => {
     expect(app).not.toContain('data-route="/entities"');
   });
 
-  it('bumps the service worker cache to v27', () => {
-    expect(read('sw.js')).toContain("CACHE_NAME = 'selimsystem-v27'");
+  it('keeps a versioned service worker cache', () => {
+    expect(read('sw.js')).toContain("CACHE_NAME = 'selimsystem-v");
   });
 });

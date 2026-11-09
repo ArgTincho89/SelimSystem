@@ -55,8 +55,8 @@ const AssetsPage = {
     const list = create('div', { style: { display: 'grid', gap: '10px' } });
     this.assets.forEach(asset => {
       const meta = asset.type === 'immovable'
-        ? [asset.propertyType, this.usageLabel(asset.usageStatus), [asset.locality, asset.province, asset.country].filter(Boolean).join(', ')].filter(Boolean).join(' · ')
-        : [asset.subtype, asset.location].filter(Boolean).join(' · ');
+        ? [this.optionLabel(this.propertyKindOptions(), asset.propertyKind) || asset.propertyType, this.optionLabel(this.conditionOptions(), asset.condition) || this.usageLabel(asset.usageStatus), asset.location || [asset.locality, asset.province, asset.country].filter(Boolean).join(', ')].filter(Boolean).join(' · ')
+        : [asset.brand, asset.plate, asset.subtype, asset.location].filter(Boolean).join(' · ');
       const card = create('article', { className: 'card', style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: 'wrap' } });
       const details = create('div', {}, [
         create('strong', { textContent: asset.name }),
@@ -117,112 +117,145 @@ const AssetsPage = {
     return control;
   },
 
+  propertyKindOptions() {
+    return [['departamento', 'Departamento'], ['casa', 'Casa'], ['galpon', 'Galpón'], ['lote', 'Lote']];
+  },
+
+  conditionOptions() {
+    return [['rented', 'Alquilado'], ['not_rented', 'No alquilado'], ['usufruct', 'Usufructo']];
+  },
+
+  optionLabel(options, value) {
+    return options.find(([key]) => key === value)?.[1] || '';
+  },
+
+  parseIntegerField(control, label) {
+    const raw = control.value.trim();
+    if (raw === '') return { value: null };
+    if (!/^\d+$/.test(raw)) return { error: `${label} debe ser un número entero igual o mayor que cero` };
+    return { value: Number(raw) };
+  },
+
   showAssetModal(asset = null) {
     const editing = Boolean(asset);
     const form = create('div', { style: { maxHeight: '65vh', overflowY: 'auto', paddingRight: '4px' } });
     const typeControl = this.select([['movable', 'Mueble'], ['immovable', 'Inmueble']], asset?.type || 'movable');
     if (editing) typeControl.disabled = true;
-    const typeGroup = create('div', { className: 'form-group' }, [create('label', { textContent: 'Clasificación' }), typeControl]);
-    form.appendChild(typeGroup);
-    const name = this.addField(form, 'Nombre', { value: asset?.name || '', required: true });
-    const description = this.addField(form, 'Descripción', { value: asset?.description || '', multiline: true });
-    const acquisitionDate = this.addField(form, 'Fecha de adquisición', { type: 'date', value: asset?.acquisitionDate || '' });
-    const acquisitionValue = this.addField(form, 'Valor de adquisición', { type: 'number', value: asset?.acquisitionValue ?? '', min: 0, step: '0.01' });
-    const status = this.addField(form, 'Estado (por ejemplo: activo, vendido, baja)', { value: asset?.status || 'active' });
-    const statusNotes = this.addField(form, 'Nota del cambio de estado', { value: '' });
-    const notes = this.addField(form, 'Notas', { value: asset?.notes || '', multiline: true });
+    form.appendChild(create('div', { className: 'form-group' }, [create('label', { textContent: 'Clasificación' }), typeControl]));
+
+    // Titular block (shared by both types)
+    const ownersSection = create('section', { className: 'form-group' });
+    ownersSection.appendChild(create('label', { textContent: 'Titular' }));
+    const ownerRows = create('div', { style: { display: 'grid', gap: '8px' } });
+    const ownerHint = create('small', { className: 'text-muted' });
+    const ownerChoices = [['', 'Seleccionar titular'], ...this.owners.filter(owner => (owner.roles || ['owner']).includes('owner')).map(owner => [owner.id, owner.name])];
+    const prefilled = new Map();
+    const refreshOwners = () => {
+      const rows = [...ownerRows.querySelectorAll('[data-owner-row]')];
+      const multiple = rows.length > 1;
+      rows.forEach(row => {
+        row._fields.percentageGroup.style.display = multiple ? '' : 'none';
+        row._fields.remove.style.display = multiple ? '' : 'none';
+      });
+      const sum = rows.reduce((total, row) => total + (Number(row._fields.percentage.value) || 0), 0);
+      ownerHint.textContent = multiple ? `Total: ${Math.round(sum * 100) / 100}% (debe sumar 100%)` : '';
+    };
+    const addOwnerRow = (record = {}) => {
+      const row = create('div', { className: 'card', style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '8px', padding: '10px' } });
+      const select = this.select(ownerChoices, record.ownerId || '');
+      select.setAttribute('aria-label', 'Titular');
+      const percentage = create('input', { className: 'form-control', type: 'text', inputMode: 'decimal', placeholder: '%', value: record.percentage ?? '', 'aria-label': 'Porcentaje' });
+      const percentageGroup = create('label', {}, [create('span', { textContent: 'Porcentaje (%)' }), percentage]);
+      const remove = create('button', { className: 'btn btn-ghost btn-sm', type: 'button', textContent: 'Quitar', onClick: () => { row.remove(); refreshOwners(); } });
+      row.append(create('label', {}, [create('span', { textContent: 'Titular' }), select]), percentageGroup, remove);
+      row.dataset.ownerRow = 'true';
+      row._fields = { select, percentage, percentageGroup, remove };
+      on(percentage, 'input', refreshOwners);
+      ownerRows.appendChild(row);
+      refreshOwners();
+    };
+    const openHolders = (asset?.ownerships || []).filter(record => !record.endDate);
+    openHolders.forEach(record => prefilled.set(record.ownerId, record.percentage ?? null));
+    if (openHolders.length) openHolders.forEach(record => addOwnerRow({ ownerId: record.ownerId, percentage: record.percentage }));
+    else addOwnerRow();
+    ownersSection.append(ownerRows, ownerHint, create('button', { className: 'btn btn-ghost btn-sm', type: 'button', textContent: 'Agregar titular', style: { marginTop: '8px' }, onClick: () => addOwnerRow() }));
+    form.appendChild(ownersSection);
+
+    const title = this.addField(form, 'Título', { value: asset?.name || '', required: true });
     const kindFields = create('div');
     form.appendChild(kindFields);
+    const fields = {};
     const renderKind = () => {
       kindFields.replaceChildren();
+      Object.keys(fields).forEach(key => delete fields[key]);
+      const same = asset?.type === typeControl.value;
       if (typeControl.value === 'movable') {
-        this.addField(kindFields, 'Subtipo', { value: asset?.type === 'movable' ? asset.subtype || '' : '', placeholder: 'Por ejemplo: vehículo, mobiliario, equipo' }).dataset.field = 'subtype';
-        this.addField(kindFields, 'Ubicación', { value: asset?.location || '' }).dataset.field = 'location';
+        const group = create('div', { className: 'form-group' }, [create('label', { textContent: 'Tipo' })]);
+        fields.vehicleType = this.select([['automovil', 'Automóvil']], asset?.vehicleType || 'automovil');
+        group.appendChild(fields.vehicleType);
+        kindFields.appendChild(group);
+        fields.brand = this.addField(kindFields, 'Marca', { value: same ? asset.brand || '' : '' });
+        fields.plate = this.addField(kindFields, 'Dominio', { value: same ? asset.plate || '' : '' });
+        fields.mileage = this.addField(kindFields, 'KMs', { value: same ? asset.mileage || '' : '' });
+        fields.color = this.addField(kindFields, 'Color', { value: same ? asset.color || '' : '' });
       } else {
-        this.addField(kindFields, 'Tipo de inmueble', { value: asset?.type === 'immovable' ? asset.propertyType || '' : '', placeholder: 'Casa, departamento, terreno...' }).dataset.field = 'propertyType';
-        this.addField(kindFields, 'Dirección', { value: asset?.type === 'immovable' ? asset.address || '' : '' }).dataset.field = 'address';
-        this.addField(kindFields, 'Localidad', { value: asset?.type === 'immovable' ? asset.locality || '' : '' }).dataset.field = 'locality';
-        this.addField(kindFields, 'Provincia', { value: asset?.type === 'immovable' ? asset.province || '' : '' }).dataset.field = 'province';
-        this.addField(kindFields, 'País', { value: asset?.type === 'immovable' ? asset.country || '' : '' }).dataset.field = 'country';
-        this.addField(kindFields, 'Superficie (m²)', { type: 'number', min: 0, step: '0.01', value: asset?.type === 'immovable' ? asset.area ?? '' : '' }).dataset.field = 'area';
-        const usageGroup = create('div', { className: 'form-group' }, [create('label', { textContent: 'Uso actual' })]);
-        usageGroup.appendChild(this.select(this.usageOptions(), asset?.type === 'immovable' ? asset.usageStatus || 'vacant' : 'vacant'));
-        kindFields.appendChild(usageGroup);
+        const group = create('div', { className: 'form-group' }, [create('label', { textContent: 'Tipo' })]);
+        fields.propertyKind = this.select([['', 'Seleccionar tipo'], ...this.propertyKindOptions()], same ? asset.propertyKind || '' : '');
+        group.appendChild(fields.propertyKind);
+        kindFields.appendChild(group);
+        fields.characteristics = this.addField(kindFields, 'Características', { value: same ? asset.characteristics || '' : '', multiline: true });
+        fields.location = this.addField(kindFields, 'Ubicación', { value: same ? asset.location || '' : '' });
+        fields.coveredAreaM2 = this.addField(kindFields, 'Superficie cubierta (m²)', { type: 'number', min: 0, step: '1', value: same ? asset.coveredAreaM2 ?? '' : '' });
+        fields.freeAreaM2 = this.addField(kindFields, 'Superficie libre (m²)', { type: 'number', min: 0, step: '1', value: same ? asset.freeAreaM2 ?? '' : '' });
+        fields.ageYears = this.addField(kindFields, 'Antigüedad', { type: 'number', min: 0, step: '1', value: same ? asset.ageYears ?? '' : '' });
+        const conditionGroup = create('div', { className: 'form-group' }, [create('label', { textContent: 'Condición' })]);
+        fields.condition = this.select(this.conditionOptions(), same ? asset.condition || 'not_rented' : 'not_rented');
+        conditionGroup.appendChild(fields.condition);
+        kindFields.appendChild(conditionGroup);
+        // Mount point for the rental block and the obligations section (evolutivo-2 S7).
+        kindFields.appendChild(create('div', { dataset: { slot: 'rental-and-obligations' } }));
       }
     };
     typeControl.addEventListener('change', renderKind);
     renderKind();
-
-    const ownersSection = create('section', { style: { borderTop: '1px solid var(--border-color)', marginTop: '12px', paddingTop: '12px' } });
-    if (editing) ownersSection.style.display = 'none';
-    ownersSection.appendChild(create('h4', { textContent: 'Titulares legales', style: { marginBottom: '8px' } }));
-    const ownerRows = create('div', { style: { display: 'grid', gap: '8px' } });
-    ownersSection.appendChild(ownerRows);
-    const ownerForm = create('div', { style: { display: 'none', marginTop: '8px' } });
-    const newOwnerName = this.addField(ownerForm, 'Nombre legal');
-    const newOwnerKind = this.select([['person', 'Persona'], ['entity', 'Entidad']]);
-    ownerForm.append(create('label', { textContent: 'Tipo', style: { display: 'block', marginBottom: '5px' } }), newOwnerKind);
-    const ownerSave = create('button', { className: 'btn btn-secondary btn-sm', type: 'button', textContent: 'Guardar titular', style: { marginTop: '8px' } });
-    ownerForm.appendChild(ownerSave);
-    ownersSection.append(ownerForm, create('button', { className: 'btn btn-ghost btn-sm', type: 'button', textContent: '+ Crear persona o entidad', style: { marginTop: '8px' }, onClick: () => { ownerForm.style.display = ownerForm.style.display === 'none' ? '' : 'none'; } }));
-    form.appendChild(ownersSection);
-    const addOwnerRow = (record = {}) => {
-      const row = create('div', { className: 'card', style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '8px', padding: '10px' } });
-      const select = this.select([['', 'Seleccionar titular'], ...this.owners.filter(owner => (owner.roles || ['owner']).includes('owner')).map(owner => [owner.id, `${owner.name} (${owner.kind === 'person' ? 'persona' : 'entidad'})`])], record.ownerId || '');
-      const percentage = create('input', { className: 'form-control', type: 'number', min: '0', max: '100', step: '0.01', placeholder: 'Porcentaje', value: record.percentage ?? '' });
-      const startDate = create('input', { className: 'form-control', type: 'date', value: record.startDate || new Date().toISOString().slice(0, 10) });
-      const ownerNotes = create('input', { className: 'form-control', type: 'text', placeholder: 'Nota de titularidad', value: record.notes || '' });
-      row.append(create('label', {}, [create('span', { textContent: 'Titular' }), select]), create('label', {}, [create('span', { textContent: 'Porcentaje informativo' }), percentage]), create('label', {}, [create('span', { textContent: 'Desde' }), startDate]), create('label', {}, [create('span', { textContent: 'Notas' }), ownerNotes]));
-      row.dataset.ownerRow = 'true';
-      row._ownershipFields = { select, percentage, startDate, ownerNotes };
-      const remove = create('button', { className: 'btn btn-ghost btn-sm', type: 'button', textContent: 'Quitar', onClick: () => row.remove() });
-      row.appendChild(remove);
-      ownerRows.appendChild(row);
-    };
-    if (!editing) (asset?.ownerships || []).forEach(addOwnerRow);
-    const addOwnerButton = create('button', { className: 'btn btn-ghost btn-sm', type: 'button', textContent: '+ Añadir titular', style: { marginTop: '8px' }, onClick: () => addOwnerRow() });
-    ownersSection.appendChild(addOwnerButton);
-    ownerSave.addEventListener('click', async () => {
-      const label = newOwnerName.value.trim();
-      if (!label) return showToast('El nombre legal es obligatorio', 'error');
-      try {
-        const created = await API.owners.create({ name: label, kind: newOwnerKind.value });
-        this.owners.push(created);
-        addOwnerRow({ ownerId: created.id });
-        newOwnerName.value = '';
-        ownerForm.style.display = 'none';
-        showToast('Titular creado');
-      } catch (error) { showToast(error.message, 'error'); }
-    });
+    const notes = this.addField(form, 'Notas', { value: asset?.notes || '', multiline: true });
 
     const footer = create('div', { style: { display: 'flex', gap: '8px' } }, [
       create('button', { className: 'btn btn-ghost', type: 'button', textContent: 'Cancelar', onClick: () => Modal.hide() }),
       create('button', { className: 'btn btn-primary', type: 'button', textContent: editing ? 'Guardar cambios' : 'Crear bien' })
     ]);
     on(footer.lastChild, 'click', async () => {
-      const data = {
-        type: typeControl.value, name: name.value.trim(), description: description.value.trim(),
-        acquisitionDate: acquisitionDate.value || null, acquisitionValue: acquisitionValue.value === '' ? null : Number(acquisitionValue.value),
-        status: status.value.trim(), statusNotes: statusNotes.value.trim(), notes: notes.value.trim()
-      };
+      const payload = { type: typeControl.value, name: title.value.trim(), notes: notes.value.trim() };
+      if (!payload.name) return showToast('El título es obligatorio', 'error');
       if (typeControl.value === 'movable') {
-        data.subtype = $('[data-field="subtype"]', kindFields).value.trim();
-        data.location = $('[data-field="location"]', kindFields).value.trim();
+        payload.vehicleType = fields.vehicleType.value;
+        ['brand', 'plate', 'mileage', 'color'].forEach(key => { payload[key] = fields[key].value.trim(); });
       } else {
-        data.propertyType = $('[data-field="propertyType"]', kindFields).value.trim();
-        ['address', 'locality', 'province', 'country'].forEach(key => data[key] = $(`[data-field="${key}"]`, kindFields).value.trim());
-        const areaValue = $('[data-field="area"]', kindFields).value;
-        data.area = areaValue === '' ? null : Number(areaValue);
-        data.usageStatus = $('select', kindFields).value;
+        if (!fields.propertyKind.value) return showToast('El tipo de inmueble es obligatorio', 'error');
+        payload.propertyKind = fields.propertyKind.value;
+        payload.characteristics = fields.characteristics.value.trim();
+        payload.location = fields.location.value.trim();
+        payload.condition = fields.condition.value;
+        const labels = { coveredAreaM2: 'La superficie cubierta', freeAreaM2: 'La superficie libre', ageYears: 'La antigüedad' };
+        for (const key of Object.keys(labels)) {
+          const parsed = this.parseIntegerField(fields[key], labels[key]);
+          if (parsed.error) return showToast(parsed.error, 'error');
+          payload[key] = parsed.value;
+        }
       }
-      const ownerships = [...ownerRows.querySelectorAll('[data-owner-row]')].map(row => {
-        const fields = row._ownershipFields;
-        return { ownerId: fields.select.value, percentage: fields.percentage.value === '' ? null : Number(fields.percentage.value), startDate: fields.startDate.value, notes: fields.ownerNotes.value.trim() };
-      }).filter(item => item.ownerId);
-      if (!editing) data.ownerships = ownerships;
+      const rows = [...ownerRows.querySelectorAll('[data-owner-row]')].map(row => row._fields).filter(item => item.select.value);
+      if (!rows.length) return showToast('Debe indicar al menos un titular', 'error');
+      const owners = rows.map(item => {
+        if (rows.length === 1) return { ownerId: item.select.value, percentage: prefilled.get(item.select.value) ?? null };
+        const percentage = Number(item.percentage.value.replace(',', '.'));
+        return { ownerId: item.select.value, percentage: item.percentage.value.trim() === '' ? null : percentage };
+      });
+      if (owners.length > 1) {
+        if (owners.some(item => !(item.percentage > 0))) return showToast('Cada titular debe tener un porcentaje mayor que 0', 'error');
+        if (Math.abs(owners.reduce((total, item) => total + item.percentage, 0) - 100) > 0.01) return showToast('El total de los porcentajes debe ser 100', 'error');
+      }
       try {
-        if (editing) await API.assets.update(asset.id, data);
-        else await API.assets.create(data);
+        await API.assets.saveForm(editing ? asset.id : null, { asset: payload, owners, rental: null, obligationResponsibilities: [] });
         Modal.hide();
         showToast(editing ? 'Bien actualizado' : 'Bien creado');
         this.render();
@@ -231,19 +264,41 @@ const AssetsPage = {
     Modal.show(editing ? 'Editar bien' : 'Nuevo bien', form, { footer });
   },
 
+  legacyLines(asset) {
+    const lines = [];
+    const add = (label, value) => { if (value !== undefined && value !== null && value !== '') lines.push(`${label}: ${value}`); };
+    add('Descripción', asset.description);
+    add('Adquisición', [asset.acquisitionDate, asset.acquisitionValue != null ? asset.acquisitionValue : ''].filter(value => value !== '' && value !== null && value !== undefined).join(' · '));
+    add('Estado', asset.status && asset.status !== 'active' ? asset.status : '');
+    add('Subtipo', asset.subtype);
+    add('Tipo de inmueble (texto libre)', asset.propertyType);
+    add('Dirección', [asset.address, asset.locality, asset.province, asset.country].filter(Boolean).join(', '));
+    add('Superficie (m²)', asset.area);
+    add('Uso actual', asset.condition ? '' : this.usageLabel(asset.usageStatus));
+    return lines;
+  },
+
+  renderLegacyData(asset, container) {
+    const lines = this.legacyLines(asset);
+    if (!lines.length) return;
+    const section = create('section', { style: { borderTop: '1px solid var(--border-color)', marginTop: '12px', paddingTop: '8px' } });
+    section.appendChild(create('h4', { textContent: 'Datos anteriores' }));
+    lines.forEach(text => section.appendChild(create('p', { className: 'text-muted', style: { margin: '4px 0' }, textContent: text })));
+    container.appendChild(section);
+  },
+
   async showDetails(id) {
     try {
       const asset = await API.assets.get(id);
       const body = create('div', { style: { maxHeight: '65vh', overflowY: 'auto' } });
-      body.append(create('p', { textContent: `${asset.type === 'immovable' ? 'Inmueble' : 'Mueble'} · Estado: ${asset.status}` }));
-      if (asset.description) body.appendChild(create('p', { textContent: asset.description }));
-      if (asset.type === 'immovable') {
-        body.appendChild(create('p', { textContent: `Tipo: ${asset.propertyType || 'Sin especificar'} · Uso: ${this.usageLabel(asset.usageStatus)}${asset.area != null ? ` · Superficie: ${asset.area} m²` : ''}` }));
-      } else if (asset.subtype) body.appendChild(create('p', { textContent: `Subtipo: ${asset.subtype}` }));
-      if (asset.acquisitionDate || asset.acquisitionValue != null) body.appendChild(create('p', { textContent: `Adquisición: ${asset.acquisitionDate || 'Fecha no indicada'}${asset.acquisitionValue != null ? ` · ${asset.acquisitionValue}` : ''}` }));
-      const location = asset.type === 'immovable' ? [asset.address, asset.locality, asset.province, asset.country].filter(Boolean).join(', ') : asset.location;
-      if (location) body.appendChild(create('p', { textContent: `Ubicación: ${location}` }));
+      body.append(create('p', { textContent: `${asset.type === 'immovable' ? 'Inmueble' : 'Mueble'}${asset.type === 'immovable' && asset.condition ? ` · ${this.optionLabel(this.conditionOptions(), asset.condition)}` : ''}` }));
+      const typed = asset.type === 'immovable'
+        ? [['Tipo', this.optionLabel(this.propertyKindOptions(), asset.propertyKind)], ['Características', asset.characteristics], ['Ubicación', asset.location],
+          ['Superficie cubierta', asset.coveredAreaM2 != null ? `${asset.coveredAreaM2} m²` : ''], ['Superficie libre', asset.freeAreaM2 != null ? `${asset.freeAreaM2} m²` : ''], ['Antigüedad', asset.ageYears != null ? asset.ageYears : '']]
+        : [['Tipo', asset.vehicleType === 'automovil' ? 'Automóvil' : ''], ['Marca', asset.brand], ['Dominio', asset.plate], ['KMs', asset.mileage], ['Color', asset.color]];
+      typed.forEach(([label, value]) => { if (value !== '' && value != null) body.appendChild(create('p', { style: { margin: '4px 0' }, textContent: `${label}: ${value}` })); });
       if (asset.notes) body.appendChild(create('p', { textContent: `Notas: ${asset.notes}` }));
+      this.renderLegacyData(asset, body);
       await this.renderAssetFile(asset, body);
       await this.renderRecoveries(asset, body);
       await this.renderEconomicAnalysis(asset, body);
