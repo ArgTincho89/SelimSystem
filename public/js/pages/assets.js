@@ -643,7 +643,7 @@ const AssetsPage = {
     Modal.show('Actualizar condición de alquiler', body, { footer });
   },
 
-  async showRentCollectionModal(asset, contract, selectedOccurrenceId = null) {
+  async showRentCollectionModal(asset, contract, selectedOccurrenceId = null, onDone = null) {
     try {
       const [fullContract, accounts, paymentMethods] = await Promise.all([API.rentals.get(contract.id), API.accounts.list(), API.finance.paymentMethods()]);
       const open = fullContract.occurrences.filter(item => item.remainingMinor > 0 && item.status !== 'cancelled');
@@ -679,7 +679,8 @@ const AssetsPage = {
             idempotencyKey: crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}-rent`
           });
           showToast('Cobro registrado en los ingresos reales');
-          await this.showDetails(asset.id);
+          Modal.hide();
+          await (onDone ? onDone() : this.showDetails(asset.id));
         } catch (error) { showToast(error.message, 'error'); }
       } })]);
       Modal.show(`Registrar cobro · ${contract.currencyCode}`, body, { footer });

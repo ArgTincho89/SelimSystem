@@ -6,8 +6,28 @@ const ObligationsPage = {
   accounts: [],
   paymentMethods: [],
   alerts: [],
+  onChange: null,
 
-  async render(filters = {}) {
+  // Loads the lookups the payment/resolution dialogs need, so they can run from the alerts center.
+  async loadLookups() {
+    const [owners, categories, accounts, paymentMethods] = await Promise.all([API.owners.list(), API.categories.list(), API.accounts.list(), API.finance.paymentMethods()]);
+    this.owners = owners;
+    this.categories = categories;
+    this.accounts = accounts.filter(account => account.activo);
+    this.paymentMethods = paymentMethods;
+  },
+
+  // After a change, either re-render this page or call the hook installed by another page.
+  async refresh() {
+    if (this.onChange) {
+      const callback = this.onChange;
+      this.onChange = null;
+      await callback();
+    } else await this.render();
+  },
+
+  async render(filters = {}, focusId = null) {
+    this.onChange = null;
     const content = $('#page-content');
     $('#navbar').style.display = '';
     content.style.paddingBottom = '';
@@ -24,9 +44,17 @@ const ObligationsPage = {
       this.alerts = alerts;
       this.paymentMethods = paymentMethods;
       this.renderContent(content, filters);
+      if (focusId) this.focusObligation(content, focusId);
     } catch (error) {
       content.replaceChildren(create('div', { className: 'empty-state', textContent: `No se pudieron cargar las obligaciones: ${error.message}` }));
     }
+  },
+
+  focusObligation(content, id) {
+    const card = [...content.querySelectorAll('[data-obligation-id]')].find(item => item.dataset.obligationId === id);
+    if (!card) return;
+    card.style.outline = '2px solid var(--accent)';
+    card.scrollIntoView?.({ block: 'center' });
   },
 
   renderContent(content, filters = {}) {
@@ -95,7 +123,7 @@ const ObligationsPage = {
       ...(item.externalIdentifier ? [create('div', { className: 'text-muted', textContent: `${this.identifierTypeLabel(item.externalIdentifierType)}: ${item.externalIdentifier}` })] : []),
       create('div', { className: 'text-muted', textContent: `${item.estimatedAmount} ${item.currencyCode} estimado · ${item.recurrenceFrequency ? this.frequencyLabel(item.recurrenceFrequency) : 'Única vez'} · Aviso ${item.reminderLeadDays} días` })
     ]);
-    const card = create('article', { className: 'card', style: { display: 'grid', gap: '10px' } }, [details]);
+    const card = create('article', { className: 'card', style: { display: 'grid', gap: '10px' }, dataset: { obligationId: item.id } }, [details]);
     const occurrences = (item.occurrences || []).filter(occurrence => occurrence.status !== 'cancelled').slice(-8);
     if (occurrences.length) {
       const table = create('div', { style: { display: 'grid', gap: '6px' } });
@@ -305,7 +333,7 @@ const ObligationsPage = {
           tenantEntityId: tenant.value, period: period.value, amount: Number(amount.value), resolvedAt: resolvedAt.value, documentIds, notes: notes.value
         });
         Modal.hide();
-        await this.render();
+        await this.refresh();
       } catch (error) { alert(error.message); }
     });
     Modal.show('Resolver obligación pagada por el inquilino', form);
@@ -363,7 +391,7 @@ const ObligationsPage = {
   },
 
   async runAction(action) {
-    try { await action(); await this.render(); }
+    try { await action(); await this.refresh(); }
     catch (error) { alert(error.message); }
   },
 

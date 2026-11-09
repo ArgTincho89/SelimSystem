@@ -67,4 +67,14 @@ Notes: a resolution persists after the obligation responsibility is later change
 
 Tests: tests/ui/evolutivo-s5-contract.test.js.
 
-## Remaining: S6, S7, S9
+## S6 - Phase 3 (done; commits S6a backend, S6b frontend)
+
+- [x] 6.1 `src/services/alerts.js` `list(db, userId, {from,to,type,assetId,holderId,limit})`: read-only (obligations and rent occurrences are generated through an in-memory `readOnlyView`, ids `virtual:*`, never persisted; alerts then carry `occurrenceId: null`). Types: `obligation_due` (obligation `reminderLeadDays`), `obligation_overdue` (always), `partial_payment`, `tenant_obligation_pending` (suppressed by active resolution; shared only once the owner portion is paid), `rent_due` (lead = account settings `alertLeadDays`, overdue included), `contract_expiry` (30 days), `rent_adjustment_due` (derived from future `rentalConditions`, 30 days), `card_installment_due` (plan `reminderLeadDays`, overdue included), `account_forecast` (via `forecastAccount`, not `refreshAlerts`, which writes), `document_pending` (paid owner occurrences of the last 60 days with no receipt linked to the occurrence or its payment transactions). `resolved`/cancelled excluded, `none` responsibility yields no payment alerts, dedupe by id, sorted by date then id, default horizon 90 days, default limit 200. `rentals.rentAlerts` helper added.
+- [x] 6.2 `src/routes/alerts.js` (`GET /api/alerts`, registered in `src/app.js`): validates dates and `from <= to`, `type`, user-owned `assetId`/`holderId`, `limit` 1-1000, repeated params.
+- [x] 6.3 Frontend: `API.getAlerts`/`API.alerts.list`; new `public/js/pages/alerts.js` page at `#/avisos` (nav entry with count badge, grouped by type, type/asset filters, Spanish messages, direct actions: Registrar pago, Adjuntar comprobante, Resolver, Contabilizar cuota, Registrar cobro, Ver obligación/bien). Reuse hooks: `ObligationsPage.loadLookups/refresh/onChange` and focus (`?focus=`), `AssetsPage.showRentCollectionModal(..., onDone)`, `#/assets?asset=`. Existing per-source widgets untouched. `public/sw.js` -> `selimsystem-v23` (+ `alerts.js` cached).
+
+Tests: tests/routes/alerts.test.js, tests/services/alerts.test.js, tests/ui/evolutivo-s6-contract.test.js.
+
+Notes: `document_pending` and the installment "En N días" message follow the business examples; amounts use es-AR formatting with a currency symbol (`$`, `€`, `US$`). Historical never-generated past occurrences of an active obligation surface as overdue (same as the pre-existing `getAlerts`).
+
+## Remaining: S7, S9

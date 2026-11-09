@@ -154,6 +154,16 @@ const API = {
     update(id, data) { return API.put(`/owners/${id}`, data); }
   },
 
+  alerts: {
+    list(filters = {}) {
+      const query = new URLSearchParams(Object.entries(filters).filter(([, value]) => value !== '' && value != null));
+      const serialized = query.toString();
+      return API.get(`/alerts${serialized ? `?${serialized}` : ''}`);
+    }
+  },
+
+  getAlerts(filters = {}) { return API.alerts.list(filters); },
+
   installments: {
     plans() { return API.get('/installments/plans'); },
     createPlan(data) { return API.post('/installments/plans', data); },

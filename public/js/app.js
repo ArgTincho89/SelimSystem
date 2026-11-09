@@ -27,9 +27,17 @@ const App = {
       const [accountAlerts, rentAlerts] = await Promise.all([API.accounts.alerts(), API.rentals.alerts()]);
       const item = document.querySelector('#navbar [data-route="/settings"]');
       if (item) item.classList.toggle('has-alert', accountAlerts.length + rentAlerts.length > 0);
+      this.setAlertBadge((await API.getAlerts()).length);
     } catch {
       // The alert indicator is non-critical.
     }
+  },
+
+  setAlertBadge(count) {
+    const item = document.querySelector('#navbar [data-route="/avisos"]');
+    if (!item) return;
+    item.querySelector('.nav-badge')?.remove();
+    if (count > 0) item.appendChild(create('span', { className: 'nav-badge', textContent: count > 99 ? '99+' : String(count) }));
   },
 
   async init() {
@@ -66,17 +74,22 @@ const App = {
       if (!this.user) return Router.navigate('/login');
       CategoriesPage.render();
     });
-    Router.register('/assets', () => {
+    Router.register('/avisos', (params) => {
       if (!this.user) return Router.navigate('/login');
-      AssetsPage.render();
+      AlertsPage.render(params);
+    });
+    Router.register('/assets', async (params) => {
+      if (!this.user) return Router.navigate('/login');
+      await AssetsPage.render();
+      if (params.asset) await AssetsPage.showDetails(params.asset);
     });
     Router.register('/entities', () => {
       if (!this.user) return Router.navigate('/login');
       EntitiesPage.render();
     });
-    Router.register('/obligations', () => {
+    Router.register('/obligations', (params) => {
       if (!this.user) return Router.navigate('/login');
-      ObligationsPage.render();
+      ObligationsPage.render({}, params.focus);
     });
     Router.register('/profile', () => {
       if (!this.user) return Router.navigate('/login');
@@ -113,6 +126,12 @@ const App = {
           <polyline points="9 22 9 12 15 12 15 22"/>
         </svg>
         <span>Inicio</span>
+      </button>
+      <button class="navbar-item" data-route="/avisos">
+        <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M18 8a6 6 0 00-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 01-3.46 0"/>
+        </svg>
+        <span>Avisos</span>
       </button>
       <button class="navbar-item" data-route="/categories">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
