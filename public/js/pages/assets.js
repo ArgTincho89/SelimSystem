@@ -61,7 +61,7 @@ const AssetsPage = {
       const details = create('div', {}, [
         create('strong', { textContent: asset.name }),
         create('div', { textContent: `${asset.type === 'immovable' ? 'Inmueble' : 'Mueble'}${meta ? ` · ${meta}` : ''}`, style: { color: 'var(--text-muted)', fontSize: 'var(--font-sm)', marginTop: '4px' } }),
-        create('div', { textContent: `Estado: ${asset.status || 'active'}${asset.owners?.length ? ` · Titular: ${asset.owners.map(item => item.name).join(', ')}` : ''}`, style: { color: 'var(--text-muted)', fontSize: 'var(--font-sm)', marginTop: '3px' } })
+        create('div', { textContent: `Estado: ${statusLabel(asset.status || 'active')}${asset.owners?.length ? ` · Titular: ${asset.owners.map(item => item.name).join(', ')}` : ''}`, style: { color: 'var(--text-muted)', fontSize: 'var(--font-sm)', marginTop: '3px' } })
       ]);
       const actions = create('div', { style: { display: 'flex', gap: '8px' } }, [
         create('button', { className: 'btn btn-ghost btn-sm', textContent: 'Ver historial', onClick: () => this.showDetails(asset.id) }),
@@ -361,7 +361,7 @@ const AssetsPage = {
     const add = (label, value) => { if (value !== undefined && value !== null && value !== '') lines.push(`${label}: ${value}`); };
     add('Descripción', asset.description);
     add('Adquisición', [asset.acquisitionDate, asset.acquisitionValue != null ? asset.acquisitionValue : ''].filter(value => value !== '' && value !== null && value !== undefined).join(' · '));
-    add('Estado', asset.status && asset.status !== 'active' ? asset.status : '');
+    add('Estado', asset.status && asset.status !== 'active' ? statusLabel(asset.status) : '');
     add('Subtipo', asset.subtype);
     add('Tipo de inmueble (texto libre)', asset.propertyType);
     add('Dirección', [asset.address, asset.locality, asset.province, asset.country].filter(Boolean).join(', '));
@@ -421,7 +421,7 @@ const AssetsPage = {
       body.appendChild(addGroup);
       if (asset.type === 'immovable') await this.renderRentals(asset, body);
       body.appendChild(create('h4', { textContent: 'Historial de estados', style: { marginTop: '14px' } }));
-      (asset.statusHistory || []).slice().reverse().forEach(event => body.appendChild(create('p', { textContent: `${event.status} · ${new Date(event.changedAt).toLocaleDateString()}${event.notes ? ` · ${event.notes}` : ''}` })));
+      (asset.statusHistory || []).slice().reverse().forEach(event => body.appendChild(create('p', { textContent: `${statusLabel(event.status)} · ${new Date(event.changedAt).toLocaleDateString()}${event.notes ? ` · ${event.notes}` : ''}` })));
       await WealthRecords.renderPanel(body, 'asset', id);
       const footer = create('div', {}, [create('button', { className: 'btn btn-primary', type: 'button', textContent: 'Cerrar', onClick: () => Modal.hide() })]);
       Modal.show(asset.name, body, { footer });
@@ -610,7 +610,6 @@ const AssetsPage = {
       ? `${new Intl.NumberFormat('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(minor / 100)} ${currency || ''}`.trim() : '-');
     const totals = map => Object.entries(map || {}).map(([currency, minor]) => money(minor, currency)).join(' · ') || '-';
     const responsibility = { owner: 'Propietario', tenant: 'Inquilino', shared: 'Compartido', third: 'Tercero', none: 'Sin responsable' };
-    const statusLabel = { paid: 'Pagado', resolved: 'Resuelto', partial: 'Parcial', overdue: 'Vencido', expected: 'Esperado', confirmed: 'Confirmado' };
     const render = result => {
       report.replaceChildren();
       [...result.months].reverse().forEach(month => {
@@ -627,7 +626,7 @@ const AssetsPage = {
           add([item.title, responsibility[item.responsibilityType] || item.responsibilityType, money(item.estimatedMinor, item.currencyCode),
             (tenantPaid ? `${money(item.actualMinor, item.currencyCode)} · Pagado por inquilino ${money(item.resolutionAmountMinor, item.currencyCode)}` : money(item.actualMinor, item.currencyCode))
               + (item.payments || []).map(pay => ` | ${pay.date}: ${money(pay.amountMinor, item.currencyCode)}${pay.accountName ? ` (${pay.accountName}${pay.paymentMethod ? `, ${pay.paymentMethod}` : ''})` : ''}`).join(''),
-            statusLabel[item.status] || item.status, API.documents.receiptLinks(item.documents || [])]);
+            statusLabel(item.status), API.documents.receiptLinks(item.documents || [])]);
         });
         [['Gastos imputados', month.expensesMinorByCurrency], ['Ingresos imputados', month.incomeMinorByCurrency],
           ['Reintegros', month.refundsMinorByCurrency], ['Recuperos', month.recoveriesMinorByCurrency]].forEach(([label, map]) => {
@@ -677,7 +676,7 @@ const AssetsPage = {
       const row = create('article', { className: 'card', style: { padding: '8px' }, dataset: { currencyRow: item.currency } });
       const sign = item.type === 'expense' ? '−' : '+';
       row.appendChild(create('strong', { textContent: `${item.date} · ${item.concept} · ${sign}${formatearMonedaConCodigo(item.amount, item.currency)}` }));
-      row.appendChild(create('small', { style: { display: 'block' }, textContent: `${item.type === 'income' ? 'Ingreso' : item.type === 'expense' ? 'Gasto' : 'Reembolso'} · ${item.category || 'Sin categoría'} · ${item.account} · ${item.paymentMethod || 'Medio no indicado'} · ${item.contract || 'Sin contrato'} · ${item.status === 'posted' ? 'Contabilizado' : item.status}` }));
+      row.appendChild(create('small', { style: { display: 'block' }, textContent: `${item.type === 'income' ? 'Ingreso' : item.type === 'expense' ? 'Gasto' : 'Reembolso'} · ${item.category || 'Sin categoría'} · ${item.account} · ${item.paymentMethod || 'Medio no indicado'} · ${item.contract || 'Sin contrato'} · ${statusLabel(item.status)}` }));
       if (item.refundSourceId) row.appendChild(create('small', { style: { display: 'block' }, textContent: `Reembolso vinculado a: ${item.refundSourceConcept || 'gasto de origen'}` }));
       (item.documents || []).forEach(document => {
         row.appendChild(API.documents.receiptLinks([document]));
@@ -688,7 +687,7 @@ const AssetsPage = {
     pending.appendChild(create('strong', { textContent: 'Pendiente, fuera de resultados reales' }));
     const pendingRows = [...(result.pending?.obligations || []).map(item => ({ ...item, kind: 'Obligación' })), ...(result.pending?.rents || []).map(item => ({ ...item, kind: 'Alquiler esperado' }))];
     if (!pendingRows.length) pending.appendChild(create('small', { style: { display: 'block' }, textContent: 'No hay importes pendientes en este período.' }));
-    pendingRows.forEach(item => pending.appendChild(create('p', { style: { margin: '5px 0' }, textContent: `${item.date} · ${item.kind} · ${item.concept} · ${formatearMonedaConCodigo(item.amount, item.currency)} · ${item.status}` })));
+    pendingRows.forEach(item => pending.appendChild(create('p', { style: { margin: '5px 0' }, textContent: `${item.date} · ${item.kind} · ${item.concept} · ${formatearMonedaConCodigo(item.amount, item.currency)} · ${statusLabel(item.status)}` })));
     container.appendChild(pending);
   },
 
@@ -718,7 +717,7 @@ const AssetsPage = {
         const card = create('article', { className: 'card', style: { padding: '10px' } });
         const heading = create('div', { style: { display: 'flex', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap', alignItems: 'center' } }, [
           create('strong', { textContent: `${this.contractTypeLabel(contract.type)} · ${contract.tenants.map(item => item.name).join(', ')}` }),
-          create('span', { textContent: contract.status, className: 'badge' })
+          create('span', { textContent: statusLabel(contract.status), className: 'badge' })
         ]);
         card.append(heading, create('small', { textContent: `${contract.startDate}${contract.endDate ? ` — ${contract.endDate}` : ' — sin fecha de fin'} · Alquiler inicial: ${contract.initialRent} ${contract.currencyCode} · vencimiento día ${contract.dueDay}`, style: { display: 'block', marginTop: '5px' } }));
         const operations = create('div', { style: { display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '8px' } });
@@ -783,7 +782,7 @@ const AssetsPage = {
   },
 
   rentStatusLabel(status) {
-    return ({ pending: 'Pendiente', partially_collected: 'Parcial', collected: 'Cobrado', overdue: 'Vencido', cancelled: 'Cancelado' })[status] || status;
+    return statusLabel(status);
   },
 
   rentalField(container, label, options = {}) {

@@ -226,7 +226,8 @@ const ObligationsPage = {
       currency.value = existing.currencyCode;
     }
     this.fieldWrap(form, 'Moneda', currency);
-    const amount = this.field(form, 'Importe estimado', { type: 'number', min: '0.01', step: '0.01', required: true, value: existing?.estimatedAmount ?? '' });
+    const amount = this.moneyField(form, 'Importe estimado', { currency: currency.value, value: existing?.estimatedAmount });
+    on(currency, 'change', () => MoneyInput.setCurrency(amount, currency.value));
     const category = this.select([['', 'Sin categoría'], ...this.categories.map(item => [item.id, item.nombre])], existing?.categoryId || (existing ? '' : providerCategory(provider.value)));
     this.fieldWrap(form, 'Categoría', category);
     // Re-prefill only while the category is still the previous provider's one (or empty).
@@ -260,12 +261,13 @@ const ObligationsPage = {
     form.appendChild(submit);
     on(form, 'submit', async event => {
       event.preventDefault();
+      if (!this.validMoney(amount)) return;
       try {
         const identifier = externalIdentifier.value.trim();
         const data = {
           title: title.value, type: type.value, assetId: asset.value || null, providerEntityId: provider.value || null,
           categoryId: category.value || null,
-          currencyCode: currency.value, estimatedAmount: Number(amount.value),
+          currencyCode: currency.value, estimatedAmount: MoneyInput.value(amount),
           startDate: date.value, endDate: endDate.value || null, recurrenceFrequency: frequency.value || null,
           reminderLeadDays: Number(reminder.value === 'custom' ? customLead.value : reminder.value), notes: notes.value,
           externalIdentifier: identifier || null, externalIdentifierType: identifier ? identifierKind.value : null
@@ -308,7 +310,7 @@ const ObligationsPage = {
     const tenant = this.select(tenants.map(owner => [owner.id, owner.name]), tenants[0].id);
     this.fieldWrap(form, 'Inquilino', tenant);
     const period = this.field(form, 'Período (AAAA-MM)', { type: 'month', required: true, value: occurrence.date.slice(0, 7) });
-    const amount = this.field(form, 'Importe pagado por el inquilino', { type: 'number', min: '0.01', step: occurrence.currencyCode === 'JPY' ? '1' : '0.01', required: true, value: occurrence.tenantDueAmount });
+    const amount = this.moneyField(form, 'Importe pagado por el inquilino', { currency: occurrence.currencyCode, value: occurrence.tenantDueAmount });
     const resolvedAt = this.field(form, 'Fecha de resolución', { type: 'date', required: true, value: new Date().toISOString().slice(0, 10) });
     const existingDocuments = create('div', { style: { display: 'grid', gap: '4px' } });
     this.fieldWrap(form, 'Comprobantes existentes de esta ocurrencia', existingDocuments);
@@ -327,6 +329,7 @@ const ObligationsPage = {
     form.appendChild(create('button', { className: 'btn btn-primary', type: 'submit', textContent: 'Registrar resolución' }));
     on(form, 'submit', async event => {
       event.preventDefault();
+      if (!this.validMoney(amount)) return;
       try {
         const documentIds = [...existingDocuments.querySelectorAll('input:checked')].map(input => input.value);
         for (const file of [...(files.files || [])]) {
@@ -334,7 +337,7 @@ const ObligationsPage = {
           documentIds.push(uploaded.id);
         }
         await API.obligations.createResolution(obligation.id, occurrence.id, {
-          tenantEntityId: tenant.value, period: period.value, amount: Number(amount.value), resolvedAt: resolvedAt.value, documentIds, notes: notes.value
+          tenantEntityId: tenant.value, period: period.value, amount: MoneyInput.value(amount), resolvedAt: resolvedAt.value, documentIds, notes: notes.value
         });
         Modal.hide();
         await this.refresh();
@@ -378,7 +381,7 @@ const ObligationsPage = {
       return;
     }
     const remaining = occurrence.remainingAmount ?? occurrence.actualDueAmount;
-    const amount = this.field(form, `Importe pagado (restante: ${remaining} ${occurrence.currencyCode})`, { type: 'number', min: '0.01', step: '0.01', required: true, value: remaining });
+    const amount = this.moneyField(form, `Importe pagado (restante: ${remaining} ${occurrence.currencyCode})`, { currency: occurrence.currencyCode, value: remaining });
     if (context.warning) form.appendChild(create('div', { className: 'card', role: 'alert', style: { borderLeft: '4px solid var(--danger)', padding: '8px' }, textContent: context.warning }));
     const accountSelect = create('select', { className: 'form-control', required: true });
     const titular = context.accounts.filter(item => item.ownerId);
@@ -405,11 +408,12 @@ const ObligationsPage = {
     on(form, 'submit', async event => {
       event.preventDefault();
       if (!category.value) { alert('Seleccioná una categoría'); return; }
+      if (!this.validMoney(amount)) return;
       submit.disabled = true;
       let result;
       try {
         result = await API.obligations.pay(obligation.id, occurrence.id, {
-          amount: Number(amount.value), accountId: accountSelect.value, categoryId: category.value, date: date.value,
+          amount: MoneyInput.value(amount), accountId: accountSelect.value, categoryId: category.value, date: date.value,
           ...(method.value ? { paymentMethodId: method.value } : {}), idempotencyKey
         });
       } catch (error) { submit.disabled = false; alert(error.message); return; }
@@ -473,6 +477,21 @@ const ObligationsPage = {
     return control;
   },
 
+  // Money amount field (es-AR formatted text input); read it with MoneyInput.value().
+  moneyField(container, label, { currency = 'ARS', value = null } = {}) {
+    const control = MoneyInput.create({ currency, value, required: true, ariaLabel: label });
+    this.fieldWrap(container, label, control);
+    return control;
+  },
+
+  // A required positive amount: shows the inline error and blocks submit otherwise.
+  validMoney(control) {
+    if (!MoneyInput.validate(control)) return false;
+    const amount = MoneyInput.value(control);
+    if (amount === null || amount <= 0) { alert('Ingresá un importe mayor a 0'); return false; }
+    return true;
+  },
+
   fieldWrap(container, label, control) {
     const wrap = create('div', { className: 'form-group' }, [create('label', { textContent: label }), control]);
     container.appendChild(wrap);
@@ -501,6 +520,6 @@ const ObligationsPage = {
   },
 
   statusLabel(value) {
-    return ({ expected: 'Previsto', confirmed: 'Confirmado', paid: 'Pagado', resolved: 'Resuelto por inquilino', partial: 'Parcial', overdue: 'Vencido', cancelled: 'Cancelado' })[value] || value;
+    return ({ expected: 'Previsto', confirmed: 'Confirmado', paid: 'Pagado', resolved: 'Resuelto por inquilino', partial: 'Parcial', overdue: 'Vencido', cancelled: 'Cancelado' })[value] || statusLabel(value);
   }
 };

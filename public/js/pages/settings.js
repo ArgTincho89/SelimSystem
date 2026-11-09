@@ -391,7 +391,7 @@ const SettingsPage = {
   async showReconcileForm(account) {
     const form = create('form');
     const setup = await API.accounts.reconciliation(account.id);
-    const amount = create('input', { id: 'opening-balance', className: 'form-control', type: 'number', step: account.currency === 'JPY' ? '1' : '0.01', required: 'required', value: account.openingBalanceMinor === null ? '' : ledgerAmount(account.openingBalanceMinor, account.currency) });
+    const amount = MoneyInput.create({ id: 'opening-balance', currency: account.currency, allowNegative: true, required: true, value: account.openingBalanceMinor === null ? null : ledgerAmount(account.openingBalanceMinor, account.currency) });
     form.appendChild(this.field(`Saldo al inicio de la fecha (${account.currency})`, amount));
     const date = create('input', { id: 'opening-date', className: 'form-control', type: 'date', required: 'required', value: account.openingDate || getToday() });
     form.appendChild(this.field('Fecha de referencia', date));
@@ -446,9 +446,10 @@ const SettingsPage = {
     form.appendChild(save);
     on(form, 'submit', async event => {
       event.preventDefault();
+      if (!MoneyInput.validate(amount)) return;
       try {
         const includedMovementIds = $$('input[type="checkbox"]', movementList).filter(input => input.checked).map(input => input.value);
-        await API.accounts.reconcile(account.id, { openingBalance: Number(amount.value), openingDate: date.value, includedMovementIds });
+        await API.accounts.reconcile(account.id, { openingBalance: MoneyInput.value(amount), openingDate: date.value, includedMovementIds });
         Modal.hide();
         await this.render();
       } catch (error) { this.showError(form, error.message); }
@@ -474,11 +475,11 @@ const SettingsPage = {
     } else if (activeAccounts[1]) to.value = activeAccounts[1].id;
     form.appendChild(this.field('Cuenta de origen', from));
     form.appendChild(this.field('Cuenta de destino', to));
-    const sent = create('input', { id: 'transfer-sent', className: 'form-control', type: 'number', step: '0.01', min: '0.01', required: 'required' });
-    const received = create('input', { id: 'transfer-received', className: 'form-control', type: 'number', step: '0.01', min: '0.01' });
+    const sent = MoneyInput.create({ id: 'transfer-sent', currency: existingTransfer?.fromCurrency || 'ARS', required: true });
+    const received = MoneyInput.create({ id: 'transfer-received', currency: existingTransfer?.toCurrency || 'ARS' });
     if (existingTransfer) {
-      sent.value = ledgerAmount(existingTransfer.sentMinor, existingTransfer.fromCurrency);
-      received.value = ledgerAmount(existingTransfer.receivedMinor, existingTransfer.toCurrency);
+      MoneyInput.setValue(sent, ledgerAmount(existingTransfer.sentMinor, existingTransfer.fromCurrency));
+      MoneyInput.setValue(received, ledgerAmount(existingTransfer.receivedMinor, existingTransfer.toCurrency));
     }
     form.appendChild(this.field('Importe enviado', sent));
     form.appendChild(this.field('Importe realmente recibido (obligatorio si cambia la moneda)', received));
@@ -493,8 +494,8 @@ const SettingsPage = {
     const title = create('input', { id: 'transfer-reference', className: 'form-control', type: 'text', maxlength: '100' });
     title.value = existingTransfer?.reference || '';
     form.appendChild(this.field('Descripción', title));
-    const fee = create('input', { id: 'transfer-fee', className: 'form-control', type: 'number', step: '0.01', min: '0' });
-    fee.value = existingTransfer?.feeMinor ? ledgerAmount(existingTransfer.feeMinor, existingTransfer.fromCurrency) : '';
+    const fee = MoneyInput.create({ id: 'transfer-fee', currency: existingTransfer?.fromCurrency || 'ARS' });
+    if (existingTransfer?.feeMinor) MoneyInput.setValue(fee, ledgerAmount(existingTransfer.feeMinor, existingTransfer.fromCurrency));
     form.appendChild(this.field('Comisión explícita (opcional)', fee));
     const feeCategory = create('select', { id: 'transfer-fee-category', className: 'form-control' });
     feeCategory.appendChild(create('option', { value: '', textContent: 'Seleccionar categoría para la comisión' }));
@@ -525,12 +526,12 @@ const SettingsPage = {
         option.dataset.sourceType = item.sourceType;
         source.appendChild(option);
       });
-      const amount = create('input', { className: 'form-control', type: 'number', min: '0.01', step: '0.01', 'aria-label': 'Importe del ingreso asignado' });
+      const amount = MoneyInput.create({ currency: existingTransfer?.fromCurrency || 'ARS', ariaLabel: 'Importe del ingreso asignado' });
       if (allocation) {
         source.value = `${allocation.sourceType}:${allocation.sourceId}`;
-        amount.value = Number.isSafeInteger(allocation.sourceMinor)
+        MoneyInput.setValue(amount, Number.isSafeInteger(allocation.sourceMinor)
           ? ledgerAmount(allocation.sourceMinor, existingTransfer.fromCurrency)
-          : allocation.amount ?? '';
+          : allocation.amount ?? null);
       }
       const remove = create('button', { className: 'btn btn-sm btn-ghost', type: 'button', textContent: 'Quitar asignación', 'aria-label': 'Quitar asignación de ingreso' });
       on(remove, 'click', () => { if (allocationRows.children.length > 1) row.remove(); else { source.value = ''; amount.value = ''; } });
@@ -560,32 +561,35 @@ const SettingsPage = {
         else option.hidden = false;
       });
       if (select.selectedOptions[0]?.hidden) select.value = '';
+      const money = select.parentNode.querySelector('[data-money-input]');
+      if (money && account) MoneyInput.setCurrency(money, account.currency);
     });
-    on(from, 'change', () => { this.updateTransferCurrencyLabels(from, to, sent, received); updateAllocationOptions(); });
-    on(to, 'change', () => this.updateTransferCurrencyLabels(from, to, sent, received));
-    this.updateTransferCurrencyLabels(from, to, sent, received);
+    on(from, 'change', () => { this.updateTransferCurrencyLabels(from, to, sent, received, fee); updateAllocationOptions(); });
+    on(to, 'change', () => this.updateTransferCurrencyLabels(from, to, sent, received, fee));
+    this.updateTransferCurrencyLabels(from, to, sent, received, fee);
     updateAllocationOptions();
     on(form, 'submit', async event => {
       event.preventDefault();
+      if (!MoneyInput.validateAll([sent, received, fee, ...allocationRows.querySelectorAll('[data-money-input]')])) return;
       const source = activeAccounts.find(account => account.id === from.value);
       const destination = activeAccounts.find(account => account.id === to.value);
       const allocationEntries = Array.from(allocationRows.children).map(row => {
         const selected = row.querySelector('select').value;
-        const amount = row.querySelector('input').value;
-        if (selected && !amount) return { error: 'Indicá el importe para cada ingreso seleccionado' };
-        if (!selected && amount) return { error: 'Seleccioná el ingreso o conversión que corresponde al importe' };
+        const amount = MoneyInput.value(row.querySelector('[data-money-input]'));
+        if (selected && amount === null) return { error: 'Indicá el importe para cada ingreso seleccionado' };
+        if (!selected && amount !== null) return { error: 'Seleccioná el ingreso o conversión que corresponde al importe' };
         if (!selected) return null;
         const [sourceType, sourceId] = selected.split(':');
-        return { sourceType, sourceId, amount: Number(amount) };
+        return { sourceType, sourceId, amount };
       });
       const allocationError = allocationEntries.find(item => item?.error);
       if (allocationError) return this.showError(form, allocationError.error);
       const allocations = allocationEntries.filter(Boolean);
       const payload = {
         fromAccountId: source.id, toAccountId: destination.id,
-        sentAmount: Number(sent.value), receivedAmount: received.value ? Number(received.value) : undefined,
+        sentAmount: MoneyInput.value(sent), receivedAmount: MoneyInput.value(received) ?? undefined,
         fecha: date.value, status: status.value, reference: title.value.trim(),
-        feeAmount: fee.value ? Number(fee.value) : undefined,
+        feeAmount: MoneyInput.value(fee) ?? undefined,
         feeCategoryId: feeCategory.value || undefined, allocations
       };
       try {
@@ -599,11 +603,13 @@ const SettingsPage = {
     sent.focus();
   },
 
-  updateTransferCurrencyLabels(from, to, sent, received) {
+  updateTransferCurrencyLabels(from, to, sent, received, fee) {
     const source = this.accounts.find(account => account.id === from.value);
     const destination = this.accounts.find(account => account.id === to.value);
     sent.setAttribute('aria-label', `Importe enviado en ${source?.currency || ''}`);
     received.setAttribute('aria-label', `Importe realmente recibido en ${destination?.currency || ''}`);
+    if (source) { MoneyInput.setCurrency(sent, source.currency); if (fee) MoneyInput.setCurrency(fee, source.currency); }
+    if (destination) MoneyInput.setCurrency(received, destination.currency);
     if (source?.currency === destination?.currency && !received.value) received.value = sent.value;
   },
 

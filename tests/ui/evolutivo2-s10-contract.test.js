@@ -15,10 +15,11 @@ describe('Evolutivo 2 S10 pay dialog and receipts contract', () => {
     expect(dialog).toContain("Modal.show('Registrar pago'");
   });
 
-  it('keeps the amount as the first and only number input', () => {
+  it('keeps the amount as the first and only money input', () => {
     const dialog = payDialog();
-    expect(dialog.match(/type: 'number'/g)).toHaveLength(1);
-    expect(dialog.indexOf("type: 'number'")).toBeLessThan(dialog.indexOf('accountSelect'));
+    expect(dialog.match(/this\.moneyField\(/g)).toHaveLength(1);
+    expect(dialog).not.toContain("type: 'number'");
+    expect(dialog.indexOf('this.moneyField(')).toBeLessThan(dialog.indexOf('accountSelect'));
   });
 
   it('offers the dialog fields, warning, blocked message and required category', () => {

@@ -149,7 +149,7 @@ const TransactionForm = {
           : record.obligationId ? `obligation:${record.obligationId}`
             : record.contractId ? `contract:${record.contractId}` : record.assetId ? `asset:${record.assetId}` : '';
       target.value = selected;
-      const amount = create('input', { className: 'form-control', type: 'number', min: '0.01', step: '0.01', placeholder: 'Importe', value: record.amount != null ? String(record.amount) : '' });
+      const amount = MoneyInput.create({ currency: activeAccounts.find(account => account.id === accountSelect.value)?.currency || 'EUR', value: record.amount != null ? record.amount : null, placeholder: 'Importe', ariaLabel: 'Importe atribuido' });
       const remove = create('button', { className: 'btn btn-ghost btn-sm', type: 'button', textContent: 'Quitar', onClick: () => row.remove() });
       row.append(target, amount, remove);
       row._allocationFields = { target, amount };
@@ -250,19 +250,13 @@ const TransactionForm = {
     const amountGroup = create('div', { className: 'form-group' });
     const amountLabel = create('label', { textContent: 'Monto', for: 'transaction-amount' });
     amountGroup.appendChild(amountLabel);
-    const amountInput = create('input', {
-      className: 'form-control',
-      type: 'number',
-      step: '0.01',
-      min: '0.01',
-      placeholder: '0.00',
-      value: transaction?.monto ?? '',
-      id: 'transaction-amount'
-    });
+    const initialCurrency = activeAccounts.find(item => item.id === accountSelect.value)?.currency || 'EUR';
+    const amountInput = MoneyInput.create({ currency: initialCurrency, value: transaction?.monto ?? null, id: 'transaction-amount' });
     const updateAmountCurrency = () => {
       const account = activeAccounts.find(item => item.id === accountSelect.value);
       amountLabel.textContent = `Monto (${account?.currency || 'EUR'})`;
-      amountInput.step = ['JPY', 'KRW', 'CLP', 'PYG', 'BIF', 'DJF', 'GNF', 'KMF', 'RWF', 'UGX', 'VND', 'VUV', 'XAF', 'XOF', 'XPF'].includes(account?.currency) ? '1' : '0.01';
+      MoneyInput.setCurrency(amountInput, account?.currency || 'EUR');
+      form.querySelectorAll('[data-money-input]').forEach(input => MoneyInput.setCurrency(input, account?.currency || 'EUR'));
     };
     on(accountSelect, 'change', updateAmountCurrency);
     updateAmountCurrency();
@@ -272,8 +266,8 @@ const TransactionForm = {
     const incomeSplitGroup = create('div', { className: 'form-group', style: { display: 'none' } });
     incomeSplitGroup.appendChild(create('label', { textContent: 'Desglose Mixto' }));
     const incomeSplitRow = create('div', { style: { display: 'flex', gap: '8px' } });
-    const amountAInput = create('input', { className: 'form-control', type: 'number', step: '0.01', min: '0', placeholder: 'A', 'aria-label': 'Importe A' });
-    const amountBInput = create('input', { className: 'form-control', type: 'number', step: '0.01', min: '0', placeholder: 'B', 'aria-label': 'Importe B' });
+    const amountAInput = MoneyInput.create({ currency: initialCurrency, placeholder: 'A', ariaLabel: 'Importe A' });
+    const amountBInput = MoneyInput.create({ currency: initialCurrency, placeholder: 'B', ariaLabel: 'Importe B' });
     incomeSplitRow.appendChild(amountAInput);
     incomeSplitRow.appendChild(amountBInput);
     incomeSplitGroup.appendChild(incomeSplitRow);
@@ -282,11 +276,11 @@ const TransactionForm = {
     // Auto-fill B with the remaining total while typing A in Mixto mode.
     on(amountAInput, 'input', () => {
       if (clasifSelect.value !== 'Mixto') return;
-      const total = parseFloat(amountInput.value);
-      const partA = parseFloat(amountAInput.value);
-      if (!Number.isFinite(total) || total <= 0 || !Number.isFinite(partA) || partA < 0) return;
+      const total = MoneyInput.value(amountInput);
+      const partA = MoneyInput.value(amountAInput);
+      if (total === null || total <= 0 || partA === null || partA < 0) return;
       const remainder = Math.round((total - partA) * 100) / 100;
-      amountBInput.value = remainder >= 0 ? String(remainder) : '';
+      MoneyInput.setValue(amountBInput, remainder >= 0 ? remainder : null);
     });
 
     const ivaGroup = create('div', { className: 'form-group', style: { display: 'none' } });
@@ -352,8 +346,8 @@ const TransactionForm = {
     clasifGroup.appendChild(clasifSelect);
     form.appendChild(clasifGroup);
     if (transaction?.clasificacion === 'Mixto') {
-      amountAInput.value = transaction.montoA ?? '';
-      amountBInput.value = transaction.montoB ?? '';
+      MoneyInput.setValue(amountAInput, transaction.montoA ?? null);
+      MoneyInput.setValue(amountBInput, transaction.montoB ?? null);
     }
     on(clasifSelect, 'change', updateClasifVisibility);
     updateClasifVisibility();
@@ -471,10 +465,13 @@ const TransactionForm = {
         titulo = catOption ? catOption.textContent.trim() : '';
       }
 
+      const moneyInputs = [amountInput, ...(selectedType === 'income' && clasifSelect.value === 'Mixto' ? [amountAInput, amountBInput] : []), ...allocationRows.querySelectorAll('[data-money-input]')];
+      if (!MoneyInput.validateAll(moneyInputs)) return showToast('Importe inválido', 'error');
+
       const data = {
         tipo: selectedType,
         titulo,
-        monto: parseFloat(amountInput.value),
+        monto: MoneyInput.value(amountInput) ?? NaN,
         fecha: dateInput.value,
         comments: commentsInput.value
       };
@@ -484,8 +481,8 @@ const TransactionForm = {
       }
 
       if (selectedType === 'income' && clasifSelect.value === 'Mixto') {
-        data.montoA = parseFloat(amountAInput.value);
-        data.montoB = parseFloat(amountBInput.value);
+        data.montoA = MoneyInput.value(amountAInput) ?? NaN;
+        data.montoB = MoneyInput.value(amountBInput) ?? NaN;
       }
 
       if (selectedType === 'income' && (clasifSelect.value === 'A' || clasifSelect.value === 'Mixto')) {
@@ -569,9 +566,9 @@ const TransactionForm = {
         if (!transaction?.isRecurringInstance && selectedType !== 'refund') {
           const allocations = [...allocationRows.querySelectorAll(':scope > div')].map(row => {
             const { target, amount } = row._allocationFields;
-            if (!target.value || amount.value === '') return null;
+            const value = MoneyInput.value(amount);
+            if (!target.value || value === null) return null;
             const [kind, id, occurrenceId] = target.value.split(':');
-            const value = Number(amount.value);
             if (kind === 'asset') return { assetId: id, amount: value };
             if (kind === 'obligation') return { obligationId: id, amount: value };
             if (kind === 'contract') return { contractId: id, amount: value };

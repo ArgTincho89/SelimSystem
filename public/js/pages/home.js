@@ -760,7 +760,7 @@ const HomePage = {
     const showPending = (label, items) => {
       section.appendChild(create('strong', { textContent: `${label} (${items.length})` }));
       if (!items.length) section.appendChild(create('small', { style: { display: 'block' }, textContent: 'Sin importes pendientes en este mes.' }));
-      items.slice(0, 5).forEach(item => section.appendChild(create('p', { style: { margin: '4px 0' }, textContent: `${item.date} · ${item.concept} · ${formatearMonedaConCodigo(item.amount, item.currency)} · ${item.status}` })));
+      items.slice(0, 5).forEach(item => section.appendChild(create('p', { style: { margin: '4px 0' }, textContent: `${item.date} · ${item.concept} · ${formatearMonedaConCodigo(item.amount, item.currency)} · ${statusLabel(item.status)}` })));
       if (items.length > 5) section.appendChild(create('small', { textContent: `Y ${items.length - 5} elementos más.` }));
     };
     showPending('Obligaciones', pending.obligations || []);
@@ -1131,26 +1131,13 @@ const HomePage = {
     const montoRow = create('div', { style: { display: 'flex', gap: '8px' } });
     const minGroup = create('div', { className: 'form-group', style: { flex: 1 } });
     minGroup.appendChild(create('label', { textContent: 'Monto mínimo' }));
-    const minInput = create('input', {
-      className: 'form-control',
-      type: 'number',
-      step: '0.01',
-      min: '0',
-      placeholder: '0',
-      value: this.filters.montoMin
-    });
+    const filterCurrency = localStorage.getItem('pate_app_currency') || 'ARS';
+    const minInput = MoneyInput.create({ currency: filterCurrency, value: this.filters.montoMin === '' || this.filters.montoMin == null ? null : parseFloat(this.filters.montoMin), ariaLabel: 'Monto mínimo' });
     minGroup.appendChild(minInput);
     montoRow.appendChild(minGroup);
     const maxGroup = create('div', { className: 'form-group', style: { flex: 1 } });
     maxGroup.appendChild(create('label', { textContent: 'Monto máximo' }));
-    const maxInput = create('input', {
-      className: 'form-control',
-      type: 'number',
-      step: '0.01',
-      min: '0',
-      placeholder: 'Sin límite',
-      value: this.filters.montoMax
-    });
+    const maxInput = MoneyInput.create({ currency: filterCurrency, value: this.filters.montoMax === '' || this.filters.montoMax == null ? null : parseFloat(this.filters.montoMax), placeholder: 'Sin límite', ariaLabel: 'Monto máximo' });
     maxGroup.appendChild(maxInput);
     montoRow.appendChild(maxGroup);
     form.appendChild(montoRow);
@@ -1190,7 +1177,10 @@ const HomePage = {
       className: 'btn btn-primary',
       textContent: 'Aplicar',
       onClick: () => {
-        if ((minInput.value || maxInput.value) && !accountSelect.value && new Set(knownAccounts.map(account => account.currency)).size > 1) {
+        if (!MoneyInput.validateAll([minInput, maxInput])) return;
+        const minAmount = MoneyInput.value(minInput);
+        const maxAmount = MoneyInput.value(maxInput);
+        if ((minAmount !== null || maxAmount !== null) && !accountSelect.value && new Set(knownAccounts.map(account => account.currency)).size > 1) {
           showToast('Elegí una cuenta para filtrar importes de una sola moneda', 'error');
           return;
         }
@@ -1199,8 +1189,8 @@ const HomePage = {
         this.filters.categoryId = catSelect.value;
         this.filters.clasificacion = clasifSelect.value;
         this.filters.texto = textInput.value.trim();
-        this.filters.montoMin = minInput.value;
-        this.filters.montoMax = maxInput.value;
+        this.filters.montoMin = minAmount === null ? '' : String(minAmount);
+        this.filters.montoMax = maxAmount === null ? '' : String(maxAmount);
         this.filters.fechaDesde = fdInput.value;
         this.filters.fechaHasta = fhInput.value;
         Modal.hide();

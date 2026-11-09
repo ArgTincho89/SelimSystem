@@ -16,6 +16,13 @@ Característica: Gestión de transacciones desde la home
     Y veo la transacción "Sueldo A"
     Y no hay errores críticos en la consola
 
+  Escenario: Crear ingreso de seis cifras y verificar el formato de importe
+    Cuando abro la página de inicio
+    Y creo un ingreso "Sueldo grande" de 211392 con clasificación "B"
+    Entonces el stat "Ingresos" muestra "ARS 211.392,00"
+    Y veo la transacción "Sueldo grande"
+    Y no hay errores críticos en la consola
+
   Escenario: Crear ingreso B y verificar resumen
     Cuando abro la página de inicio
     Y creo un ingreso "Sueldo B" de 800 con clasificación "B"

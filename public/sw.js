@@ -1,4 +1,4 @@
-const CACHE_NAME = 'selimsystem-v31';
+const CACHE_NAME = 'selimsystem-v32';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
@@ -12,6 +12,7 @@ const STATIC_ASSETS = [
   '/js/router.js',
   '/js/utils/dom.js',
   '/js/utils/format.js',
+  '/js/components/moneyInput.js',
   '/js/components/navbar.js',
   '/js/components/modal.js',
   '/js/components/monthSelector.js',
@@ -26,6 +27,7 @@ const STATIC_ASSETS = [
   '/js/pages/obligations.js',
   '/js/pages/alerts.js',
   '/js/pages/profile.js',
+  '/js/pages/settings.js',
   '/manifest.json',
   '/icons/icon-192.png',
   '/icons/icon-512.png',

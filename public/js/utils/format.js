@@ -95,3 +95,60 @@ function groupTransactionsByDate(transactions) {
     .sort(([a], [b]) => b.localeCompare(a))
     .map(([fecha, items]) => ({ fecha, items }));
 }
+
+const ZERO_DECIMAL_CURRENCIES = ['JPY', 'KRW', 'CLP', 'PYG', 'BIF', 'DJF', 'GNF', 'KMF', 'RWF', 'UGX', 'VND', 'VUV', 'XAF', 'XOF', 'XPF'];
+
+// Number of fraction digits used for a currency (0 for zero-decimal currencies).
+function currencyDigits(code) {
+  return ZERO_DECIMAL_CURRENCIES.includes(String(code || '').toUpperCase()) ? 0 : 2;
+}
+
+const STATUS_LABELS = {
+  pending: 'Pendiente',
+  overdue: 'Vencido',
+  partially_collected: 'Parcial',
+  partial: 'Parcial',
+  collected: 'Cobrado',
+  paid: 'Pagado',
+  resolved: 'Resuelto',
+  cancelled: 'Cancelado',
+  expected: 'Esperado',
+  confirmed: 'Confirmado',
+  posted: 'Contabilizado',
+  active: 'Activo',
+  ended: 'Finalizado',
+  draft: 'Borrador',
+  expiring: 'Por vencer',
+  scheduled: 'Programado',
+  reversed: 'Anulado'
+};
+
+// Spanish label for a status code. Unknown or empty values never leak the raw code.
+function statusLabel(status) {
+  return Object.prototype.hasOwnProperty.call(STATUS_LABELS, status) ? STATUS_LABELS[status] : 'Sin estado';
+}
+
+// Orders accounts parent first, then its children. Returns [{ account, label, depth }];
+// top-level labels are unchanged and children are prefixed with an arrow.
+function orderAccountsAsTree(accounts, labelFn = account => account.name) {
+  const list = accounts || [];
+  const ids = new Set(list.map(account => account.id));
+  const childrenOf = new Map();
+  const roots = [];
+  list.forEach(account => {
+    if (account.parentId && ids.has(account.parentId)) {
+      if (!childrenOf.has(account.parentId)) childrenOf.set(account.parentId, []);
+      childrenOf.get(account.parentId).push(account);
+    } else {
+      roots.push(account);
+    }
+  });
+  const result = [];
+  roots.forEach(root => {
+    result.push({ account: root, label: labelFn(root), depth: 0 });
+    (childrenOf.get(root.id) || []).forEach(child => {
+      result.push({ account: child, label: `↳ ${labelFn(child)}`, depth: 1 });
+    });
+  });
+  return result;
+}

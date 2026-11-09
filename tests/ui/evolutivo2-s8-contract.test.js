@@ -43,9 +43,10 @@ describe('Evolutivo 2 S8 obligation form contract', () => {
     expect(form).not.toContain('Porcentaje del propietario');
   });
 
-  it('keeps the amount as the first number input and honors the asset shortcut', () => {
+  it('keeps the amount as the first money input and honors the asset shortcut', () => {
     const form = modal();
-    expect(form.match(/type: 'number'/g)).toHaveLength(1);
+    expect(form.match(/this\.moneyField\(/g)).toHaveLength(1);
+    expect(form).not.toContain("type: 'number'");
     expect(form).toContain('existing?.assetId || defaults.assetId');
     expect(read('js/pages/obligations.js')).toContain('this.showCreateModal(null, { assetId: newForAssetId })');
   });

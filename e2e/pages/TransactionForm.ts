@@ -58,9 +58,8 @@ export class TransactionForm {
   }
 
   async fillAmount(amount: number): Promise<void> {
-    const numberInputs = this.modal.locator('input.form-control[type="number"]');
-    // The first number input is always the main amount.
-    await numberInputs.nth(0).fill(String(amount));
+    // The main amount is a money input (text, es-AR); "12.5" and "211392" are accepted.
+    await this.modal.locator('#transaction-amount').fill(String(amount));
   }
 
   async fillDate(date: string): Promise<void> {
@@ -85,7 +84,7 @@ export class TransactionForm {
   }
 
   async fillMixto(montoA: number, montoB: number): Promise<void> {
-    const splitInputs = this.modal.locator('.form-group').filter({ hasText: 'Desglose Mixto' }).locator('input[type="number"]');
+    const splitInputs = this.modal.locator('.form-group').filter({ hasText: 'Desglose Mixto' }).locator('[data-money-input]');
     await splitInputs.nth(0).fill(String(montoA));
     await splitInputs.nth(1).fill(String(montoB));
   }
