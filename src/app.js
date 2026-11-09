@@ -25,6 +25,7 @@ const wealthNoteRoutes = require('./routes/wealth-notes').router;
 const obligationRoutes = require('./routes/obligations');
 const rentalRoutes = require('./routes/rentals');
 const financeRoutes = require('./routes/finance');
+const installmentRoutes = require('./routes/installments');
 
 function createApp(options = {}) {
   const dataDir = options.dataDir || config.dataDir;
@@ -69,6 +70,7 @@ function createApp(options = {}) {
   app.use('/api/obligations', obligationRoutes);
   app.use('/api/rentals', rentalRoutes);
   app.use('/api/finance', financeRoutes);
+  app.use('/api/installments', installmentRoutes);
 
   app.get('/health', (req, res) => res.status(200).json({ status: 'ok' }));
   app.get('/version.json', (req, res) => res.json({ version }));
