@@ -83,7 +83,7 @@ Dependency graph: S1 -> {S2, S3}; S3 -> S4 -> S5 (also needs S2); S4 -> S6 -> S7
 
 ## Slice S11 (final): full verification
 
-- [ ] 11.1 Run `npm test` (all unit/integration/UI contract suites) and fix any regression in the touched slices only.
-- [ ] 11.2 Run `npm run test:e2e` (Cucumber + Playwright). Regression checks: `TransactionForm.fillAmount` fills the FIRST number input inside a modal (transaction modal is unchanged; the pay dialog also keeps the amount first); settings E2E clicks the exact tab names "Cuentas" and "Avisos" (new tabs "Titular", "Inquilino", "Proveedor" are distinct, `exact` matching must still resolve uniquely); the navbar item removal must not break navigation steps. Update step definitions only if a real selector conflict appears.
-- [ ] 11.3 Run `npm run test:coverage`: global 60% and per-file thresholds in `jest.config.js` must pass; `src/services/asset-form.js` >=80% lines. Add targeted tests (new files) if a threshold fails.
-- [ ] 11.4 Confirm `public/sw.js` ends at `selimsystem-v31`, `migrateEvolutivo2` is idempotent on a copy of real data (second run `updated: 0`), and the Success Criteria in `proposal.md` are all met; then ready for `sdd-verify`.
+- [x] 11.1 Run `npm test` (all unit/integration/UI contract suites) and fix any regression in the touched slices only.
+- [x] 11.2 Run `npm run test:e2e` (Cucumber + Playwright). Regression checks: `TransactionForm.fillAmount` fills the FIRST number input inside a modal (transaction modal is unchanged; the pay dialog also keeps the amount first); settings E2E clicks the exact tab names "Cuentas" and "Avisos" (new tabs "Titular", "Inquilino", "Proveedor" are distinct, `exact` matching must still resolve uniquely); the navbar item removal must not break navigation steps. Update step definitions only if a real selector conflict appears.
+- [x] 11.3 Run `npm run test:coverage`: global 60% and per-file thresholds in `jest.config.js` must pass; `src/services/asset-form.js` >=80% lines. Add targeted tests (new files) if a threshold fails.
+- [x] 11.4 Confirm `public/sw.js` ends at `selimsystem-v31`, `migrateEvolutivo2` is idempotent on a copy of real data (second run `updated: 0`), and the Success Criteria in `proposal.md` are all met; then ready for `sdd-verify`.

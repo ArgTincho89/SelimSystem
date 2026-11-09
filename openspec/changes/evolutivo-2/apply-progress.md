@@ -65,3 +65,11 @@ Notes: `accounts` in the context always lists every active account in the occurr
 - [x] 10.3 sw.js v31; tests/ui/evolutivo2-s10-contract.test.js
 
 Notes: files are CRLF; no existing evolutivo-s* test needed changes (they assert `ObligationsPage.pay(` which is kept). Resolutions: "Adjuntar comprobante" row button uploads linked only to the occurrence.
+
+## S11 — Final verification (orchestrator)
+
+- `npm run test:coverage`: 67 suites / 609 tests green, thresholds met.
+- `npm run test:e2e`: 76/76 scenarios, 585/585 steps green.
+- `public/sw.js` ends at `selimsystem-v31`.
+- `migrateEvolutivo` + `migrateEvolutivo2` run twice on a copy of local `data/`: `updated: 0` both runs (local data has no legacy parties/assets/contracts/obligations; backfill behavior is covered by migration test suites).
+- Apply complete: S1–S10. Next: sdd-verify, then deploy on user request.
