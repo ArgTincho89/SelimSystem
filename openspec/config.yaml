@@ -1,0 +1,74 @@
+schema: spec-driven
+
+context: |
+  Tech stack: Node.js 22 / Express 4 REST API + vanilla JS PWA; TypeScript E2E suite.
+  Architecture: single Express monolith (src/server.js, src/app.js), JSON file DB (src/db/jsondb.js).
+  Testing: Jest 29 + Supertest (unit/integration) in root; Cucumber 10 + Playwright 1.46 (E2E) in e2e/.
+  Style: no linter/formatter configured; Husky pre-push runs full coverage.
+
+projects:
+  - path: "."
+    stack: "Node.js 22 / Express 4 / vanilla JS"
+    test_command: "npm test"
+    framework: "Jest 29 + Supertest"
+  - path: "e2e"
+    stack: "Node.js / TypeScript 5.5"
+    test_command: "npm test"
+    framework: "Cucumber 10 + Playwright 1.46"
+
+strict_tdd: false
+
+rules:
+  proposal:
+    - Include rollback plan for risky changes
+  specs:
+    - Use Given/When/Then for scenarios
+    - Use RFC 2119 keywords (MUST, SHALL, SHOULD, MAY)
+  design:
+    - Include sequence diagrams for complex flows
+    - Document architecture decisions with rationale
+  tasks:
+    - Group by phase, use hierarchical numbering
+    - Keep tasks completable in one session
+  apply:
+    guidelines:
+      - Follow existing code patterns
+    tdd: false
+    test_command: ""
+  verify:
+    test_command: ""
+    build_command: ""
+    coverage_threshold: 0
+  archive:
+    - Warn before merging destructive deltas
+
+testing:
+  strict_tdd: false
+  detected: "2026-11-09"
+  projects:
+    - relative_path: "."
+      stack: "Node.js 22 / Express 4 / vanilla JS"
+      test_command: "npm test"
+      framework: "Jest 29 + Supertest"
+      layers:
+        unit: true
+        integration: true
+        e2e: false
+      coverage_command: "npm run test:coverage"
+      quality:
+        linter: null
+        type_checker: null
+        formatter: null
+    - relative_path: "e2e"
+      stack: "Node.js / TypeScript 5.5"
+      test_command: "npm test"
+      framework: "Cucumber 10 + Playwright 1.46"
+      layers:
+        unit: false
+        integration: false
+        e2e: true
+      coverage_command: null
+      quality:
+        linter: null
+        type_checker: "npx tsc --noEmit"
+        formatter: null
