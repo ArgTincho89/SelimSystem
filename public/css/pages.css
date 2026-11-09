@@ -1180,7 +1180,7 @@ body.desktop-mode.desktop-home #page-content {
 }
 
 .desktop-home-stats {
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: var(--space-md);
   flex: 0 0 auto;
   margin: 0;
