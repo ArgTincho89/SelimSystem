@@ -48,7 +48,7 @@ router.delete('/payment-methods/:id', (req, res) => {
   const method = db.findById('paymentMethods', req.params.id, userId);
   if (!method) return res.status(404).json({ error: 'Medio de pago no encontrado' });
   const referenced = ['transactions', 'obligations', 'obligationOccurrences', 'rentCollections'].some(collection =>
-    db.findAll(collection, userId).some(item => item.paymentMethodId === method.id)
+    db.findAll(collection, userId).some(item => !item.reversedAt && item.paymentMethodId === method.id)
   );
   if (referenced) return res.status(409).json({ error: 'El medio de pago tiene movimientos o historial vinculado' });
   db.remove('paymentMethods', method.id, userId);

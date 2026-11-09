@@ -124,7 +124,6 @@ describe('Rental contracts, expected rent periods, and collections', () => {
     const summary = await agent.get('/api/summary').query({ month: '2025-03' });
     expect(summary.body.ingresos).toBe(150);
     expect((await agent.put(`/api/transactions/${incomeRows[0].id}`).send({ monto: 151 })).status).toBe(409);
-    expect((await agent.delete(`/api/transactions/${incomeRows[0].id}`)).status).toBe(409);
 
     const ended = await agent.put(`/api/rentals/${created.body.id}`).send({ status: 'ended', endDate: '2025-03-31' });
     expect(ended.status).toBe(200);

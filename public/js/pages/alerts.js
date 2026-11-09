@@ -158,7 +158,7 @@ const AlertsPage = {
   async collectRent(alert) {
     const contract = await API.rentals.get(alert.contractId);
     const occurrence = (contract.occurrences || []).find(item => item.id === alert.rentOccurrenceId) || (contract.occurrences || []).find(item => item.date === alert.date);
-    await AssetsPage.showRentCollectionModal({ id: alert.assetId }, contract, occurrence?.id || null, () => this.reload());
+    await AssetsPage.showRentCollectionModal({ id: alert.assetId }, contract, occurrence?.id || null, () => this.reload(), { single: true });
   },
 
   async postInstallment(alert) {

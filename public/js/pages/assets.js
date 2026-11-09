@@ -742,6 +742,7 @@ const AssetsPage = {
           create('span', { textContent: `${item.date} · ${item.rentAmount} ${item.currencyCode} · ${this.rentStatusLabel(item.status)} · Pagado ${item.paidAmount}, pendiente ${item.remainingAmount}` }),
           create('span', { style: { display: 'flex', gap: '6px' } }, [
             item.remainingMinor > 0 && item.status !== 'cancelled' ? create('button', { className: 'btn btn-ghost btn-sm', type: 'button', textContent: 'Cobrar período', onClick: () => this.showRentCollectionModal(asset, contract, item.id) }) : null,
+            ...this.reverseButtons(asset, item),
             item.paidMinor === 0 && item.status !== 'cancelled' ? create('button', { className: 'btn btn-ghost btn-sm', type: 'button', textContent: 'Cancelar período', onClick: async () => {
               try { await API.rentals.cancelOccurrence(contract.id, item.id); await this.showDetails(asset.id); }
               catch (error) { showToast(error.message, 'error'); }
@@ -775,6 +776,27 @@ const AssetsPage = {
     };
     filter.addEventListener('change', renderList);
     renderList();
+  },
+
+  // "Anular cobro" for each distinct collection allocated to the occurrence, with inline confirmation.
+  reverseButtons(asset, occurrence) {
+    const ids = [...new Set((occurrence.allocations || []).map(item => item.collectionId).filter(Boolean))];
+    return ids.map(collectionId => {
+      const wrapper = create('span', { style: { display: 'inline-flex', gap: '6px', alignItems: 'center' } });
+      const start = create('button', { className: 'btn btn-ghost btn-sm', type: 'button', textContent: 'Anular cobro' });
+      start.addEventListener('click', () => {
+        wrapper.replaceChildren(
+          create('small', { textContent: 'El período vuelve a quedar pendiente de cobro.' }),
+          create('button', { className: 'btn btn-danger btn-sm', type: 'button', textContent: 'Confirmar anulación', onClick: async () => {
+            try { await API.rentals.reverseCollection(collectionId); showToast('Cobro anulado'); await this.showDetails(asset.id); }
+            catch (error) { showToast(error.message, 'error'); }
+          } }),
+          create('button', { className: 'btn btn-ghost btn-sm', type: 'button', textContent: 'Cancelar', onClick: () => wrapper.replaceChildren(start) })
+        );
+      });
+      wrapper.appendChild(start);
+      return wrapper;
+    });
   },
 
   contractTypeLabel(type) {
@@ -875,47 +897,66 @@ const AssetsPage = {
     Modal.show('Actualizar condición de alquiler', body, { footer });
   },
 
-  async showRentCollectionModal(asset, contract, selectedOccurrenceId = null, onDone = null) {
+  // options.single: collect exactly one occurrence (Avisos); otherwise multi-period selection is kept.
+  async showRentCollectionModal(asset, contract, selectedOccurrenceId = null, onDone = null, options = {}) {
     try {
-      const [fullContract, accounts, paymentMethods] = await Promise.all([API.rentals.get(contract.id), API.accounts.list(), API.finance.paymentMethods()]);
+      const [fullContract, accounts] = await Promise.all([API.rentals.get(contract.id), API.accounts.list()]);
+      const currency = contract.currencyCode;
+      const idempotencyKey = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}-rent`;
       const open = fullContract.occurrences.filter(item => item.remainingMinor > 0 && item.status !== 'cancelled');
       const body = create('div', { style: { maxHeight: '65vh', overflowY: 'auto' } });
       const rows = create('div', { style: { display: 'grid', gap: '6px' } });
       const amountInputs = [];
-      open.forEach(occurrence => {
-        const checkbox = create('input', { type: 'checkbox', checked: occurrence.id === selectedOccurrenceId });
-        const amount = create('input', { className: 'form-control', type: 'number', min: '0.01', step: contract.currencyCode === 'JPY' ? '1' : '0.01', value: occurrence.id === selectedOccurrenceId ? occurrence.remainingAmount : '' });
-        const row = create('label', { className: 'card', style: { padding: '8px', display: 'grid', gridTemplateColumns: 'auto 1fr minmax(90px, 150px)', gap: '8px', alignItems: 'center' } }, [
-          checkbox, create('span', { textContent: `${occurrence.date} · pendiente ${occurrence.remainingAmount} ${contract.currencyCode}` }), amount
-        ]);
-        rows.appendChild(row);
-        amountInputs.push({ occurrence, checkbox, amount });
-      });
-      if (!open.length) rows.appendChild(create('small', { textContent: 'No hay períodos pendientes para asignar.' }));
-      body.append(create('p', { textContent: 'Selecciona uno o varios períodos y distribuye el cobro recibido. La parte no asignada quedará visible.' }), rows);
-      const total = this.rentalField(body, `Importe total recibido (${contract.currencyCode})`, { type: 'number', min: '0.01', step: contract.currencyCode === 'JPY' ? '1' : '0.01' });
-      const account = this.select([['', 'Seleccionar cuenta'], ...accounts.filter(item => item.activo && item.currency === contract.currencyCode).map(item => [item.id, item.nombre])]);
+      let single = null;
+      if (options.single) {
+        single = open.find(item => item.id === selectedOccurrenceId);
+        if (!single) { showToast('Ese período ya no tiene saldo pendiente de cobro', 'error'); return; }
+        body.appendChild(create('p', { textContent: `Período ${single.date} · pendiente ${single.remainingAmount} ${currency}` }));
+      } else {
+        open.forEach(occurrence => {
+          const checkbox = create('input', { type: 'checkbox', checked: occurrence.id === selectedOccurrenceId });
+          const amount = MoneyInput.create({ currency, value: occurrence.id === selectedOccurrenceId ? occurrence.remainingAmount : null, ariaLabel: `Importe ${occurrence.date}` });
+          rows.appendChild(create('label', { className: 'card', style: { padding: '8px', display: 'grid', gridTemplateColumns: 'auto 1fr minmax(90px, 150px)', gap: '8px', alignItems: 'center' } }, [
+            checkbox, create('span', { textContent: `${occurrence.date} · pendiente ${occurrence.remainingAmount} ${currency}` }), amount
+          ]));
+          amountInputs.push({ occurrence, checkbox, amount });
+        });
+        if (!open.length) rows.appendChild(create('small', { textContent: 'No hay períodos pendientes para asignar.' }));
+        body.append(create('p', { textContent: 'Selecciona uno o varios períodos y distribuye el cobro recibido. La parte no asignada quedará visible.' }), rows);
+      }
+      const total = MoneyInput.create({ currency, value: single ? single.remainingAmount : null, required: true, ariaLabel: `Importe total recibido (${currency})` });
+      body.append(create('label', { className: 'form-group' }, [create('span', { textContent: `Importe total recibido (${currency})` }), total]));
+      const eligible = accounts.filter(item => item.activo && item.currency === currency);
+      const account = this.select([['', 'Seleccionar cuenta'], ...eligible.map(item => [item.id, item.nombre])]);
+      account.value = (eligible.find(item => item.primary) || (eligible.length === 1 ? eligible[0] : null))?.id || '';
       body.append(create('label', { className: 'form-group' }, [create('span', { textContent: 'Cuenta (misma moneda del contrato)' }), account]));
       const date = this.rentalField(body, 'Fecha de cobro', { type: 'date', value: new Date().toISOString().slice(0, 10) });
-      const method = this.rentalField(body, 'Medio de cobro (texto libre)');
-      const paymentMethod = this.select([['', 'Sin medio reutilizable'], ...paymentMethods.map(item => [item.id, `${item.name}${item.lastFour ? ` ···· ${item.lastFour}` : ''}`])]);
-      paymentMethod.addEventListener('change', () => { method.value = paymentMethods.find(item => item.id === paymentMethod.value)?.name || method.value; });
-      body.append(create('label', { className: 'form-group' }, [create('span', { textContent: 'Medio reutilizable' }), paymentMethod]));
+      const method = this.rentalField(body, 'Medio de cobro (opcional)');
+      const ivaPercent = Number(fullContract.ivaPercent) || 0;
+      const classification = this.select([['', 'Sin clasificar'], ['A', ivaPercent > 0 ? `A (IVA ${ivaPercent}%)` : 'A'], ['B', 'B']]);
+      classification.value = ivaPercent > 0 ? 'A' : '';
+      body.append(create('label', { className: 'form-group' }, [create('span', { textContent: 'Clasificación' }), classification]));
       const footer = create('div', {}, [create('button', { className: 'btn btn-primary', type: 'button', textContent: 'Registrar cobro', onClick: async () => {
-        const allocations = amountInputs.filter(item => item.checkbox.checked).map(item => ({ occurrenceId: item.occurrence.id, amount: Number(item.amount.value) }));
+        if (!MoneyInput.validateAll([total, ...amountInputs.map(item => item.amount)])) return;
+        const totalValue = MoneyInput.value(total);
+        if (!(totalValue > 0)) return showToast('Ingresá el importe recibido', 'error');
+        const allocations = single
+          ? [{ occurrenceId: single.id, amount: totalValue }]
+          : amountInputs.filter(item => item.checkbox.checked).map(item => ({ occurrenceId: item.occurrence.id, amount: MoneyInput.value(item.amount) }));
         if (!allocations.length) return showToast('Selecciona al menos un período para asignar', 'error');
         try {
           await API.rentals.collect({
-            amount: Number(total.value), accountId: account.value, date: date.value,
-            method: method.value.trim(), paymentMethodId: paymentMethod.value || null, allocations,
-            idempotencyKey: crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}-rent`
+            amount: totalValue, accountId: account.value, date: date.value,
+            method: method.value.trim(), allocations,
+            ...(classification.value ? { clasificacion: classification.value } : {}),
+            idempotencyKey
           });
           showToast('Cobro registrado en los ingresos reales');
           Modal.hide();
           await (onDone ? onDone() : this.showDetails(asset.id));
         } catch (error) { showToast(error.message, 'error'); }
       } })]);
-      Modal.show(`Registrar cobro · ${contract.currencyCode}`, body, { footer });
+      Modal.show(`Registrar cobro · ${currency}`, body, { footer });
     } catch (error) { showToast(`No se pudo abrir el cobro: ${error.message}`, 'error'); }
   }
 };

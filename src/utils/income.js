@@ -86,6 +86,8 @@ function getIncomeIva(transaction) {
   }
   const amountCents = toCents(breakdown.a) || 0n;
   const rateBasisPoints = toCents(ivaPorcentaje) || 0n;
+  // Gross amounts (ivaIncluded): IVA = gross * r / (100 + r); otherwise the amount is net.
+  if (transaction.ivaIncluded) return fromCents(divideRound(amountCents * rateBasisPoints, 10000n + rateBasisPoints));
   return fromCents(divideRound(amountCents * rateBasisPoints, 10000n));
 }
 

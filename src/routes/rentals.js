@@ -147,6 +147,7 @@ router.get('/collections/list', (req, res) => {
   const db = req.app.locals.db;
   const userId = req.session.userId;
   const collections = db.findAll('rentCollections', userId)
+    .filter(item => !item.reversedAt)
     .filter(item => !req.query.contractId || (db.findAll('rentCollectionAllocations', userId).some(allocation => allocation.collectionId === item.id && db.findById('rentOccurrences', allocation.occurrenceId, userId)?.contractId === req.query.contractId)))
     .sort((a, b) => b.date.localeCompare(a.date));
   res.json(collections.map(item => {
@@ -168,9 +169,10 @@ router.post('/collections', (req, res) => {
   const key = input.idempotencyKey;
   if (typeof key !== 'string' || key.length < 8 || key.length > 120) return res.status(400).json({ error: 'Se requiere una clave de idempotencia válida' });
   const keyHash = rentals.hash(key);
-  const fingerprint = rentals.hash(JSON.stringify({ amount: input.amount, accountId: input.accountId, date: input.date, method: input.method || '', paymentMethodId: input.paymentMethodId || null, allocations: input.allocations || [] }));
+  const fingerprint = rentals.hash(JSON.stringify({ amount: input.amount, accountId: input.accountId, date: input.date, method: input.method || '', clasificacion: input.clasificacion || null, allocations: input.allocations || [] }));
   const prior = db.findAll('rentCollections', userId).find(item => item.idempotencyKey === keyHash);
   if (prior) {
+    if (prior.reversedAt) return res.status(409).json({ error: 'Ese cobro fue anulado; registrá uno nuevo' });
     if (prior.fingerprint !== fingerprint) return res.status(409).json({ error: 'La clave de idempotencia ya se utilizó para otro cobro' });
     return res.json({ ...rentals.collectionView(db, userId, prior), replayed: true });
   }
@@ -181,7 +183,8 @@ router.post('/collections', (req, res) => {
   const paymentMethod = input.paymentMethodId ? db.findById('paymentMethods', input.paymentMethodId, userId) : null;
   if (input.paymentMethodId && !paymentMethod) return res.status(400).json({ error: 'El medio de cobro no es válido' });
   const methodLabel = typeof input.method === 'string' ? input.method.trim() : '';
-  if (!paymentMethod && (!methodLabel || methodLabel.length > 100)) return res.status(400).json({ error: 'El medio de cobro debe tener entre 1 y 100 caracteres' });
+  if (methodLabel.length > 100) return res.status(400).json({ error: 'El medio de cobro no puede superar los 100 caracteres' });
+  if (input.clasificacion !== undefined && input.clasificacion !== null && !['A', 'B'].includes(input.clasificacion)) return res.status(400).json({ error: 'La clasificación debe ser A o B' });
   ledger.ensureSetup(db, userId);
   const account = db.findById('accounts', input.accountId, userId);
   if (!account || !account.activo) return res.status(400).json({ error: 'Seleccioná una cuenta activa' });
@@ -191,6 +194,14 @@ router.post('/collections', (req, res) => {
   if (allocationResult.error) return res.status(400).json({ error: allocationResult.error });
   const allocatedMinor = allocationResult.allocations.reduce((sum, item) => sum + item.amountMinor, 0);
   if (allocatedMinor > amountMinor) return res.status(400).json({ error: 'Las asignaciones superan el importe real cobrado' });
+  const contractIvas = [...new Set(allocationResult.allocations.map(item => {
+    const occurrence = db.findById('rentOccurrences', item.occurrenceId, userId);
+    const contract = occurrence && db.findById('rentalContracts', occurrence.contractId, userId);
+    return Number(contract?.ivaPercent) || 0;
+  }))];
+  const ivaPercent = contractIvas.length === 1 && contractIvas[0] > 0 ? contractIvas[0] : null;
+  const clasificacion = input.clasificacion || (ivaPercent ? 'A' : null);
+  const ivaApplies = clasificacion === 'A' && ivaPercent !== null;
   const collectionId = uuidv4();
   let transaction;
   let collection;
@@ -201,13 +212,13 @@ router.post('/collections', (req, res) => {
       accountId: account.id, currencyCode: account.currency, titulo: 'Cobro de alquiler',
       ...incomeAttribution.incomeHolderSnapshot(db, userId, account),
       categoryId: null, refundSourceId: null, fecha: date, recurrente: false, frecuencia: null, fechaFin: null,
-      clasificacion: null, montoA: null, montoB: null, ivaPorcentaje: null,
+      clasificacion, montoA: null, montoB: null, ivaPorcentaje: ivaApplies ? ivaPercent : null, ivaIncluded: ivaApplies,
       rentCollectionId: collectionId, rentCollectionIdempotencyKey: keyHash,
       paymentMethodId: paymentMethod?.id || null, paymentMethod: methodLabel || paymentMethod?.name || ''
     }, userId);
     collection = db.create('rentCollections', {
       id: collectionId, transactionId: transaction.id, amountMinor, amount: ledger.fromMinorUnits(amountMinor, account.currency),
-      currencyCode: account.currency, accountId: account.id, date, method: methodLabel || paymentMethod?.name || '', paymentMethodId: paymentMethod?.id || null,
+      currencyCode: account.currency, accountId: account.id, date, method: methodLabel || paymentMethod?.name || '', paymentMethodId: paymentMethod?.id || null, clasificacion,
       idempotencyKey: keyHash, fingerprint
     }, userId);
     allocationResult.allocations.forEach(item => savedAllocations.push(db.create('rentCollectionAllocations', {
@@ -222,6 +233,14 @@ router.post('/collections', (req, res) => {
     return res.status(500).json({ error: 'No se pudo registrar el cobro' });
   }
   res.status(201).json(rentals.collectionView(db, userId, collection));
+});
+
+router.post('/collections/:id/reverse', (req, res) => {
+  const db = req.app.locals.db;
+  const userId = req.session.userId;
+  const result = rentals.reverseCollection(db, userId, req.params.id);
+  if (result.error) return res.status(result.status || 409).json({ error: result.error });
+  res.json(result);
 });
 
 router.post('/collections/:id/allocations', (req, res) => {

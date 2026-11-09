@@ -947,7 +947,15 @@ const HomePage = {
       disabled: tx.isRecurringInstance && tx.occurrenceStatus === 'posted'
     }));
 
-    on(footer.lastChild, 'click', async () => {
+    const deleteButton = footer.lastChild;
+    let rentDeleteArmed = false;
+    on(deleteButton, 'click', async () => {
+      if (tx.rentCollectionId && !rentDeleteArmed) {
+        rentDeleteArmed = true;
+        deleteButton.textContent = 'Confirmar eliminación';
+        showToast('Al eliminar este cobro de alquiler, el período vuelve a quedar pendiente de cobro. Tocá de nuevo para confirmar.');
+        return;
+      }
       try {
         if (tx.isRecurringInstance) await API.transactions.skipOccurrence(tx.originalId, tx.fecha);
         else await API.transactions.delete(tx.id);
@@ -976,6 +984,7 @@ const HomePage = {
     categoryDetails.appendChild(document.createTextNode(` - ${formatFechaCorta(tx.fecha)}`));
     if (tx.accountName) categoryDetails.appendChild(document.createTextNode(` · ${tx.accountName} (${tx.currencyCode || 'EUR'})`));
     details.appendChild(categoryDetails);
+    if (tx.rentCollectionId) details.appendChild(create('p', { textContent: 'Cobro de alquiler: si lo eliminás, el período vuelve a quedar pendiente de cobro.', style: { color: 'var(--text-secondary)', fontSize: 'var(--font-xs)' } }));
     const amountDetail = create('p', {
       textContent: `${tx.tipo === 'expense' ? '-' : '+'}${formatearMoneda(tx.monto, tx.currencyCode || 'EUR')}`,
       style: { fontSize: 'var(--font-xl)', fontWeight: '700', color: `var(--${tx.tipo === 'expense' ? 'expense' : tx.tipo === 'income' ? 'income' : 'refund'}-color)` }

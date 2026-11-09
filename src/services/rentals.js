@@ -258,6 +258,44 @@ function validateAllocations(db, userId, input, currencyCode, ignoreCollectionId
   return { allocations: normalized };
 }
 
+function reverseCollection(db, userId, collectionId) {
+  const collection = db.findById('rentCollections', collectionId, userId);
+  if (!collection) return { status: 404, error: 'Cobro no encontrado' };
+  if (collection.reversedAt) return { status: 409, error: 'Ese cobro ya fue anulado' };
+  const transaction = db.findById('transactions', collection.transactionId, userId);
+  const account = transaction && db.findById('accounts', transaction.accountId || collection.accountId, userId);
+  if (account && account.reconciled && account.openingDate && (collection.date < account.openingDate || (account.includedMovementIds || []).includes(transaction.id))) {
+    return { status: 409, error: 'La cuenta fue conciliada; no se puede revertir el cobro' };
+  }
+  if (transaction) {
+    const linkedNormalization = db.findAll('transfers', userId).some(transfer => [...(transfer.normalizationAllocations || []), ...(transfer.pendingAllocations || [])].some(item => item.sourceType === 'income' && item.sourceId === transaction.id));
+    const linkedRefund = db.findAll('transactions', userId).some(item => item.tipo === 'refund' && item.refundSourceId === transaction.id);
+    const allocated = db.findAll('movementAllocations', userId).some(item => item.transactionId === transaction.id);
+    if (linkedNormalization || linkedRefund || allocated) return { status: 409, error: 'Este cobro tiene referencias activas; resuélvelas antes de anularlo' };
+  }
+  const allocations = db.findAll('rentCollectionAllocations', userId).filter(item => item.collectionId === collection.id);
+  const documents = transaction ? db.findAll('documents', userId).filter(item => item.transactionId === transaction.id) : [];
+  const removedAllocations = [];
+  let removedTransaction = null;
+  try {
+    allocations.forEach(item => { db.remove('rentCollectionAllocations', item.id, userId); removedAllocations.push(item); });
+    if (transaction) { db.remove('transactions', transaction.id, userId); removedTransaction = transaction; }
+    db.update('rentCollections', collection.id, { reversedAt: new Date().toISOString(), reversedTransactionId: transaction?.id || null }, userId);
+    documents.forEach(item => db.update('documents', item.id, { transactionId: null, detachedFromCollectionId: collection.id }, userId));
+  } catch {
+    db.clearCache();
+    try {
+      removedAllocations.forEach(item => { if (!db.findById('rentCollectionAllocations', item.id, userId)) db.create('rentCollectionAllocations', item, userId); });
+      if (removedTransaction && !db.findById('transactions', removedTransaction.id, userId)) db.create('transactions', removedTransaction, userId);
+      if (db.findById('rentCollections', collection.id, userId)?.reversedAt) db.update('rentCollections', collection.id, { reversedAt: null, reversedTransactionId: null }, userId);
+    } catch { /* best effort restore */ }
+    db.clearCache();
+    return { status: 500, error: 'No se pudo anular el cobro' };
+  }
+  ledger.refreshAlerts(db, userId);
+  return { ok: true, collectionId: collection.id, reopenedOccurrenceIds: [...new Set(allocations.map(item => item.occurrenceId))] };
+}
+
 function collectionView(db, userId, collection) {
   const allocations = db.findAll('rentCollectionAllocations', userId).filter(item => item.collectionId === collection.id);
   const allocatedMinor = allocations.reduce((sum, item) => sum + item.amountMinor, 0);
@@ -311,6 +349,6 @@ module.exports = {
   rentAlerts,
   CONTRACT_TYPES, CONTRACT_STATES, PERIODICITIES, CONDITION_METHODS, validDate, hash,
   validateContract, conditionsFor, applyCondition, generateOccurrences, occurrenceView,
-  validateAllocations, collectionView, intervalMonths,
+  validateAllocations, collectionView, reverseCollection, intervalMonths,
   CONTRACT_KINDS, activeContractFor, hasOccurrences, afterContractWrite, cancelUnpaidOccurrences
 };

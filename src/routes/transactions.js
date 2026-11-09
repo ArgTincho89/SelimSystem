@@ -3,6 +3,7 @@ const { requireAuth } = require('../middleware/auth');
 const { generateRecurringInstances, getMonthTransactions } = require('../utils/recurring');
 const { roundCents, sumCents } = require('../utils/income');
 const ledger = require('../services/account-ledger');
+const rentals = require('../services/rentals');
 const finance = require('../services/finance');
 const incomeAttribution = require('../services/income-attribution');
 
@@ -229,7 +230,7 @@ router.put('/:id', (req, res) => {
     return res.status(404).json({ error: 'Transacción no encontrada' });
   }
   if (transaction.obligationOccurrenceId) return res.status(409).json({ error: 'Los pagos vinculados a obligaciones son inmutables; registra un movimiento compensatorio si hace falta' });
-  if (transaction.rentCollectionId) return res.status(409).json({ error: 'Los cobros de alquiler vinculados a períodos son inmutables; registra un movimiento compensatorio si hace falta' });
+  if (transaction.rentCollectionId) return res.status(409).json({ error: 'Para corregir un cobro de alquiler, eliminá la transacción: el período vuelve a quedar pendiente de cobro' });
 
   const updates = {};
   const paymentMethodId = req.body.paymentMethodId !== undefined ? (req.body.paymentMethodId || null) : transaction.paymentMethodId || null;
@@ -415,7 +416,11 @@ router.delete('/:id', (req, res) => {
   }
 
   if (transaction.obligationOccurrenceId) return res.status(409).json({ error: 'Los pagos vinculados a obligaciones no se pueden eliminar' });
-  if (transaction.rentCollectionId) return res.status(409).json({ error: 'Los cobros de alquiler vinculados a períodos no se pueden eliminar' });
+  if (transaction.rentCollectionId) {
+    const result = rentals.reverseCollection(db, userId, transaction.rentCollectionId);
+    if (result.error) return res.status(result.status || 409).json({ error: result.error });
+    return res.json({ ok: true, collectionId: result.collectionId, reopenedOccurrenceIds: result.reopenedOccurrenceIds });
+  }
 
   const linkedNormalization = db.findAll('transfers', userId).some(transfer => [...(transfer.normalizationAllocations || []), ...(transfer.pendingAllocations || [])].some(item => item.sourceType === 'income' && item.sourceId === transaction.id));
   const linkedRefund = db.findAll('transactions', userId).some(item => item.tipo === 'refund' && item.refundSourceId === transaction.id);

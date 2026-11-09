@@ -263,6 +263,7 @@ const API = {
     alerts() { return API.get('/rentals/alerts'); },
     collections(contractId) { return API.get(`/rentals/collections/list${contractId ? `?contractId=${encodeURIComponent(contractId)}` : ''}`); },
     collect(data) { return API.post('/rentals/collections', data); },
+    reverseCollection(collectionId) { return API.post(`/rentals/collections/${encodeURIComponent(collectionId)}/reverse`, {}); },
     allocate(collectionId, data) { return API.post(`/rentals/collections/${encodeURIComponent(collectionId)}/allocations`, data); }
   }
 };
