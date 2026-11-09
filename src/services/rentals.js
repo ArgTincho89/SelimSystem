@@ -67,11 +67,30 @@ function occurrenceDates(contract, throughDate, conditions = []) {
 }
 
 const CONTRACT_KINDS = new Set(['rental', 'usufruct']);
+const MODALITIES = ['locacion', 'comodato', 'mutuo'];
+const KIND_BY_MODALITY = { locacion: 'rental', comodato: 'usufruct', mutuo: 'usufruct' };
+
+/** Modality of a contract; legacy contracts (no `modality`) map from their kind. */
+function modalityOf(contract) {
+  if (contract.modality) return contract.modality;
+  return contract.contractKind === 'usufruct' ? 'comodato' : 'locacion';
+}
+
+function ivaBasisPoints(ivaPercent) {
+  const scaled = ivaPercent === null || ivaPercent === undefined ? 0 : decimalScaled(Number(ivaPercent), 2);
+  return scaled === null || scaled < 0 ? 0 : scaled;
+}
+
+/** Gross expected amount: net x (1 + IVA%). Legacy contracts (no IVA) keep gross = net. */
+function grossMinor(netMinor, ivaPercent) {
+  const bp = ivaBasisPoints(ivaPercent);
+  return bp ? ledger.mulDivRound(netMinor, 10000 + bp, 10000) : netMinor;
+}
 
 // `assetHint` lets the composite asset form validate a contract before its asset exists.
 function validateContract(db, userId, input, existing = null, assetHint = null) {
   const value = { ...(existing || {}) };
-  const fields = ['assetId', 'type', 'startDate', 'endDate', 'initialRent', 'currencyCode', 'periodicity', 'dueDay', 'depositAmount', 'guarantee', 'includedExpenses', 'expenseResponsibility', 'notes', 'documentId', 'status', 'tenantIds', 'adjustmentFrequencyMonths', 'adjustmentCriterion', 'contractKind'];
+  const fields = ['assetId', 'type', 'startDate', 'endDate', 'initialRent', 'currencyCode', 'periodicity', 'dueDay', 'depositAmount', 'guarantee', 'includedExpenses', 'expenseResponsibility', 'notes', 'documentId', 'status', 'tenantIds', 'adjustmentFrequencyMonths', 'adjustmentCriterion', 'contractKind', 'modality', 'ivaPercent', 'declarationId'];
   fields.forEach(field => { if (input[field] !== undefined) value[field] = input[field]; });
   if (assetHint) value.assetId = assetHint.id;
   const asset = assetHint || db.findById('assets', value.assetId, userId);
@@ -81,8 +100,15 @@ function validateContract(db, userId, input, existing = null, assetHint = null) 
   if (frequency !== null && (!Number.isInteger(frequency) || frequency < 1 || frequency > 120)) return { error: 'La frecuencia de ajuste debe ser un entero entre 1 y 120 meses' };
   const criterion = value.adjustmentCriterion ?? null;
   if (criterion !== null && (typeof criterion !== 'string' || criterion.trim().length > 120)) return { error: 'El criterio de ajuste no es válido' };
-  const contractKind = value.contractKind ?? 'rental';
+  const modality = value.modality ?? null;
+  if (modality !== null && !MODALITIES.includes(modality)) return { error: 'La modalidad no es válida' };
+  const contractKind = modality ? KIND_BY_MODALITY[modality] : (value.contractKind ?? 'rental');
   if (!CONTRACT_KINDS.has(contractKind)) return { error: 'El tipo de contrato (alquiler o usufructo) no es válido' };
+  let ivaPercent = value.ivaPercent ?? null;
+  if (ivaPercent !== null) {
+    if (typeof ivaPercent !== 'number' || !Number.isFinite(ivaPercent) || ivaPercent < 0 || ivaPercent > 100 || decimalScaled(ivaPercent, 2) / 100 !== ivaPercent) return { error: 'El IVA debe estar entre 0 y 100, con hasta dos decimales' };
+    if (contractKind !== 'rental' || (modality && modality !== 'locacion')) return { error: 'Solo el contrato de locación admite IVA' };
+  }
   if (!validDate(value.startDate) || !validDate(value.endDate, true) || (value.endDate && value.endDate < value.startDate)) return { error: 'El período del contrato no es válido' };
   if (!ledger.CURRENCIES.has(value.currencyCode)) return { error: 'La moneda del contrato no es válida' };
   if (!PERIODICITIES.has(value.periodicity)) return { error: 'La periodicidad no es válida' };
@@ -115,12 +141,23 @@ function validateContract(db, userId, input, existing = null, assetHint = null) 
     guarantee: value.guarantee || '', includedExpenses: (value.includedExpenses || []).map(item => item.trim()),
     expenseResponsibility: { ...value.expenseResponsibility }, notes: (value.notes || '').trim(),
     documentId: value.documentId || null, tenantIds: [...value.tenantIds], status: value.status || 'active',
-    adjustmentFrequencyMonths: frequency, adjustmentCriterion: criterion === null ? null : criterion.trim() || null, contractKind
+    adjustmentFrequencyMonths: frequency, adjustmentCriterion: criterion === null ? null : criterion.trim() || null, contractKind,
+    ...(modality ? { modality } : {}), ...(value.declarationId ? { declarationId: value.declarationId } : {}),
+    ...(ivaPercent !== null || value.ivaPercent !== undefined ? { ivaPercent } : {})
   } };
 }
 
+/** Active contracts of an asset (or of one declaration), in modality order: locación, comodato, mutuo. */
+function activeContractsFor(db, userId, scope) {
+  const declarationId = scope && typeof scope === 'object' ? scope.id : null;
+  const assetId = scope && typeof scope === 'object' ? scope.assetId : scope;
+  return db.findAll('rentalContracts', userId)
+    .filter(item => item.assetId === assetId && item.status === 'active' && (!declarationId || item.declarationId === declarationId))
+    .sort((a, b) => MODALITIES.indexOf(modalityOf(a)) - MODALITIES.indexOf(modalityOf(b)) || String(a.createdAt).localeCompare(String(b.createdAt)));
+}
+
 function activeContractFor(db, userId, assetId) {
-  return db.findAll('rentalContracts', userId).find(item => item.assetId === assetId && item.status === 'active') || null;
+  return activeContractsFor(db, userId, assetId)[0] || null;
 }
 
 function hasOccurrences(db, userId, contractId) {
@@ -132,7 +169,8 @@ function afterContractWrite(db, userId, contract) {
   if (contract.status !== 'active') return;
   const asset = db.findById('assets', contract.assetId, userId);
   if (!asset) return;
-  const condition = contract.contractKind === 'usufruct' ? 'usufruct' : 'rented';
+  const active = db.findAll('rentalContracts', userId).filter(item => item.assetId === asset.id && item.status === 'active');
+  const condition = active.some(item => (item.contractKind || 'rental') !== 'usufruct') ? 'rented' : 'usufruct';
   const patch = {};
   if (asset.usageStatus !== 'rented') patch.usageStatus = 'rented';
   if (asset.condition !== condition) patch.condition = condition;
@@ -208,7 +246,7 @@ function occurrenceView(db, userId, occurrence, today) {
   let status = occurrence.cancelled ? 'cancelled' : paidMinor >= occurrence.rentMinor ? 'collected' : paidMinor > 0 ? 'partially_collected' : occurrence.date < today ? 'overdue' : 'pending';
   const contract = db.findById('rentalContracts', occurrence.contractId, userId);
   return {
-    ...occurrence, status, paidMinor, remainingMinor,
+    ...occurrence, modality: occurrence.modality || (contract ? modalityOf(contract) : null), status, paidMinor, remainingMinor,
     paidAmount: ledger.fromMinorUnits(paidMinor, occurrence.currencyCode),
     remainingAmount: ledger.fromMinorUnits(remainingMinor, occurrence.currencyCode),
     allocations: allocations.map(item => ({ ...item, collection: db.findById('rentCollections', item.collectionId, userId) })),
@@ -224,10 +262,12 @@ function generateOccurrences(db, userId, contract, throughDate) {
     if (onDate.some(item => !item.cancelled)) continue;
     if (onDate.some(item => item.cancelled && !item.supersededByConditionId)) continue;
     const applicable = [...conditions].filter(item => item.effectiveDate <= date).pop();
-    const rentMinor = applicable?.rentMinor || contract.initialRentMinor;
+    const netMinor = applicable?.rentMinor || contract.initialRentMinor;
+    const rentMinor = grossMinor(netMinor, contract.ivaPercent);
     const item = db.create('rentOccurrences', {
       contractId: contract.id, date, period: monthDate(date), currencyCode: contract.currencyCode,
       rentMinor, rentAmount: ledger.fromMinorUnits(rentMinor, contract.currencyCode),
+      modality: modalityOf(contract), netMinor, ivaPercent: contract.ivaPercent ?? null, ivaMinor: rentMinor - netMinor,
       conditionId: applicable?.id || null, generationKey: applicable ? `${contract.id}:${date}:${applicable.id}` : `${contract.id}:${date}`,
       cancelled: contract.status === 'cancelled' || contract.status === 'ended' && date > (contract.endDate || throughDate),
       generatedAt: new Date().toISOString()
@@ -329,7 +369,7 @@ function rentAlerts(db, userId, { today, leadDays = 5, expiryDays = 30, adjustme
     generateOccurrences(db, userId, contract, rentEnd)
       .filter(item => ['pending', 'partially_collected', 'overdue'].includes(item.status) && (item.date < today || item.date <= rentEnd))
       .forEach(item => items.push({
-        ...base, type: 'rent_due', id: `rent:${contract.id}:${item.date}`, date: item.date, period: item.period,
+        ...base, modality: item.modality, type: 'rent_due', id: `rent:${contract.id}:${item.date}`, date: item.date, period: item.period,
         rentOccurrenceId: String(item.id).startsWith('virtual:') ? null : item.id,
         amount: item.remainingAmount, expectedAmount: item.rentAmount, currencyCode: item.currencyCode,
         status: item.date < today ? 'overdue' : item.status
@@ -350,5 +390,5 @@ module.exports = {
   CONTRACT_TYPES, CONTRACT_STATES, PERIODICITIES, CONDITION_METHODS, validDate, hash,
   validateContract, conditionsFor, applyCondition, generateOccurrences, occurrenceView,
   validateAllocations, collectionView, reverseCollection, intervalMonths,
-  CONTRACT_KINDS, activeContractFor, hasOccurrences, afterContractWrite, cancelUnpaidOccurrences
+  CONTRACT_KINDS, MODALITIES, KIND_BY_MODALITY, modalityOf, grossMinor, decimalScaled, activeContractsFor, activeContractFor, hasOccurrences, afterContractWrite, cancelUnpaidOccurrences
 };

@@ -36,7 +36,26 @@ async function setupRentFixture(prefix) {
       idempotencyKey: `${prefix}-collection-${counter}`, ...extra
     });
   }
-  return { app, db, agent, other, userId, tenantId, assetId, accountId, createContract, occurrenceId, collect };
+  const modality = (kind = 'locacion', overrides = {}) => ({
+    kind, startDate: '2025-01-01', endDate: '2025-12-31', amount: 100000, currencyCode: 'ARS',
+    ivaPercent: kind === 'locacion' ? 21 : null, adjustmentFrequencyMonths: null, adjustmentCriterion: null, ...overrides
+  });
+  const declare = (modalities = [modality()], extra = {}) => agent.post('/api/rentals/declarations').send({ assetId, tenantIds: [tenantId], notes: '', modalities, ...extra });
+  const edit = (id, modalities, extra = {}) => agent.put(`/api/rentals/declarations/${id}`).send({ tenantIds: [tenantId], modalities, ...extra });
+  // Collects occurrences of one modality at their (gross) expected amount.
+  function collectModality(view, kind, dates, extra = {}) {
+    counter += 1;
+    const item = view.modalities.find(entry => entry.kind === kind);
+    const allocations = dates.map(date => {
+      const occurrence = item.occurrences.find(entry => entry.date === date);
+      return { occurrenceId: occurrence.id, amount: occurrence.rentMinor / 100 };
+    });
+    return agent.post('/api/rentals/collections').send({
+      amount: allocations.reduce((sum, entry) => sum + entry.amount, 0), accountId, date: '2025-03-02', allocations,
+      idempotencyKey: `${prefix}-decl-collection-${counter}`, ...extra
+    });
+  }
+  return { app, db, agent, other, userId, tenantId, assetId, accountId, createContract, occurrenceId, collect, modality, declare, edit, collectModality };
 }
 
 module.exports = { setupRentFixture };

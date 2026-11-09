@@ -3,6 +3,7 @@ const { validateOwnershipSet } = require('../utils/ownership-overlap');
 const ledger = require('./account-ledger');
 const rentals = require('./rentals');
 const obligations = require('./obligations');
+const declarations = require('./rental-declarations');
 
 function isoDay(offsetDays = 0) {
   const date = new Date();
@@ -174,7 +175,9 @@ function applyResponsibilities(db, userId, items) {
 /** Contract and obligation data appended to asset responses. */
 function describe(db, userId, asset) {
   const contract = rentals.activeContractFor(db, userId, asset.id);
+  const declaration = declarations.activeDeclarationFor(db, userId, asset.id);
   return {
+    declaration: declaration ? declarations.view(db, userId, declaration, { occurrences: false }) : null,
     activeContract: contract ? {
       ...contract, adjustmentFrequencyMonths: contract.adjustmentFrequencyMonths ?? null,
       adjustmentCriterion: contract.adjustmentCriterion ?? null, contractKind: contract.contractKind || 'rental',

@@ -7,6 +7,7 @@ const rentals = require('../services/rentals');
 
 const router = express.Router();
 router.use(requireAuth);
+router.use('/declarations', require('./rental-declarations'));
 
 function contractResponse(db, userId, contract, throughDate) {
   const occurrenceEnd = contract.status === 'ended' ? (contract.endDate || ledger.localDateForUser(db, userId)) : throughDate;
@@ -18,6 +19,8 @@ function contractResponse(db, userId, contract, throughDate) {
     adjustmentFrequencyMonths: contract.adjustmentFrequencyMonths ?? null,
     adjustmentCriterion: contract.adjustmentCriterion ?? null,
     contractKind: contract.contractKind || 'rental',
+    modality: rentals.modalityOf(contract),
+    ivaPercent: contract.ivaPercent ?? null,
     asset: db.findById('assets', contract.assetId, userId),
     tenants: contract.tenantIds.map(id => db.findById('legalOwners', id, userId)).filter(Boolean),
     conditions: rentals.conditionsFor(db, userId, contract.id),

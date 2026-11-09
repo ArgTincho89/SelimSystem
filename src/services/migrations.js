@@ -92,8 +92,10 @@ function migrateAssetsAndContracts(db, userId) {
 }
 
 /**
- * Idempotent add-only backfill for "evolutivo-3" (assets part).
- * Sets `cadastralId` and `constructionDate` to null on immovables only when undefined.
+ * Idempotent add-only backfill for "evolutivo-3".
+ * Assets: `cadastralId` and `constructionDate` null on immovables only when undefined.
+ * Contracts: each contract without a declaration gets its own `rentalDeclarations` record plus
+ * `declarationId`, `modality` and `ivaPercent` (only the fields that are undefined).
  */
 function migrateEvolutivo3(db) {
   let updated = 0;
@@ -111,6 +113,7 @@ function migrateEvolutivo3(db) {
       return { ...asset, ...patch };
     });
     if (changed) db.replace('assets', user.id, next);
+    updated += require('./rental-declarations').backfillDeclarations(db, user.id);
   }
   return { updated };
 }

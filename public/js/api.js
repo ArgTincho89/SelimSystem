@@ -264,6 +264,12 @@ const API = {
     collections(contractId) { return API.get(`/rentals/collections/list${contractId ? `?contractId=${encodeURIComponent(contractId)}` : ''}`); },
     collect(data) { return API.post('/rentals/collections', data); },
     reverseCollection(collectionId) { return API.post(`/rentals/collections/${encodeURIComponent(collectionId)}/reverse`, {}); },
-    allocate(collectionId, data) { return API.post(`/rentals/collections/${encodeURIComponent(collectionId)}/allocations`, data); }
+    allocate(collectionId, data) { return API.post(`/rentals/collections/${encodeURIComponent(collectionId)}/allocations`, data); },
+    declarations: {
+      list(assetId) { return API.get(`/rentals/declarations${assetId ? `?assetId=${encodeURIComponent(assetId)}` : ''}`); },
+      create(data) { return API.post('/rentals/declarations', data); },
+      update(id, data) { return API.put(`/rentals/declarations/${encodeURIComponent(id)}`, data); },
+      end(id) { return API.post(`/rentals/declarations/${encodeURIComponent(id)}/end`, {}); }
+    }
   }
 };
