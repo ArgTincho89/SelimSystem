@@ -1,6 +1,7 @@
 const express = require('express');
 const { requireAuth } = require('../middleware/auth');
 const economicOverview = require('../services/economic-overview');
+const assetFile = require('../services/asset-file');
 const { validateOwnershipSet } = require('../utils/ownership-overlap');
 
 const router = express.Router();
@@ -193,6 +194,16 @@ router.get('/:id/monthly-view', (req, res) => {
   const result = economicOverview.monthlyView(db, userId, asset, { from: req.query.from, to: req.query.to });
   if (result.error) return res.status(400).json({ error: result.error });
   res.json(result);
+});
+
+router.get('/:id/file', (req, res) => {
+  const db = req.app.locals.db;
+  const userId = req.session.userId;
+  const asset = db.findById('assets', req.params.id, userId);
+  if (!asset) return res.status(404).json({ error: 'Bien no encontrado' });
+  const horizon = assetFile.parseHorizon(req.query.horizonDays);
+  if (horizon.error) return res.status(400).json({ error: horizon.error });
+  res.json(assetFile.build(db, userId, asset, { horizonDays: horizon.value }));
 });
 
 router.put('/:id', (req, res) => {
