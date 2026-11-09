@@ -46,3 +46,9 @@ Notes: rented/usufruct with no rental and no active contract returns 400 ("Compl
 - [x] 7.3 sw.js v29; tests/ui/evolutivo2-s7-contract.test.js; S5/S6 contract tests relaxed/updated
 
 Notes: the asset Editar button now fetches GET /api/assets/:id so activeContract and obligations are available. Responsibilities travel in the composite form body (not via PATCH). Frequency is a text input with integer validation; the amount is the only number input of the block.
+
+## Slice S8 (obligation form simplification) - done
+- [x] 8.1 validateDefinition defaults missing paymentMethod to ''; payment POST no longer copies the obligation/occurrence payment method (empty, S9 captures it); category chain body -> occurrence -> obligation -> provider.expenseCategoryId; PUT propagation tolerates missing paymentMethod
+- [x] 8.2 obligations.js form: Nombre, Tipo, Bien, Proveedor, Cuenta/Contrato selector + number, Frecuencia, Primer/Ultimo vencimiento, Aviso, Moneda, Importe, Categoria (provider prefill), Responsable Titular/Inquilino, Notas; sw.js v30; tests/ui/evolutivo2-s8-contract.test.js, tests/routes/obligation-simplified.test.js
+
+Notes: provider field stays providerEntityId (legalOwners). Cuenta habitual and responsibleEntityId were removed from the form but stored values are kept (omitted from PUT payload). Legacy shared/third/none appear as an "(anterior)" option and are left untouched unless changed. Custom reminder days is a text input so the amount stays the first number input. Obligation list no longer shows paymentMethod.

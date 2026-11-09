@@ -145,7 +145,7 @@ router.put('/:id', (req, res) => {
       occurrenceChanges.title = updated.title;
       occurrenceChanges.categoryId = updated.categoryId;
       occurrenceChanges.accountId = updated.accountId;
-      occurrenceChanges.paymentMethod = updated.paymentMethod;
+      occurrenceChanges.paymentMethod = updated.paymentMethod || '';
       occurrenceChanges.paymentMethodId = updated.paymentMethodId || null;
       db.update('obligationOccurrences', item.id, occurrenceChanges, userId);
     });
@@ -242,7 +242,8 @@ router.post('/:id/occurrences/:occurrenceId/payments', (req, res) => {
   const account = db.findById('accounts', selectedAccountId, userId);
   if (!account || !account.activo) return res.status(400).json({ error: 'Seleccioná una cuenta activa' });
   if (account.currency !== occurrence.currencyCode) return res.status(400).json({ error: 'La moneda de la cuenta no coincide con la obligación' });
-  const selectedCategoryId = categoryId || occurrence.categoryId || obligation.categoryId;
+  const providerCategoryId = obligation.providerEntityId ? db.findById('legalOwners', obligation.providerEntityId, userId)?.expenseCategoryId : null;
+  const selectedCategoryId = categoryId || occurrence.categoryId || obligation.categoryId || providerCategoryId;
   const category = db.findById('categories', selectedCategoryId, userId);
   if (!category) return res.status(400).json({ error: 'Seleccioná una categoría válida' });
   const amountMinor = ledger.moneyInput(amount, account.currency);
@@ -261,8 +262,8 @@ router.post('/:id/occurrences/:occurrenceId/payments', (req, res) => {
       categoryId: category.id, fecha: paymentDate, recurrente: false, frecuencia: null, fechaFin: null,
       clasificacion: 'variable', obligationId: obligation.id, obligationOccurrenceId: occurrence.id,
       obligationIdempotencyKey: keyHash, obligationPaymentFingerprint: fingerprint,
-       paymentMethod: occurrence.paymentMethod || obligation.paymentMethod || '',
-       paymentMethodId: occurrence.paymentMethodId || obligation.paymentMethodId || null, paymentId
+      // The payment method is chosen when paying; legacy obligation values are not copied.
+      paymentMethod: '', paymentMethodId: null, paymentId
     }, userId);
   } catch {
     db.clearCache();

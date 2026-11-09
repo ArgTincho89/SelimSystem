@@ -7,12 +7,10 @@ describe('Evolutivo S2 UI contract', () => {
   it('exposes the responsibility selector and conditional split fields', () => {
     const source = read('js/pages/obligations.js');
     ['owner', 'tenant', 'shared', 'third', 'none'].forEach(type => expect(source).toContain(`['${type}',`));
-    expect(source).toContain('responsibilityType: responsibilityType.value');
-    expect(source).toContain('responsibleThirdEntityId:');
-    expect(source).toContain('rentalContractId: rentalContract.value');
-    expect(source).toContain("type: 'percentage', ownerPercent");
-    expect(source).toContain('ownerFixedMinor');
-    expect(source).toContain('ruleText');
+    expect(source).toContain('data.responsibilityType = responsibilityType.value');
+    expect(source).toContain('data.responsibleThirdEntityId = null');
+    expect(source).toContain('data.rentalContractId =');
+    expect(source).toContain('(anterior)');
   });
 
   it('shows the responsibility in the obligation list', () => {

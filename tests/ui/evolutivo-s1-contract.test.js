@@ -13,8 +13,8 @@ describe('Evolutivo S1 UI contract', () => {
 
   it('exposes external identifier fields on the obligations page', () => {
     const source = read('js/pages/obligations.js');
-    expect(source).toContain('externalIdentifier: externalIdentifier.value');
-    expect(source).toContain('externalIdentifierType: externalIdentifierType.value');
+    expect(source).toContain('externalIdentifier: identifier || null');
+    expect(source).toContain('externalIdentifierType: identifier ? identifierKind.value : null');
     expect(source).toContain("['policy', 'Póliza']");
   });
 

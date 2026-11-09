@@ -108,6 +108,8 @@ const ObligationsPage = {
     return label;
   },
 
+  IDENTIFIER_KINDS: [['account', 'Cuenta'], ['contract', 'Contrato']],
+
   IDENTIFIER_TYPES: [['account', 'Cuenta'], ['contract', 'Contrato'], ['meter', 'Medidor'], ['policy', 'Póliza'], ['client', 'Cliente'], ['other', 'Otro']],
 
   identifierTypeLabel(type) {
@@ -119,7 +121,7 @@ const ObligationsPage = {
     const provider = this.owners.find(record => record.id === item.providerEntityId)?.name;
     const details = create('div', {}, [
       create('h3', { textContent: item.title, style: { marginBottom: '4px' } }),
-      create('div', { className: 'text-muted', textContent: [item.type, asset, provider, item.paymentMethod].filter(Boolean).join(' · ') }),
+      create('div', { className: 'text-muted', textContent: [item.type, asset, provider].filter(Boolean).join(' · ') }),
       create('div', { className: 'text-muted', textContent: `Responsabilidad: ${this.responsibilityLabel(item)}` }),
       ...(item.externalIdentifier ? [create('div', { className: 'text-muted', textContent: `${this.identifierTypeLabel(item.externalIdentifierType)}: ${item.externalIdentifier}` })] : []),
       create('div', { className: 'text-muted', textContent: `${item.estimatedAmount} ${item.currencyCode} estimado · ${item.recurrenceFrequency ? this.frequencyLabel(item.recurrenceFrequency) : 'Única vez'} · Aviso ${item.reminderLeadDays} días` })
@@ -179,6 +181,15 @@ const ObligationsPage = {
     return card;
   },
 
+  // Responsibility options offered by the form. Legacy values (shared/third/none) are only kept when already stored.
+  async activeContractFor(assetId) {
+    if (!assetId) return null;
+    try {
+      const contracts = await API.get(`/rentals?assetId=${encodeURIComponent(assetId)}`);
+      return contracts.find(contract => contract.status === 'active') || null;
+    } catch { return null; }
+  },
+
   async showCreateModal(existing = null, defaults = {}) {
     const form = create('form', { style: { display: 'grid', gap: '10px', maxHeight: '70vh', overflowY: 'auto' } });
     const title = this.field(form, 'Nombre', { required: true, value: existing?.title || '' });
@@ -187,14 +198,24 @@ const ObligationsPage = {
     const asset = this.select([['', 'Sin bien vinculado'], ...this.assets.map(item => [item.id, item.name])], existing?.assetId || defaults.assetId || '');
     this.fieldWrap(form, 'Bien', asset);
     const providers = this.owners.filter(item => (item.roles || []).includes('provider'));
+    const providerCategory = id => providers.find(item => item.id === id)?.expenseCategoryId || '';
     const provider = this.select([['', 'Sin proveedor'], ...providers.map(item => [item.id, item.name])], existing?.providerEntityId || '');
     this.fieldWrap(form, 'Proveedor', provider);
-    const responsible = this.select([['', 'Sin responsable'], ...this.owners.map(item => [item.id, item.name])], existing?.responsibleEntityId || '');
-    this.fieldWrap(form, 'Persona u organización responsable', responsible);
-    const account = this.select([['', 'Sin cuenta habitual'], ...this.accounts.map(item => [item.id, `${item.nombre} (${item.currency})`])], existing?.accountId || '');
-    this.fieldWrap(form, 'Cuenta habitual', account);
-    const category = this.select([['', 'Sin categoría'], ...this.categories.map(item => [item.id, item.nombre])], existing?.categoryId || '');
-    this.fieldWrap(form, 'Categoría', category);
+    const identifierKind = this.select(this.IDENTIFIER_KINDS, existing?.externalIdentifierType || 'account');
+    if (existing?.externalIdentifierType && !this.IDENTIFIER_KINDS.some(([value]) => value === existing.externalIdentifierType)) {
+      identifierKind.prepend(create('option', { value: existing.externalIdentifierType, textContent: `${this.identifierTypeLabel(existing.externalIdentifierType)} (anterior)` }));
+      identifierKind.value = existing.externalIdentifierType;
+    }
+    this.fieldWrap(form, 'Cuenta o contrato', identifierKind);
+    const externalIdentifier = this.field(form, 'Número de cuenta o contrato', { value: existing?.externalIdentifier || '' });
+    const frequency = this.select([['', 'Única vez'], ['monthly', 'Mensual'], ['bimonthly', 'Cada dos meses'], ['quarterly', 'Trimestral'], ['semiannual', 'Semestral'], ['annual', 'Anual']], existing?.recurrenceFrequency || '');
+    this.fieldWrap(form, 'Frecuencia', frequency);
+    const date = this.field(form, 'Primer vencimiento', { type: 'date', required: true, value: existing?.startDate || new Date().toISOString().slice(0, 10) });
+    const endDate = this.field(form, 'Último vencimiento (opcional)', { type: 'date', value: existing?.endDate || '' });
+    const reminderValues = ['0', '7', '15', '30'];
+    const reminder = this.select([['0', 'El mismo día'], ['7', '7 días antes'], ['15', '15 días antes'], ['30', '30 días antes'], ['custom', 'Personalizado']], reminderValues.includes(String(existing?.reminderLeadDays ?? 7)) ? String(existing?.reminderLeadDays ?? 7) : 'custom');
+    this.fieldWrap(form, 'Aviso', reminder);
+    const customLead = this.field(form, 'Días de anticipación personalizados', { type: 'text', value: existing?.reminderLeadDays ?? 7 });
     const currencies = ['ARS', 'EUR', 'USD'];
     const currency = this.select(currencies.map(code => [code, code]), existing?.currencyCode || 'ARS');
     if (existing?.currencyCode && !currencies.includes(existing.currencyCode)) {
@@ -204,49 +225,30 @@ const ObligationsPage = {
     }
     this.fieldWrap(form, 'Moneda', currency);
     const amount = this.field(form, 'Importe estimado', { type: 'number', min: '0.01', step: '0.01', required: true, value: existing?.estimatedAmount ?? '' });
-    const paymentMethod = this.field(form, 'Medio de pago (texto libre)', { value: existing?.paymentMethod || '' });
-    const paymentMethodId = this.select([['', 'Sin medio reutilizable'], ...this.paymentMethods.map(item => [item.id, `${item.name}${item.lastFour ? ` ···· ${item.lastFour}` : ''}`])], existing?.paymentMethodId || '');
-    this.fieldWrap(form, 'Medio de pago reutilizable', paymentMethodId);
-    paymentMethodId.addEventListener('change', () => {
-      const selected = this.paymentMethods.find(item => item.id === paymentMethodId.value);
-      if (selected) paymentMethod.value = selected.name;
+    const category = this.select([['', 'Sin categoría'], ...this.categories.map(item => [item.id, item.nombre])], existing?.categoryId || (existing ? '' : providerCategory(provider.value)));
+    this.fieldWrap(form, 'Categoría', category);
+    // Re-prefill only while the category is still the previous provider's one (or empty).
+    let previousProviderCategory = providerCategory(provider.value);
+    on(provider, 'change', () => {
+      if (!category.value || category.value === previousProviderCategory) category.value = providerCategory(provider.value);
+      previousProviderCategory = providerCategory(provider.value);
     });
-    const date = this.field(form, 'Primer vencimiento', { type: 'date', required: true, value: existing?.startDate || new Date().toISOString().slice(0, 10) });
-    const endDate = this.field(form, 'Último vencimiento (opcional)', { type: 'date', value: existing?.endDate || '' });
-    const frequency = this.select([['', 'Única vez'], ['monthly', 'Mensual'], ['bimonthly', 'Cada dos meses'], ['quarterly', 'Trimestral'], ['semiannual', 'Semestral'], ['annual', 'Anual']], existing?.recurrenceFrequency || '');
-    this.fieldWrap(form, 'Frecuencia', frequency);
-    const reminderValues = ['0', '7', '15', '30'];
-    const reminder = this.select([['0', 'El mismo día'], ['7', '7 días antes'], ['15', '15 días antes'], ['30', '30 días antes'], ['custom', 'Personalizado']], reminderValues.includes(String(existing?.reminderLeadDays ?? 7)) ? String(existing?.reminderLeadDays ?? 7) : 'custom');
-    this.fieldWrap(form, 'Aviso', reminder);
-    const customLead = this.field(form, 'Días de anticipación personalizados', { type: 'number', min: '0', max: '90', value: existing?.reminderLeadDays ?? 7 });
-    const externalIdentifierType = this.select([['', 'Sin tipo de identificador'], ...this.IDENTIFIER_TYPES], existing?.externalIdentifierType || '');
-    this.fieldWrap(form, 'Tipo de identificador externo', externalIdentifierType);
-    const externalIdentifier = this.field(form, 'Identificador externo (cuenta, contrato, medidor, póliza...)', { value: existing?.externalIdentifier || '' });
-    const responsibilityType = this.select(this.RESPONSIBILITY_TYPES, existing?.responsibilityType || 'owner');
-    this.fieldWrap(form, 'Responsabilidad de pago', responsibilityType);
-    const split = existing?.responsibilitySplit || {};
-    const splitType = this.select([['percentage', 'Porcentajes'], ['fixed', 'Importes fijos'], ['other', 'Regla acordada']], split.type || 'percentage');
-    const splitTypeWrap = this.fieldWrap(form, 'Tipo de reparto', splitType);
-    const ownerPercent = this.field(form, 'Porcentaje del propietario', { type: 'number', min: '0', max: '100', step: '0.01', value: split.ownerPercent ?? 50 });
-    const tenantPercent = this.field(form, 'Porcentaje del inquilino', { type: 'number', min: '0', max: '100', step: '0.01', value: split.tenantPercent ?? 50 });
-    const ownerFixed = this.field(form, 'Importe fijo del propietario', { type: 'number', min: '0', step: '0.01', value: split.ownerFixedMinor === undefined ? '' : split.ownerFixedMinor / 100 });
-    const tenantFixed = this.field(form, 'Importe fijo del inquilino', { type: 'number', min: '0', step: '0.01', value: split.tenantFixedMinor === undefined ? '' : split.tenantFixedMinor / 100 });
-    const ruleText = this.field(form, 'Regla acordada', { value: split.ruleText || '' });
-    const third = this.select([['', 'Seleccioná un tercero'], ...this.owners.map(item => [item.id, item.name])], existing?.responsibleThirdEntityId || '');
-    const thirdWrap = this.fieldWrap(form, 'Tercero responsable', third);
-    const rentalContract = this.select([['', 'Sin contrato de alquiler']], '');
-    this.fieldWrap(form, 'Contrato de alquiler (opcional)', rentalContract);
-    this.loadRentalContracts(rentalContract, asset, existing?.rentalContractId || '');
-    const splitControls = [[splitType, null], [ownerPercent, 'percentage'], [tenantPercent, 'percentage'], [ownerFixed, 'fixed'], [tenantFixed, 'fixed'], [ruleText, 'other']];
-    const syncResponsibility = () => {
-      splitControls.forEach(([control, kind]) => {
-        control.closest('.form-group').style.display = responsibilityType.value === 'shared' && (!kind || kind === splitType.value) ? '' : 'none';
-      });
-      thirdWrap.style.display = responsibilityType.value === 'third' ? '' : 'none';
+    const storedResponsibility = existing?.responsibilityType || 'owner';
+    const legacyResponsibility = !['owner', 'tenant'].includes(storedResponsibility) && existing ? storedResponsibility : null;
+    const responsibilityType = this.select([['owner', 'Titular'], ['tenant', 'Inquilino'], ...(legacyResponsibility ? [[legacyResponsibility, `${this.responsibilityLabel(existing)} (anterior)`]] : [])], legacyResponsibility || storedResponsibility);
+    const responsibilityHint = create('small', { className: 'text-muted' });
+    const responsibilityWrap = this.fieldWrap(form, 'Responsable', responsibilityType);
+    responsibilityWrap.appendChild(responsibilityHint);
+    let activeContract = null;
+    const syncResponsibility = async () => {
+      activeContract = await this.activeContractFor(asset.value);
+      const tenantOption = [...responsibilityType.options].find(option => option.value === 'tenant');
+      tenantOption.disabled = !activeContract;
+      responsibilityHint.textContent = activeContract ? '' : 'El bien no tiene un contrato de alquiler activo; solo el titular puede ser responsable.';
+      if (!activeContract && responsibilityType.value === 'tenant' && storedResponsibility !== 'tenant') responsibilityType.value = 'owner';
     };
-    on(responsibilityType, 'change', syncResponsibility);
-    on(splitType, 'change', syncResponsibility);
-    syncResponsibility();
+    on(asset, 'change', syncResponsibility);
+    await syncResponsibility();
     const notes = this.field(form, 'Notas', { multiline: true, value: existing?.notes || '' });
     on(reminder, 'change', () => { customLead.disabled = reminder.value !== 'custom'; });
     customLead.disabled = reminder.value !== 'custom';
@@ -257,22 +259,21 @@ const ObligationsPage = {
     on(form, 'submit', async event => {
       event.preventDefault();
       try {
+        const identifier = externalIdentifier.value.trim();
         const data = {
           title: title.value, type: type.value, assetId: asset.value || null, providerEntityId: provider.value || null,
-          responsibleEntityId: responsible.value || null, accountId: account.value || null, categoryId: category.value || null,
-          currencyCode: currency.value, estimatedAmount: Number(amount.value), paymentMethod: paymentMethod.value, paymentMethodId: paymentMethodId.value || null,
+          categoryId: category.value || null,
+          currencyCode: currency.value, estimatedAmount: Number(amount.value),
           startDate: date.value, endDate: endDate.value || null, recurrenceFrequency: frequency.value || null,
           reminderLeadDays: Number(reminder.value === 'custom' ? customLead.value : reminder.value), notes: notes.value,
-          externalIdentifier: externalIdentifier.value.trim() || null, externalIdentifierType: externalIdentifierType.value || null,
-          responsibilityType: responsibilityType.value, responsibilitySplit: null,
-          responsibleThirdEntityId: responsibilityType.value === 'third' ? third.value || null : null,
-          rentalContractId: rentalContract.value || null
+          externalIdentifier: identifier || null, externalIdentifierType: identifier ? identifierKind.value : null
         };
-        if (responsibilityType.value === 'shared') {
-          const minor = input => (input.value === '' ? undefined : Math.round(Number(input.value) * 100));
-          if (splitType.value === 'percentage') data.responsibilitySplit = { type: 'percentage', ownerPercent: Number(ownerPercent.value), tenantPercent: Number(tenantPercent.value) };
-          else if (splitType.value === 'fixed') data.responsibilitySplit = { type: 'fixed', ownerFixedMinor: minor(ownerFixed), tenantFixedMinor: minor(tenantFixed) };
-          else data.responsibilitySplit = { type: 'other', ruleText: ruleText.value };
+        // Legacy shared/third/none stay untouched unless the user picks Titular or Inquilino.
+        if (!legacyResponsibility || responsibilityType.value !== legacyResponsibility) {
+          data.responsibilityType = responsibilityType.value;
+          data.responsibilitySplit = null;
+          data.responsibleThirdEntityId = null;
+          data.rentalContractId = responsibilityType.value === 'tenant' ? activeContract?.id || null : null;
         }
         if (existing && effectiveFromDate.value) {
           data.effectiveFromDate = effectiveFromDate.value;
@@ -410,22 +411,6 @@ const ObligationsPage = {
     const wrap = create('div', { className: 'form-group' }, [create('label', { textContent: label }), control]);
     container.appendChild(wrap);
     return wrap;
-  },
-
-  async loadRentalContracts(select, assetSelect, selected) {
-    const fill = async () => {
-      select.replaceChildren(create('option', { value: '', textContent: 'Sin contrato de alquiler' }));
-      if (assetSelect.value) {
-        try {
-          const contracts = await API.get(`/rentals?assetId=${encodeURIComponent(assetSelect.value)}`);
-          contracts.forEach(contract => select.appendChild(create('option', { value: contract.id, textContent: `Contrato ${contract.startDate} a ${contract.endDate || 'sin fin'}` })));
-        } catch { /* contracts are optional; keep the empty choice */ }
-      }
-      select.value = [...select.options].some(option => option.value === selected) ? selected : '';
-      selected = '';
-    };
-    on(assetSelect, 'change', fill);
-    await fill();
   },
 
   select(options, selected = '') {

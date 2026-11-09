@@ -282,6 +282,8 @@ function validateDefinition(db, userId, body, existing = null) {
   if (typeof merged.estimatedAmount !== 'number' || ledger.moneyInput(merged.estimatedAmount, merged.currencyCode) === null) return { error: 'El importe estimado debe ser positivo y válido para la moneda' };
   if (!validDate(merged.startDate) || (merged.endDate && (!validDate(merged.endDate) || merged.endDate < merged.startDate))) return { error: 'El período de la obligación no es válido' };
   if (merged.recurrenceFrequency && !ledger.FREQUENCIES.has(merged.recurrenceFrequency)) return { error: 'La frecuencia no es válida' };
+  // Payment method is no longer part of the obligation; legacy stored values are kept as-is.
+  if (merged.paymentMethod === undefined || merged.paymentMethod === null) merged.paymentMethod = '';
   if (typeof merged.paymentMethod !== 'string' || merged.paymentMethod.length > 120) return { error: 'El medio de pago no es válido' };
   if (typeof merged.notes !== 'string' || merged.notes.length > 4000) return { error: 'Las notas no son válidas' };
   if (!Number.isInteger(merged.reminderLeadDays) || merged.reminderLeadDays < 0 || merged.reminderLeadDays > 90) return { error: 'El aviso debe estar entre 0 y 90 días' };

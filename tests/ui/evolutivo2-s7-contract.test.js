@@ -69,7 +69,7 @@ describe('Evolutivo 2 S7 rental block and obligations section UI contract', () =
     expect(read('js/api.js')).toContain('setResponsibility(id, responsibilityType)');
   });
 
-  it('bumps the service worker cache to v29', () => {
-    expect(read('sw.js')).toContain("CACHE_NAME = 'selimsystem-v29'");
+  it('bumps the service worker cache to v29 or later', () => {
+    expect(Number(read('sw.js').match(/CACHE_NAME = 'selimsystem-v(\d+)'/)[1])).toBeGreaterThanOrEqual(29);
   });
 });
