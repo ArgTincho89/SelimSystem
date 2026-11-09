@@ -1,6 +1,7 @@
 const express = require('express');
 const { requireAuth } = require('../middleware/auth');
 const economicOverview = require('../services/economic-overview');
+const { validateOwnershipSet } = require('../utils/ownership-overlap');
 
 const router = express.Router();
 router.use(requireAuth);
@@ -155,6 +156,8 @@ router.post('/', (req, res) => {
     if (ownership.error) return res.status(400).json({ error: ownership.error });
     ownershipRecords.push(ownership.value);
   }
+  const overlap = validateOwnershipSet(ownershipRecords);
+  if (overlap.error) return res.status(400).json({ error: overlap.error });
   const asset = db.create('assets', parsed.value, userId);
   ownershipRecords.forEach(record => db.create('assetOwnerships', { ...record, assetId: asset.id }, userId));
   db.create('assetStatusHistory', { assetId: asset.id, status: asset.status, changedAt: asset.createdAt, notes: 'Estado inicial' }, userId);
@@ -203,6 +206,9 @@ router.post('/:id/ownerships', (req, res) => {
   if (!asset) return res.status(404).json({ error: 'Bien no encontrado' });
   const parsed = validateOwnership(req.body || {}, db, userId);
   if (parsed.error) return res.status(400).json({ error: parsed.error });
+  const existing = ownershipsForAsset(db, userId, asset.id);
+  const overlap = validateOwnershipSet([...existing, parsed.value]);
+  if (overlap.error) return res.status(400).json({ error: overlap.error });
   const record = db.create('assetOwnerships', { ...parsed.value, assetId: asset.id }, userId);
   res.status(201).json({ ...record, owner: db.findById('legalOwners', record.ownerId, userId) });
 });
@@ -217,6 +223,9 @@ router.patch('/:id/ownerships/:ownershipId', (req, res) => {
   if (ownership.endDate) return res.status(409).json({ error: 'El período de titularidad ya está cerrado' });
   const endDate = req.body.endDate;
   if (!validDate(endDate, false) || endDate < ownership.startDate) return res.status(400).json({ error: 'La fecha de finalización no es válida' });
+  const others = ownershipsForAsset(db, userId, asset.id).filter(item => item.id !== ownership.id);
+  const overlap = validateOwnershipSet([...others, { ...ownership, endDate }]);
+  if (overlap.error) return res.status(400).json({ error: overlap.error });
   res.json(db.update('assetOwnerships', ownership.id, { endDate }, userId));
 });
 

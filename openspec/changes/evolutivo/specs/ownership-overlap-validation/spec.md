@@ -2,76 +2,105 @@
 
 ## Purpose
 
-Prevent overlapping ownership periods for the same asset, including shared ownership.
+Keep ownership history of an asset consistent while allowing shared (concurrent) ownership. An asset MAY have several holders at the same time (e.g. 50% mother, 50% father). What MUST be prevented is (a) the same holder having two overlapping periods on the same asset, and (b) the concurrent percentages of an asset exceeding 100% on any date.
 
 ## Requirements
 
-### Requirement: Reject overlapping periods on create
+### Requirement: Concurrent co-ownership allowed
 
-The system MUST reject creating an ownership period that overlaps an existing period for the same asset.
+The system MUST allow different holders to have overlapping ownership periods on the same asset.
 
-#### Scenario: Overlapping create rejected
+#### Scenario: Two co-owners at the same time
 
-- GIVEN an existing ownership from 2024-01-01 to 2024-12-31
-- WHEN a new ownership from 2024-06-01 to 2024-08-31 is created
-- THEN the request is rejected with 400
-
-#### Scenario: Non-overlapping create accepted
-
-- GIVEN an existing ownership ending 2024-12-31
-- WHEN a new ownership starts 2025-01-01
+- GIVEN holder A owns the asset 50% from 2024-01-01 (open-ended)
+- WHEN holder B is added with 50% from 2024-01-01
 - THEN it is accepted
 
-### Requirement: Reject overlapping periods in batch asset creation
+### Requirement: Same-holder overlap rejected
 
-When creating an asset with multiple ownerships, the system MUST validate all pairs and reject overlaps.
+The system MUST reject an ownership period that overlaps another period of the SAME holder on the same asset.
 
-#### Scenario: Batch overlap rejected
+#### Scenario: Same holder overlapping create rejected
 
-- GIVEN two ownerships in the same request overlapping
+- GIVEN holder A owns the asset from 2024-01-01 to 2024-12-31
+- WHEN a new period for holder A from 2024-06-01 to 2024-08-31 is created
+- THEN the request is rejected with 400
+
+#### Scenario: Same holder adjacent period accepted
+
+- GIVEN holder A owns the asset until 2024-12-31
+- WHEN a new period for holder A starts 2025-01-01
+- THEN it is accepted
+
+#### Scenario: Same holder open-ended overlap rejected
+
+- GIVEN holder A has an open-ended period starting 2024-01-01
+- WHEN a new period for holder A starting 2025-01-01 is created
+- THEN the request is rejected with 400
+
+#### Scenario: Shared boundary day rejected
+
+- GIVEN holder A owns the asset from 2024-01-01 to 2024-06-30
+- WHEN a new period for holder A starts 2024-06-30
+- THEN the request is rejected with 400
+
+### Requirement: Concurrent percentage cap
+
+On any date, the sum of non-null `percentage` values of the asset's periods active on that date MUST NOT exceed 100. Periods with a null percentage do not count toward the sum.
+
+#### Scenario: Percentages exceed 100 rejected
+
+- GIVEN holder A owns 60% from 2024-01-01 (open-ended)
+- WHEN holder B is added with 50% from 2024-06-01
+- THEN the request is rejected with 400
+
+#### Scenario: Percentages fit after a period closes
+
+- GIVEN holder A owned 100% from 2024-01-01 to 2024-12-31
+- WHEN holder B is added with 100% from 2025-01-01
+- THEN it is accepted
+
+### Requirement: Batch asset creation
+
+When creating an asset with multiple ownerships, the system MUST apply both rules across all submitted periods and reject the request with 400 if any is violated.
+
+#### Scenario: Batch same-holder overlap rejected
+
+- GIVEN two periods for the same holder in the same request that overlap
 - WHEN the asset is created
 - THEN the request is rejected with 400
 
-### Requirement: Open-ended periods
+#### Scenario: Batch co-owners accepted
 
-An ownership with no end date MUST be treated as extending indefinitely and MUST overlap any later period for the same asset.
+- GIVEN two different holders at 50% each with the same start date
+- WHEN the asset is created
+- THEN it is accepted
 
-#### Scenario: Open-ended overlap
+### Requirement: Patch revalidation
 
-- GIVEN an existing open-ended ownership starting 2024-01-01
-- WHEN a new ownership starting 2025-01-01 is created
-- THEN the request is rejected with 400
-
-### Requirement: Inclusive boundary rule
-
-Periods sharing a boundary day MUST be considered overlapping; adjacent periods (end date one day before start date) are allowed.
-
-#### Scenario: Shared boundary rejected
-
-- GIVEN an existing ownership from 2024-01-01 to 2024-06-30
-- WHEN a new ownership starts 2024-06-30
-- THEN the request is rejected with 400
+When a period's end date is patched, the system MUST revalidate both rules against the asset's other periods (excluding the patched one).
 
 ## Data Contract
 
 No new fields. Validation applies to `assetOwnerships` records:
-- `assetId`, `ownerId`, `startDate`, `endDate` (nullable), `percentage`, `notes`.
+- `assetId`, `ownerId`, `startDate`, `endDate` (nullable), `percentage` (nullable), `notes`.
 
 ## Validation Rules
 
-- Two periods overlap when `startA <= (endB || infinity)` and `startB <= (endA || infinity)`.
-- `startDate` and `endDate` MUST be valid dates; `endDate`, when provided, MUST be >= `startDate`.
-- Overlap validation MUST consider all existing ownerships for the asset.
-- Percentage values, when provided, MUST remain between 0 and 100.
+- Two periods overlap when `startA <= (endB || infinity)` and `startB <= (endA || infinity)` (inclusive dates).
+- Same-holder rule compares only periods with equal `ownerId`.
+- Percentage cap: it is sufficient to check the sum at every period start date within the candidate period (sums only change at start dates).
+- `endDate`, when provided, MUST be >= `startDate`; `percentage`, when provided, MUST be between 0 and 100.
 
 ## Edge Cases
 
-- Adjacent periods are allowed.
-- Closed periods do not block future non-overlapping periods.
-- Patching an open period's end date does not need overlap revalidation unless it would overlap another existing period.
+- Adjacent periods of the same holder are allowed.
+- Closed periods do not block future periods.
+- Legacy data that already violates a rule is not rewritten; only new writes are validated.
 
 ## Acceptance Criteria
 
-- Overlapping ownership periods are rejected.
-- Non-overlapping and adjacent periods are accepted.
-- Batch creation validates all pairs.
+- Concurrent co-ownership by different holders is accepted.
+- Overlapping periods of the same holder are rejected.
+- Concurrent percentages above 100% are rejected.
+- Batch creation and patch apply both rules.

@@ -26,4 +26,13 @@ Results: `npm run test:coverage` 34 suites / 395 tests pass.
 
 Notes: `portionsFor` treats shared `other` rule as owner-only (informational). Percentage split rounds tenant portion, owner takes the remainder. Fixed split: tenant = min(tenantFixed, due); if only ownerFixed given, tenant = due - ownerFixed. Obligations are updated with PUT (no PATCH route exists).
 
-## Remaining: S3..S9
+## S8 - Phase 5 (done)
+
+- [x] 8.1 `src/utils/ownership-overlap.js` (`overlaps`, `validateOwnershipSet`): same-holder overlap rejected, concurrent percentage sum > 100 rejected at each start date; different holders may overlap.
+- [x] 8.2 Applied in `src/routes/assets.js` on batch create, POST ownership (existing + candidate) and PATCH end date (others + patched).
+- [x] 8.3 No frontend change: add/close ownership handlers in `public/js/pages/assets.js` already toast the API error message; CACHE_NAME stays v20.
+
+Tests: tests/services/ownership-overlap.test.js, tests/routes/assets-ownership-overlap.test.js.
+Results: `npm run test:coverage` 36 suites / 409 tests pass.
+
+## Remaining: S3..S7, S9
