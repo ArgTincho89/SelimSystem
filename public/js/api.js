@@ -154,6 +154,16 @@ const API = {
     update(id, data) { return API.put(`/owners/${id}`, data); }
   },
 
+  installments: {
+    plans() { return API.get('/installments/plans'); },
+    createPlan(data) { return API.post('/installments/plans', data); },
+    plan(id) { return API.get(`/installments/plans/${encodeURIComponent(id)}`); },
+    cancelPlan(id) { return API.post(`/installments/plans/${encodeURIComponent(id)}/cancel`, {}); },
+    occurrences(month) { return API.get(`/installments/occurrences?month=${encodeURIComponent(month)}`); },
+    postOccurrence(planId, occurrenceId, data = {}) { return API.post(`/installments/plans/${encodeURIComponent(planId)}/occurrences/${encodeURIComponent(occurrenceId)}/post`, data); },
+    cancelOccurrence(planId, occurrenceId) { return API.post(`/installments/plans/${encodeURIComponent(planId)}/occurrences/${encodeURIComponent(occurrenceId)}/cancel`, {}); }
+  },
+
   documents: {
     list(targetType, targetId) {
       const field = ({ asset: 'assetId', obligation: 'obligationId', contract: 'contractId', occurrence: 'occurrenceId', rentOccurrence: 'rentOccurrenceId', transaction: 'transactionId', tenant: 'tenantEntityId' })[targetType] || 'entityId';

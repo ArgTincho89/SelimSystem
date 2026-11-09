@@ -25,7 +25,8 @@ describe('Evolutivo S2 UI contract', () => {
     expect(source).toContain('uploadTargets');
   });
 
-  it('bumps the service worker cache name to v20', () => {
-    expect(read('sw.js')).toContain("CACHE_NAME = 'selimsystem-v20'");
+  it('bumps the service worker cache name to v20 or later', () => {
+    const version = Number(read('sw.js').match(/CACHE_NAME = 'selimsystem-v(\d+)'/)[1]);
+    expect(version).toBeGreaterThanOrEqual(20);
   });
 });

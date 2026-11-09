@@ -31,6 +31,7 @@ const TransactionForm = {
         updateCategoryVisibility();
         updateClasifVisibility();
         updateRecurringVisibility();
+        updateInstallmentVisibility();
       });
       typeSelector.appendChild(btn);
     });
@@ -100,6 +101,30 @@ const TransactionForm = {
     });
     paymentMethodGroup.append(create('label', { textContent: 'Medio de pago reutilizable', for: paymentMethodSelect.id }), paymentMethodSelect, create('label', { textContent: 'Etiqueta heredada opcional', for: paymentMethodLabel.id }), paymentMethodLabel, createMethodButton, editMethodButton, deleteMethodButton);
     form.appendChild(paymentMethodGroup);
+
+    // Credit-card installments: shown for new expenses paid with a credit-card method.
+    const installmentGroup = create('div', { className: 'form-group installment-fields', style: { display: 'none' } });
+    const installmentsCountInput = create('input', { className: 'form-control', type: 'number', min: '1', max: '120', step: '1', value: '1', id: 'transaction-installments-count' });
+    const installmentDueDayInput = create('input', { className: 'form-control', type: 'number', min: '1', max: '31', step: '1', id: 'transaction-installments-due-day' });
+    const installmentInterestInput = create('input', { className: 'form-control', type: 'number', min: '0', max: '1000', step: '0.01', placeholder: 'Sin interés', id: 'transaction-installments-interest' });
+    installmentGroup.append(
+      create('label', { textContent: 'Cantidad de cuotas', for: installmentsCountInput.id }), installmentsCountInput,
+      create('label', { textContent: 'Día de vencimiento', for: installmentDueDayInput.id }), installmentDueDayInput,
+      create('label', { textContent: 'Interés % (opcional)', for: installmentInterestInput.id }), installmentInterestInput,
+      create('small', { textContent: 'Con más de una cuota se crea una compra en cuotas: no se registra ningún gasto hasta contabilizar cada cuota.' })
+    );
+    form.appendChild(installmentGroup);
+    function creditCardSelected() {
+      return paymentMethods.find(item => item.id === paymentMethodSelect.value)?.type === 'credit_card';
+    }
+    function updateInstallmentVisibility() {
+      installmentGroup.style.display = !isEdit && selectedType === 'expense' && creditCardSelected() ? 'block' : 'none';
+    }
+    function installmentMode() {
+      return installmentGroup.style.display !== 'none' && Number(installmentsCountInput.value) > 1;
+    }
+    on(paymentMethodSelect, 'change', updateInstallmentVisibility);
+    updateInstallmentVisibility();
 
     const allocationSection = create('section', { className: 'form-group', style: { borderTop: '1px solid var(--border-color)', paddingTop: '10px' } });
     allocationSection.appendChild(create('strong', { textContent: 'Atribución del movimiento' }));
@@ -494,6 +519,33 @@ const TransactionForm = {
       if (!data.monto || data.monto <= 0) return showToast('El monto debe ser positivo', 'error');
       if (selectedType === 'income' && data.clasificacion === 'Mixto' && (!Number.isFinite(data.montoA) || !Number.isFinite(data.montoB) || Math.round((data.montoA + data.montoB) * 100) !== Math.round(data.monto * 100))) {
         return showToast('Los importes A y B deben sumar el monto total', 'error');
+      }
+
+      if (installmentMode()) {
+        const count = Number(installmentsCountInput.value);
+        const dueDay = Number(installmentDueDayInput.value || (dateInput.value || '').slice(8, 10));
+        if (!Number.isInteger(count) || count < 2 || count > 120) return showToast('La cantidad de cuotas debe estar entre 2 y 120', 'error');
+        if (!Number.isInteger(dueDay) || dueDay < 1 || dueDay > 31) return showToast('El día de vencimiento debe estar entre 1 y 31', 'error');
+        const interestRaw = installmentInterestInput.value.trim();
+        const interest = interestRaw === '' ? 0 : Number(interestRaw);
+        if (!Number.isFinite(interest) || interest < 0 || interest > 1000) return showToast('El interés debe estar entre 0 y 1000', 'error');
+        const targets = [...allocationRows.querySelectorAll(':scope > div')].map(row => row._allocationFields.target.value).filter(Boolean);
+        if (targets.some(value => !value.startsWith('asset:'))) return showToast('Las cuotas solo admiten imputación a un bien', 'error');
+        const plan = {
+          title: titulo, purchaseDate: data.fecha, totalAmount: data.monto, accountId: data.accountId,
+          paymentMethodId: data.paymentMethodId, categoryId: data.categoryId, installmentsCount: count, dueDay,
+          interestPercent: interest, notes: data.comments || '',
+          ...(targets[0] ? { assetId: targets[0].split(':')[1] } : {})
+        };
+        try {
+          await API.installments.createPlan(plan);
+          if (onSave) await onSave();
+          Modal.hide();
+          showToast('Compra en cuotas creada');
+        } catch (err) {
+          showToast(err.message, 'error');
+        }
+        return;
       }
 
       try {

@@ -575,3 +575,26 @@ body.desktop-mode .fab {
     font-size: var(--font-sm);
   }
 }
+
+.installment-section {
+  display: grid;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-lg);
+}
+
+.installment-heading {
+  font-size: var(--font-md);
+  margin: 0;
+  color: var(--text-secondary);
+}
+
+.installment-item {
+  cursor: pointer;
+  background: transparent;
+  border: 1px dashed var(--border-color);
+  opacity: 0.9;
+}
+
+.installment-item .transaction-amount {
+  color: var(--text-secondary);
+}

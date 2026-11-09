@@ -25,17 +25,18 @@ const HomePage = {
 
     try {
       const trendsFrom = addMonths(this.currentMonth, -5);
-      const [summary, transactions, categories, accounts, trends, overview] = await Promise.all([
+      const [summary, transactions, categories, accounts, trends, overview, installments] = await Promise.all([
         API.summary.get(this.currentMonth),
         API.transactions.list(this.currentMonth),
         API.categories.list(),
         API.accounts.list(),
         API.trends.get(trendsFrom, this.currentMonth, null).catch(() => null),
-        API.finance.overview(this.currentMonth)
+        API.finance.overview(this.currentMonth),
+        API.installments.occurrences(this.currentMonth).catch(() => [])
       ]);
 
       localStorage.setItem('pate_app_currency', summary.activeCurrency || 'ARS');
-      this.renderContent(content, summary, transactions, categories, { desktop, accounts, trends, overview });
+      this.renderContent(content, summary, transactions, categories, { desktop, accounts, trends, overview, installments });
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
           content.classList.add('visible');
@@ -109,6 +110,9 @@ const HomePage = {
       this.observeStatRow(statsRow);
       requestAnimationFrame(() => this.fitStatValues(statsRow));
     }
+
+    const installmentSection = this.renderInstallmentSection(options.installments, categories);
+    if (installmentSection) transactionPane.appendChild(installmentSection);
 
     if (transactions.length > 0 || this.hasActiveFilters()) {
       const txSection = create('div');
@@ -322,6 +326,8 @@ const HomePage = {
     const transactionsPanel = create('section', { className: 'desktop-home-transactions', 'aria-label': 'Transacciones' });
     const transactionHeading = create('h2', { className: 'page-title desktop-home-title', textContent: 'Transacciones' });
     transactionsPanel.appendChild(transactionHeading);
+    const desktopInstallments = this.renderInstallmentSection(options.installments, categories);
+    if (desktopInstallments) transactionsPanel.appendChild(desktopInstallments);
     const transactionList = create('div', { className: 'desktop-home-transaction-scroll' });
     this.renderDesktopTransactions(transactionList, transactions, categories);
     transactionsPanel.appendChild(transactionList);
@@ -613,6 +619,70 @@ const HomePage = {
         container.appendChild(item);
       });
     });
+  },
+
+  // Scheduled card installments for the month. Informational only: never part of the month totals until posted.
+  renderInstallmentSection(installments, categories) {
+    if (!installments?.length) return null;
+    const section = create('section', { className: 'installment-section', 'aria-label': 'Cuotas programadas' });
+    section.appendChild(create('h3', { className: 'installment-heading', textContent: 'Cuotas programadas (no incluidas en los totales)' }));
+    installments.forEach(item => {
+      const row = create('div', {
+        className: 'transaction-item installment-item', role: 'button', tabindex: '0',
+        'aria-label': `${item.label}, vence el ${item.dueDate}, programada`
+      });
+      const info = create('div', { className: 'transaction-info' });
+      info.appendChild(create('div', { className: 'transaction-title', textContent: item.label }));
+      info.appendChild(create('div', { className: 'transaction-category', textContent: `Programada · vence ${item.dueDate}` }));
+      const amount = create('div', { className: 'transaction-amount installment-amount', textContent: formatearMoneda(item.amount, item.currencyCode) });
+      this.markSensitive(amount);
+      row.append(create('div', { className: 'transaction-icon', textContent: '🗓️' }), info, amount);
+      const open = () => this.showInstallmentOptions(item, categories);
+      on(row, 'click', open);
+      on(row, 'keydown', event => {
+        if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); open(); }
+      });
+      section.appendChild(row);
+    });
+    return section;
+  },
+
+  showInstallmentOptions(item, categories) {
+    const body = create('div');
+    body.appendChild(create('p', {}, [create('strong', { textContent: item.label })]));
+    body.appendChild(create('p', { style: { color: 'var(--text-secondary)', margin: '8px 0' }, textContent: `Vence el ${item.dueDate} · ${formatearMoneda(item.amount, item.currencyCode)}. Esta cuota está programada y no suma a los gastos hasta que la contabilices.` }));
+    let categorySelect = null;
+    if (!item.categoryId) {
+      body.appendChild(create('label', { textContent: 'Categoría', for: 'installment-post-category' }));
+      categorySelect = create('select', { className: 'form-control', id: 'installment-post-category' });
+      categories.forEach(category => categorySelect.appendChild(create('option', { value: category.id, textContent: category.nombre })));
+      body.appendChild(categorySelect);
+    }
+    const footer = create('div', { style: { display: 'flex', gap: '8px' } });
+    footer.appendChild(create('button', { className: 'btn btn-ghost', type: 'button', textContent: 'Cerrar', onClick: () => Modal.hide() }));
+    footer.appendChild(create('button', {
+      className: 'btn btn-danger', type: 'button', textContent: 'Cancelar cuota',
+      onClick: async () => {
+        try {
+          await API.installments.cancelOccurrence(item.planId, item.id);
+          Modal.hide();
+          showToast('Cuota cancelada');
+          this.render({ month: this.currentMonth });
+        } catch (error) { showToast(error.message, 'error'); }
+      }
+    }));
+    footer.appendChild(create('button', {
+      className: 'btn btn-primary', type: 'button', textContent: 'Contabilizar cuota',
+      onClick: async () => {
+        try {
+          await API.installments.postOccurrence(item.planId, item.id, categorySelect ? { categoryId: categorySelect.value } : {});
+          Modal.hide();
+          showToast('Cuota contabilizada');
+          this.render({ month: this.currentMonth });
+        } catch (error) { showToast(error.message, 'error'); }
+      }
+    }));
+    Modal.show('Cuota programada', body, { footer });
   },
 
   createStat(label, rows, color) {
