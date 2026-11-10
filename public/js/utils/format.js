@@ -128,6 +128,20 @@ function statusLabel(status) {
   return Object.prototype.hasOwnProperty.call(STATUS_LABELS, status) ? STATUS_LABELS[status] : 'Sin estado';
 }
 
+// Spanish label for a rental modality code ("" when absent, never the raw code).
+const MODALITY_LABELS = { locacion: 'Locación', comodato: 'Comodato', mutuo: 'Mutuo' };
+function modalityLabel(modality) {
+  return Object.prototype.hasOwnProperty.call(MODALITY_LABELS, modality) ? MODALITY_LABELS[modality] : '';
+}
+
+// Total of a net amount plus an IVA percentage, rounded to the currency precision.
+function totalWithIva(amount, ivaPercent, currency = 'ARS') {
+  const net = Number(amount);
+  if (!Number.isFinite(net)) return null;
+  const factor = 10 ** currencyDigits(currency);
+  return Math.round(net * (100 + (Number(ivaPercent) || 0)) / 100 * factor) / factor;
+}
+
 // Orders accounts parent first, then its children. Returns [{ account, label, depth }];
 // top-level labels are unchanged and children are prefixed with an arrow.
 function orderAccountsAsTree(accounts, labelFn = account => account.name) {

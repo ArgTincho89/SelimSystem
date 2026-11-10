@@ -167,3 +167,24 @@ N/A: no shell, subprocess, VCS/PR automation or executable-file boundary. Audit 
 - [ ] Q3: confirm that IVA rent is reported as `A` with IVA included in the collected amount.
 - [ ] Q4: should comodato/mutuo accept a zero amount? Assumed positive, as in current validation.
 - [ ] `settings.js` is missing from the `sw.js` asset list. Slice 1 adds it (assumed harmless).
+
+## Amendment 2026-11-10 — user answers (authoritative over earlier sections)
+
+Source: `request.md` § "Answers to open questions". Implemented in slice **S4c** (sw v36; S5 → v37, S6 → v38).
+
+### A/B classification (Q3 resolved)
+- A = declared/invoiced income (only A carries IVA). B = cash, not invoiced, never IVA. Both count as income; reports keep the A/B split (`utils/income.js` breakdown already supports `A`, `B`, `Mixto` with `montoA`/`montoB`).
+- Default per modality: **locación → A** (with the contract `ivaPercent` when set, amounts gross, `ivaIncluded:true`); **comodato and mutuo → B** (never IVA).
+- A collection covering several modalities is ONE income transaction per currency: `clasificacion` = `A`, `B` or `Mixto` derived from the allocations (`montoA` = sum allocated to A lines, `montoB` = rest, `ivaPorcentaje` = locación IVA, `ivaIncluded:true`). The body may override per allocation with `allocations[i].clasificacion` ∈ {A,B}; IVA is dropped for lines overridden to B. `getIncomeIva` already applies `ivaIncluded` to `montoA`.
+
+### Month-level rent period (Q4 resolved)
+- A declaration month = all modality occurrences of the same declaration with the same due date. The month is **Cobrado** only when every modality occurrence is fully collected; otherwise Pendiente/Vencido/Parcial (statusLabel) at month level.
+- Avisos: ONE "Alquiler pendiente de cobro" entry per declaration month, showing total and the parts (Locación/Comodato/Mutuo with remaining amounts). Legacy single-contract periods behave as a one-part month.
+- "Registrar cobro" from Avisos (single mode): the selected month only, one line per modality with its remaining amount prefilled (MoneyInput, editable for partial) and its A/B select (default above; IVA shown only for A). Lines in different currencies are grouped per currency, each with its own account select (default primary of that currency) and posted as separate collections in one action; the dialog reports per-currency result.
+- Ver historial / ficha mensual group occurrences by declaration month (month row with status + collapsed per-modality lines).
+
+### Undo collection (Q10 resolved: "Deshacer")
+- UI label "Deshacer cobro" (replaces "Anular cobro"); inline confirmation. Available on the month/occurrence rows, the "Cobros y saldos" list, and via deleting the transaction in Transacciones.
+- Undo restores the state before the collection: transaction, allocations and collection removed (internal tombstone kept only for idempotency, hidden everywhere); receipts uploaded for that collection whose only target was the collection/transaction are deleted with their stored file; documents with other targets are only unlinked.
+- The reconciled-account guard is REMOVED (undo always allowed; if the account was reconciled the reconciliation is invalidated: `reconciled:false` and the transaction id removed from `includedMovementIds`, the response returns `reconciliationReset:true` and the UI shows "La conciliación de la cuenta quedó pendiente de revisar").
+- Still blocked (409 with a clear Spanish message naming the dependent movement) only when another movement depends on the transaction (refund, normalization, movement allocation): the user must undo that one first.

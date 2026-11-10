@@ -78,7 +78,7 @@ const AlertsPage = {
     const overdue = alert.status === 'overdue';
     const card = create('article', { className: 'card', dataset: { alertId: alert.id }, style: { display: 'grid', gap: '8px', borderLeft: `4px solid ${overdue ? 'var(--danger)' : 'var(--accent)'}` } }, [
       create('div', { style: { display: 'flex', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap' } }, [
-        create('strong', { textContent: alert.title }),
+        create('strong', { textContent: alert.type === 'rent_due' && modalityLabel(alert.modality) ? `${alert.title} · ${modalityLabel(alert.modality)}` : alert.title }),
         create('span', { className: overdue ? 'text-danger' : 'text-muted', textContent: overdue ? `Vencido · ${alert.date}` : alert.date })
       ]),
       create('div', { textContent: alert.message || alert.title })

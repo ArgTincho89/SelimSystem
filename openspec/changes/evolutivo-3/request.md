@@ -43,3 +43,7 @@ Registre un cobro de un alquiler, se imputó en Transacciones (correcto) pero se
 ## Follow-up clarification (verbatim, Spanish)
 
 con respeco a "Agregar LOGS de cada acción realizada con su timestamp" eso debe ser una sección en "Perfil"  y en "Acciones de cuenta" que se llame LOGS y me permita consultar todas mis acciones en lenguaje claro declarando dia, hora y minuto
+
+## Answers to open questions (verbatim, Spanish, 2026-11-10)
+
+Con respeto a preguntas abiertas: Pago en A significa un pago en blanco, declarado y que por ende tributa impuestos, pago en B significa en efectivo, sin facturar y por ende sin IVA por eso ambos deben impactar a ingresos pero afectar a la categoria correspondiente ( A y B) y solo A permite ingresar IVA. Con respecto a las marias modalidades en un mismo alquiler eso es por que un alquiler se puede determinar por ejemplo por un monto de 10.000.000 pero que 5.000.000 es en blanco y por ende con un contrato de alquiler ( todo declarado) y el saldo dividido entre un comodato y un contrato de mutuo pero los 3 son fundamentales para considerar ese mes de alquiler pagado ( y un alquiler puede componerse de un solo tipo de esos contratos, dos o tres) . Respecto al cambio de fecha de inicio de contrato, me parece correcto.  Lo de anular un cobro, sigo pensando que se debe poder anular el cobro y esa anulación debe estar correctamente implementada para que sea como "Deshacer" la acción de imputación del cobro.  Continua con el desarrollo, lo restante tambien me parece bien

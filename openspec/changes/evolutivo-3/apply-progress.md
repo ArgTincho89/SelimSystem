@@ -44,3 +44,9 @@ Notes:
 - Collection IVA classification (S2) works with contracts created through the declarations API (A + `ivaIncluded` on the gross amount); covered in `tests/services/rental-iva.test.js`.
 - Tests: `rental-iva`, `rentals-declarations-create`, `rentals-declarations-edit`, `migrations-evolutivo3-contracts`; `tests/helpers/rent-fixture.js` gained `modality/declare/edit/collectModality`.
 - No sw bump (no UI). `end` endpoint and `api.js` stayed in S4a (fallback not needed).
+
+## Slice S4b (rental-declaration modal UI, sw v35) - done
+- [x] 4.5 `public/js/pages/rentalDeclaration.js` (new, loaded in index.html and cached in sw.js) and `assets.js`: "Declarar/Editar alquiler" modal, modality checkboxes with per-modality fieldsets, MoneyInput amounts, IVA only in locacion with live "Total con IVA", shared obligations/notes, "Seleccioná al menos una modalidad", inline save warning, server 409 messages surfaced, read-only in "Ver", "Finalizar alquiler" via `/end`.
+- [x] 4.6 `modalityLabel`/`totalWithIva` in `format.js`; modality labels in Avisos, pending occurrences, contract list and history. sw `selimsystem-v35`.
+- Tests: `tests/ui/evolutivo3-s4-contract.test.js`; e2e `rental-declaration.feature` (+ `AssetsPage.ts`, `assetsSteps.ts`). Jest 85 suites/753 tests, coverage thresholds pass, e2e 79/79 scenarios.
+- Out of scope: S4c (month-level aggregation, collection dialog).
