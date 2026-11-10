@@ -15,11 +15,11 @@ describe('Rent collection classification, optional method and idempotency finger
     expect(res.body.clasificacion).toBe('A');
   });
 
-  it('leaves a contract without IVA unclassified and accepts a missing method', async () => {
+  it('classifies a locación without IVA as A without IVA and accepts a missing method', async () => {
     const contract = await f.createContract({ startDate: '2024-01-01', endDate: '2024-12-31' });
     const res = await f.collect(contract, ['2024-01-01']);
     expect(res.status).toBe(201);
-    expect(res.body.transaction.clasificacion).toBeNull();
+    expect(res.body.transaction).toMatchObject({ clasificacion: 'A', ivaPorcentaje: null });
     expect(res.body.transaction.ivaIncluded).toBe(false);
     expect(res.body.method).toBe('');
   });

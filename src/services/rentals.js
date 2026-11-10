@@ -310,7 +310,8 @@ function classifyCollection(db, userId, allocations, amountMinor, override = nul
     const contract = occurrence && db.findById('rentalContracts', occurrence.contractId, userId);
     const locacion = !contract || modalityOf(contract) === 'locacion';
     const iva = locacion ? Number(contract?.ivaPercent) || 0 : 0;
-    const base = locacion ? (iva > 0 ? 'A' : null) : 'B';
+    // Locación is declared income (A, IVA only when the contract sets it); comodato/mutuo are B.
+    const base = locacion ? 'A' : 'B';
     const cls = override || item.clasificacion || base;
     return { amountMinor: item.amountMinor, cls, iva: cls === 'A' ? iva : 0 };
   });
