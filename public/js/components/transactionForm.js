@@ -41,7 +41,7 @@ const TransactionForm = {
     const accountLabel = create('label', { textContent: 'Cuenta' });
     const accountSelect = create('select', { className: 'form-control', id: 'transaction-account' });
     const activeAccounts = accounts.filter(account => account.activo);
-    activeAccounts.forEach(account => accountSelect.appendChild(create('option', { value: account.id, textContent: `${account.nombre} (${account.currency})` })));
+    accountTreeOptions(activeAccounts).forEach(({ account, label }) => accountSelect.appendChild(create('option', { value: account.id, textContent: label })));
     const defaultAccount = transaction?.accountId || options.accountId || activeAccounts.find(account => account.primary)?.id;
     if (defaultAccount) accountSelect.value = defaultAccount;
     accountLabel.setAttribute('for', accountSelect.id);

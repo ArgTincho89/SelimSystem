@@ -456,7 +456,8 @@ function titularCandidates(db, userId, obligation, accounts, today) {
   return accounts.filter(account => account.ownerId && best.has(account.ownerId))
     .map(account => ({ account, ...best.get(account.ownerId) }))
     .sort((a, b) => b.percentage - a.percentage || a.startDate.localeCompare(b.startDate)
-      || Number(Boolean(b.account.primary)) - Number(Boolean(a.account.primary)) || (a.account.order ?? 0) - (b.account.order ?? 0))
+      || Number(Boolean(b.account.primary)) - Number(Boolean(a.account.primary))
+      || Number(Boolean(a.account.parentId)) - Number(Boolean(b.account.parentId)) || (a.account.order ?? 0) - (b.account.order ?? 0))
     .map(item => item.account);
 }
 
@@ -466,12 +467,13 @@ function paymentContext(db, userId, obligation, occurrence) {
   const view = occurrenceView(db, userId, occurrence, today);
   const responsibilityType = responsibilityFor(obligation, occurrence).responsibilityType;
   const owners = new Map(db.findAll('legalOwners', userId).map(item => [item.id, item.name]));
+  // Top-level accounts come before sub-accounts; each group keeps the account order.
   const accounts = db.findAll('accounts', userId).filter(item => item.activo && item.currency === occurrence.currencyCode)
-    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+    .sort((a, b) => Number(Boolean(a.parentId)) - Number(Boolean(b.parentId)) || (a.order ?? 0) - (b.order ?? 0));
   const context = {
     occurrence: { id: occurrence.id, date: occurrence.date, currencyCode: occurrence.currencyCode, remainingAmount: view.remainingAmount },
     responsibilityType, categoryId: categoryChain(db, userId, obligation, occurrence),
-    accounts: accounts.map(item => ({ id: item.id, name: item.nombre || item.name, currency: item.currency, ownerId: item.ownerId || null, ownerName: owners.get(item.ownerId) || null, primary: Boolean(item.primary) })),
+    accounts: accounts.map(item => ({ id: item.id, name: item.nombre || item.name, currency: item.currency, ownerId: item.ownerId || null, parentId: item.parentId || null, ownerName: owners.get(item.ownerId) || null, primary: Boolean(item.primary) })),
     suggestedAccountId: null, accountSource: 'none', warning: null, blocked: false, blockedReason: null,
     paymentMethods: db.findAll('paymentMethods', userId)
   };

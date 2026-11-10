@@ -22,11 +22,16 @@ function activityLogMiddleware(req, res, next) {
       try {
         const outcome = res.statusCode < 400 ? 'success' : 'failure';
         const entityId = context.entityId || (outcome === 'success' ? createdId : null);
-        const label = context.entityLabel || (entityId ? activityLog.labelFor(db, userId, context.route && context.route.entityType, entityId) : '');
+        let label = context.entityLabel || (entityId ? activityLog.labelFor(db, userId, context.route && context.route.entityType, entityId) : '');
+        let route = context.route;
+        if (outcome === 'success' && !context.entityId) {
+          const refined = activityLog.refineRoute(db, userId, route, entityId);
+          if (refined.label) { route = refined.route; label = refined.label; }
+        }
         activityLog.append(db, userId, {
-          method: req.method, route: context.route ? context.route.pattern : `/${path.split('/')[1] || ''}`, action: context.route ? context.route.action : 'generic',
-          entityType: context.route ? context.route.entityType : null, entityId, entityLabel: label, outcome, statusCode: res.statusCode,
-          message: activityLog.buildMessage({ route: context.route, label, path, outcome })
+          method: req.method, route: route ? route.pattern : `/${path.split('/')[1] || ''}`, action: route ? route.action : 'generic',
+          entityType: route ? route.entityType : null, entityId, entityLabel: label, outcome, statusCode: res.statusCode,
+          message: activityLog.buildMessage({ route, label, path, outcome })
         });
       } catch (err) {
         console.error('[ACTIVITY-LOG]', err.message);

@@ -177,3 +177,8 @@ function orderAccountsAsTree(accounts, labelFn = account => account.name) {
   });
   return result;
 }
+
+// Account options as a tree: parent, then its sub-accounts prefixed with an arrow; every label shows the currency.
+function accountTreeOptions(accounts) {
+  return orderAccountsAsTree(accounts, account => `${account.nombre || account.name} (${account.currency})`);
+}

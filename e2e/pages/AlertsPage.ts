@@ -31,7 +31,7 @@ export class AlertsPage extends BasePage {
   async collectFirstRentAlert(accountName: string): Promise<void> {
     await this.rentAlerts.first().getByRole('button', { name: 'Registrar cobro' }).click();
     await expect(this.modal.getByText('Cobro en ARS')).toBeVisible();
-    await this.modal.getByLabel('Cuenta (ARS)').selectOption({ label: accountName });
+    await this.modal.getByLabel('Cuenta (ARS)').selectOption({ label: `${accountName} (ARS)` });
     await this.modal.getByRole('button', { name: 'Registrar cobro' }).click();
     await this.page.waitForSelector('.modal-overlay', { state: 'hidden', timeout: 10000 });
   }

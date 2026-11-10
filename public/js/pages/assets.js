@@ -432,7 +432,7 @@ const AssetsPage = {
             if (!available.length) return showToast('No hay una cuenta activa en la moneda del reclamo', 'error');
             const form = create('div', { style: { display: 'grid', gap: '8px' } });
             const amount = create('input', { className: 'form-control', type: 'number', min: '0.01', step: ['JPY', 'KRW', 'CLP', 'PYG'].includes(claim.currencyCode) ? '1' : '0.01', value: claim.outstandingAmount });
-            const account = this.select(available.map(item => [item.id, item.nombre]));
+            const account = this.select(accountTreeOptions(available).map(({ account: item, label }) => [item.id, label]));
             form.append(create('label', {}, [create('span', { textContent: `Importe recibido (pendiente: ${claim.outstandingAmount} ${claim.currencyCode})` }), amount]));
             form.append(create('label', {}, [create('span', { textContent: 'Cuenta de ingreso' }), account]));
             Modal.show('Registrar reintegro', form, { footer: create('div', {}, [create('button', { className: 'btn btn-primary', type: 'button', textContent: 'Guardar ingreso', onClick: async () => {
@@ -880,7 +880,7 @@ const AssetsPage = {
       const method = this.rentalField(body, 'Medio de cobro (opcional)');
       const groups = [...new Set(open.map(part => part.currencyCode))].map(currency => {
         const eligible = accounts.filter(item => item.activo && item.currency === currency);
-        const account = this.select([['', 'Seleccionar cuenta'], ...eligible.map(item => [item.id, item.nombre])]);
+        const account = this.select([['', 'Seleccionar cuenta'], ...accountTreeOptions(eligible).map(({ account: item, label }) => [item.id, label])]);
         account.value = (eligible.find(item => item.primary) || (eligible.length === 1 ? eligible[0] : null))?.id || '';
         const section = create('section', { style: { display: 'grid', gap: '6px', marginTop: '10px' }, dataset: { rentMonthCurrency: currency } }, [
           create('strong', { textContent: `Cobro en ${currency}` }),
@@ -954,7 +954,7 @@ const AssetsPage = {
       const total = MoneyInput.create({ currency, value: null, required: true, ariaLabel: `Importe total recibido (${currency})` });
       body.append(create('label', { className: 'form-group' }, [create('span', { textContent: `Importe total recibido (${currency})` }), total]));
       const eligible = accounts.filter(item => item.activo && item.currency === currency);
-      const account = this.select([['', 'Seleccionar cuenta'], ...eligible.map(item => [item.id, item.nombre])]);
+      const account = this.select([['', 'Seleccionar cuenta'], ...accountTreeOptions(eligible).map(({ account: item, label }) => [item.id, label])]);
       account.value = (eligible.find(item => item.primary) || (eligible.length === 1 ? eligible[0] : null))?.id || '';
       body.append(create('label', { className: 'form-group' }, [create('span', { textContent: 'Cuenta (misma moneda del contrato)' }), account]));
       const date = this.rentalField(body, 'Fecha de cobro', { type: 'date', value: new Date().toISOString().slice(0, 10) });

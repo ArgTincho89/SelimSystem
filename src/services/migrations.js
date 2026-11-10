@@ -93,6 +93,7 @@ function migrateAssetsAndContracts(db, userId) {
 
 /**
  * Idempotent add-only backfill for "evolutivo-3".
+ * Accounts: `parentId` null only when undefined (sub-accounts).
  * Assets: `cadastralId` and `constructionDate` null on immovables only when undefined.
  * Contracts: each contract without a declaration gets its own `rentalDeclarations` record plus
  * `declarationId`, `modality` and `ivaPercent` (only the fields that are undefined).
@@ -113,6 +114,14 @@ function migrateEvolutivo3(db) {
       return { ...asset, ...patch };
     });
     if (changed) db.replace('assets', user.id, next);
+    const accounts = db.findAll('accounts', user.id);
+    if (accounts.some(account => account.parentId === undefined)) {
+      db.replace('accounts', user.id, accounts.map(account => {
+        if (account.parentId !== undefined) return account;
+        updated += 1;
+        return { ...account, parentId: null };
+      }));
+    }
     updated += require('./rental-declarations').backfillDeclarations(db, user.id);
   }
   return { updated };

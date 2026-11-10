@@ -389,7 +389,7 @@ const ObligationsPage = {
     [['Cuentas de los titulares', titular], ['Otras cuentas', others]].forEach(([label, group]) => {
       if (!group.length) return;
       const optgroup = create('optgroup', { label });
-      group.forEach(item => optgroup.appendChild(create('option', { value: item.id, textContent: `${item.name}${item.ownerName ? ` · ${item.ownerName}` : ''} (${item.currency})` })));
+      accountTreeOptions(group).forEach(({ account: item, label }) => optgroup.appendChild(create('option', { value: item.id, textContent: `${label.replace(/ (w+)$/, '')}${item.ownerName ? ` · ${item.ownerName}` : ''} (${item.currency})` })));
       accountSelect.appendChild(optgroup);
     });
     accountSelect.value = context.suggestedAccountId || '';

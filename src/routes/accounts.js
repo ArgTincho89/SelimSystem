@@ -81,18 +81,29 @@ router.post('/', (req, res) => {
   const db = req.app.locals.db;
   const userId = req.session.userId;
   ledger.ensureSetup(db, userId);
-  const { name, nombre, primary, order, presentation, ownerId } = req.body;
+  const { name, nombre, primary, order, presentation, parentId } = req.body;
+  let { ownerId } = req.body;
   const currency = req.body.currency || 'ARS';
   const accountName = (name || nombre || '').trim();
   if (!accountName || accountName.length > 80) return res.status(400).json({ error: 'El nombre debe tener entre 1 y 80 caracteres' });
   if (!ledger.SELECTABLE_CURRENCIES.has(currency)) return res.status(400).json({ error: 'Moneda no válida' });
+  let parent = null;
+  if (parentId !== undefined && parentId !== null && parentId !== '') {
+    parent = db.findById('accounts', parentId, userId);
+    if (!parent) return res.status(400).json({ error: 'Cuenta de origen de la sub-cuenta no encontrada' });
+    if (parent.parentId) return res.status(400).json({ error: 'Una sub-cuenta no puede tener sub-cuentas' });
+    if (!parent.activo) return res.status(400).json({ error: 'No se puede crear una sub-cuenta en una cuenta archivada' });
+    if (primary) return res.status(400).json({ error: 'Una sub-cuenta no puede ser la principal' });
+    if (!req.body.currency) return res.status(400).json({ error: 'La moneda de la sub-cuenta es obligatoria' });
+    if (ownerId === undefined || ownerId === null || ownerId === '') ownerId = parent.ownerId || null;
+  }
   if (ownerId !== undefined && ownerId !== null && ownerId !== '') {
     const owner = db.findById('legalOwners', ownerId, userId);
     if (!owner || (Array.isArray(owner.roles) ? !owner.roles.includes('owner') : owner.role && owner.role !== 'owner')) return res.status(400).json({ error: 'Titular legal no encontrado' });
   }
   if (primary && db.findAll('accounts', userId).some(account => account.primary && account.activo)) return res.status(409).json({ error: 'Ya existe una cuenta principal activa' });
   const account = db.create('accounts', {
-    nombre: accountName, currency, ownerId: ownerId || null, primary: primary === true, legacyPrimary: false,
+    nombre: accountName, currency, ownerId: ownerId || null, parentId: parent ? parent.id : null, primary: primary === true, legacyPrimary: false,
     activo: true, archivedAt: null, order: Number.isInteger(order) ? order : db.findAll('accounts', userId).length,
     presentation: presentation || 'default', openingBalanceMinor: null, openingDate: null,
     reconciled: false, includedMovementIds: []
@@ -182,7 +193,9 @@ router.put('/:id', (req, res) => {
       updates.ownerId = owner.id;
     }
   }
+  if (req.body.parentId !== undefined && (req.body.parentId || null) !== (account.parentId || null)) return res.status(400).json({ error: 'No se puede cambiar la cuenta de la que depende una sub-cuenta' });
   if (primary === true && !account.primary) {
+    if (account.parentId) return res.status(400).json({ error: 'Una sub-cuenta no puede ser la principal' });
     if (!account.activo) return res.status(409).json({ error: 'Una cuenta archivada no puede ser principal' });
     const accounts = ledger.accountsForUser(db, userId);
     db.replace('accounts', userId, accounts.map(item => ({ ...item, primary: item.id === account.id })));
@@ -201,6 +214,7 @@ router.post('/:id/archive', (req, res) => {
   const account = db.findById('accounts', req.params.id, userId);
   if (!account) return res.status(404).json({ error: 'Cuenta no encontrada' });
   if (account.primary) return res.status(409).json({ error: 'La cuenta principal no se puede archivar' });
+  if (db.findAll('accounts', userId).some(item => item.parentId === account.id && item.activo)) return res.status(409).json({ error: 'Archivá primero las sub-cuentas' });
   const today = ledger.localDateForUser(db, userId);
   const hasRecurring = db.findAll('transactions', userId).some(tx => ledger.accountForMovement(db, userId, tx)?.id === account.id && tx.recurrente && tx.frecuencia)
     || db.findAll('recurrenceRevisions', userId).some(item => ledger.accountForMovement(db, userId, item.template)?.id === account.id && item.template?.recurrente && item.template?.frecuencia && (!item.effectiveUntilDate || item.effectiveUntilDate >= today));
@@ -216,6 +230,7 @@ router.delete('/:id', (req, res) => {
   const userId = req.session.userId;
   const account = db.findById('accounts', req.params.id, userId);
   if (!account) return res.status(404).json({ error: 'Cuenta no encontrada' });
+  if (db.findAll('accounts', userId).some(item => item.parentId === account.id)) return res.status(409).json({ error: 'Eliminá primero las sub-cuentas' });
   if (account.primary || ledger.hasMovement(db, userId, account.id)) return res.status(409).json({ error: 'Solo se pueden eliminar físicamente cuentas no principales y sin movimientos' });
   db.remove('accounts', account.id, userId);
   res.json({ ok: true });

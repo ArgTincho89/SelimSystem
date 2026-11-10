@@ -177,3 +177,39 @@ When('abro el detalle de la cuenta USD', async function (this: SelimSystemWorld)
 Then('los importes del detalle de la cuenta siguen ocultos', async function (this: SelimSystemWorld) {
   await new AccountSettingsPage(this.page!).expectAccountDetailsAmountsHidden();
 });
+
+When('agrego la sub-cuenta {string} en {word} a la cuenta {string}', async function (this: SelimSystemWorld, name: string, currency: string, parentName: string) {
+  const page = this.page!;
+  const card = page.locator('.settings-account-list > .settings-card').filter({ hasText: parentName }).first();
+  await card.getByRole('button', { name: 'Agregar sub-cuenta' }).click();
+  const modal = page.locator('.modal-overlay');
+  await modal.locator('#account-name').fill(name);
+  await modal.locator('#account-currency').click();
+  await modal.locator(`.currency-option[data-currency="${currency}"]`).click();
+  await modal.getByRole('button', { name: 'Crear sub-cuenta' }).click();
+  await expect(modal).toBeHidden();
+});
+
+Then('Configuración muestra la sub-cuenta {string} en {word} bajo su cuenta', async function (this: SelimSystemWorld, name: string, currency: string) {
+  const cards = this.page!.locator('.settings-account-list > .settings-card');
+  const child = cards.filter({ hasText: `↳ ${name}` }).first();
+  await expect(child).toBeVisible();
+  await expect(child).toContainText(currency);
+  const titles = await cards.locator('h3').allInnerTexts();
+  const childIndex = titles.findIndex(title => title.includes(`↳ ${name}`));
+  expect(childIndex).toBeGreaterThan(0);
+  expect(titles[childIndex - 1]).toContain('Cuenta principal');
+});
+
+When('registro el ingreso {string} de {float} en la sub-cuenta {string}', async function (this: SelimSystemWorld, title: string, amount: number, accountLabel: string) {
+  await new HomePage(this.page!).createIncome(title, amount, 'A', { fecha: businessDate(), accountName: accountLabel });
+});
+
+Then('el ingreso {string} quedó asignado a la sub-cuenta {string}', async function (this: SelimSystemWorld, title: string, accountName: string) {
+  const accounts = await (await this.api!.get('/api/accounts')).json();
+  const child = accounts.find((account: any) => account.nombre === accountName);
+  expect(child.parentId).toBeTruthy();
+  const transactions = await (await this.api!.get('/api/transactions')).json();
+  const tx = transactions.find((item: any) => item.titulo === title);
+  expect(tx.accountId).toBe(child.id);
+});

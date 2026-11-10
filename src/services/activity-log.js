@@ -28,6 +28,7 @@ const ROUTES = [
   r('PATCH', '/accounts/settings', 'account.settings', 'Cambiaste la configuración de tus cuentas', 'cambiar la configuración de tus cuentas', null),
   r('PATCH', '/accounts/order', 'account.reorder', 'Reordenaste tus cuentas', 'reordenar tus cuentas', null),
   r('POST', '/accounts', 'account.create', 'Creaste la cuenta', 'crear una cuenta', 'account', { join: '' }),
+  r('POST', '/accounts', 'account.create-sub', 'Creaste la subcuenta', 'crear una subcuenta', 'account', { join: '' }),
   r('POST', '/accounts/:id/reconcile', 'account.reconcile', 'Conciliaste la cuenta', 'conciliar una cuenta', 'account', { id: 'id', join: '' }),
   r('POST', '/accounts/:id/archive', 'account.archive', 'Archivaste la cuenta', 'archivar una cuenta', 'account', { id: 'id', join: '' }),
   r('PUT', '/accounts/:id', 'account.update', 'Modificaste la cuenta', 'modificar una cuenta', 'account', { id: 'id', join: '' }),
@@ -126,6 +127,16 @@ const LABELS = {
     return [assetName, months && `período ${months}`].filter(Boolean).join(', ');
   }
 };
+
+// A created account that has a parent is logged as "Creaste la subcuenta X de Y".
+function refineRoute(db, userId, route, entityId) {
+  if (!route || route.action !== 'account.create' || !entityId) return { route, label: '' };
+  const account = db.findById('accounts', entityId, userId);
+  const parent = account && account.parentId ? db.findById('accounts', account.parentId, userId) : null;
+  if (!parent) return { route, label: '' };
+  const name = account.nombre || account.name || '';
+  return { route: ROUTES.find(item => item.action === 'account.create-sub'), label: `${name} de ${parent.nombre || parent.name || ''}`.slice(0, 120) };
+}
 
 function labelFor(db, userId, type, id) {
   if (!type || !id || typeof id !== 'string') return '';
@@ -228,4 +239,4 @@ function list(db, userId, { limit, before } = {}) {
   return { items, nextBefore: sorted.length > size ? items[items.length - 1].timestamp : null };
 }
 
-module.exports = { COLLECTION, ROUTES, labelFor, buildMessage, append, pruneOld, list, resolveContext, isSkipped, normalizePath, periodLabel };
+module.exports = { COLLECTION, ROUTES, refineRoute, labelFor, buildMessage, append, pruneOld, list, resolveContext, isSkipped, normalizePath, periodLabel };

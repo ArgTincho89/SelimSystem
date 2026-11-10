@@ -85,9 +85,10 @@ const SettingsPage = {
   },
 
   renderAccount(account) {
-    const card = create('article', { className: 'settings-card' });
+    const isChild = Boolean(account.parentId);
+    const card = create('article', { className: isChild ? 'settings-card settings-subaccount' : 'settings-card', style: isChild ? { marginLeft: '24px' } : {} });
     const heading = create('div', { className: 'settings-section-heading' });
-    const title = `${account.nombre}${account.primary ? ' · Principal' : ''}${account.activo ? '' : ' · Archivada'}`;
+    const title = `${isChild ? '↳ ' : ''}${account.nombre}${account.primary ? ' · Principal' : ''}${account.activo ? '' : ' · Archivada'}`;
     heading.appendChild(create('h3', { textContent: title }));
     heading.appendChild(create('span', { className: 'account-card-currency', textContent: account.currency }));
     card.appendChild(heading);
@@ -108,13 +109,20 @@ const SettingsPage = {
     const edit = create('button', { className: 'btn btn-sm btn-ghost', type: 'button', textContent: 'Editar' });
     on(edit, 'click', () => this.showAccountForm(account));
     actions.appendChild(edit);
+    if (!isChild && account.activo) {
+      const addSub = create('button', { className: 'btn btn-sm btn-ghost', type: 'button', textContent: 'Agregar sub-cuenta' });
+      on(addSub, 'click', () => this.showAccountForm(null, account));
+      actions.appendChild(addSub);
+    }
     if (!account.primary && account.activo) {
-      const primary = create('button', { className: 'btn btn-sm btn-ghost', type: 'button', textContent: 'Hacer principal' });
-      on(primary, 'click', async () => {
-        try { await API.accounts.update(account.id, { primary: true }); await this.render(); }
-        catch (error) { showToast(error.message, 'error'); }
-      });
-      actions.appendChild(primary);
+      if (!isChild) {
+        const primary = create('button', { className: 'btn btn-sm btn-ghost', type: 'button', textContent: 'Hacer principal' });
+        on(primary, 'click', async () => {
+          try { await API.accounts.update(account.id, { primary: true }); await this.render(); }
+          catch (error) { showToast(error.message, 'error'); }
+        });
+        actions.appendChild(primary);
+      }
       const archive = create('button', { className: 'btn btn-sm btn-ghost', type: 'button', textContent: 'Archivar' });
       on(archive, 'click', async () => {
         try { await API.accounts.archive(account.id); await this.render(); }
@@ -296,7 +304,7 @@ const SettingsPage = {
     Modal.show('Detalle de cuenta', body, { footer });
   },
 
-  showAccountForm(account = null) {
+  showAccountForm(account = null, parent = null) {
     const form = create('form');
     const name = create('input', { id: 'account-name', className: 'form-control', type: 'text', maxlength: '80', required: 'required', value: account?.nombre || '' });
     form.appendChild(this.field('Nombre de cuenta', name));
@@ -363,28 +371,30 @@ const SettingsPage = {
       .map(owner => [owner.id, owner.name])];
     const owner = create('select', { id: 'account-owner', className: 'form-control' });
     ownerOptions.forEach(([value, label]) => owner.appendChild(create('option', { value, textContent: label })));
-    owner.value = account?.ownerId || '';
+    owner.value = account?.ownerId || parent?.ownerId || '';
     form.appendChild(this.field('Titular de la cuenta', owner));
     const primaryLabel = create('label', { className: 'checkbox-label' });
     const primary = create('input', { type: 'checkbox', className: 'form-checkbox' });
     primary.checked = account?.primary || false;
     primary.disabled = Boolean(account?.primary);
     if (!account && this.accounts.some(item => item.primary && item.activo)) primary.disabled = true;
+    const isSub = Boolean(parent || account?.parentId);
+    if (isSub) { primary.checked = false; primary.disabled = true; primaryLabel.style.display = 'none'; }
     primaryLabel.appendChild(primary);
     primaryLabel.appendChild(document.createTextNode(' Cuenta principal'));
     form.appendChild(primaryLabel);
-    const save = create('button', { className: 'btn btn-primary', type: 'submit', textContent: account ? 'Guardar cuenta' : 'Crear cuenta' });
+    const save = create('button', { className: 'btn btn-primary', type: 'submit', textContent: account ? 'Guardar cuenta' : (parent ? 'Crear sub-cuenta' : 'Crear cuenta') });
     form.appendChild(save);
     on(form, 'submit', async event => {
       event.preventDefault();
       try {
         if (account) await API.accounts.update(account.id, { name: name.value.trim(), currency: currencyValue, primary: primary.checked, ownerId: owner.value || null });
-        else await API.accounts.create({ name: name.value.trim(), currency: currencyValue, primary: primary.checked, ownerId: owner.value || null });
+        else await API.accounts.create({ name: name.value.trim(), currency: currencyValue, primary: primary.checked, ownerId: owner.value || null, ...(parent ? { parentId: parent.id } : {}) });
         Modal.hide();
         await this.render();
       } catch (error) { this.showError(form, error.message); }
     });
-    Modal.show(account ? 'Editar cuenta' : 'Nueva cuenta', form);
+    Modal.show(account ? 'Editar cuenta' : (parent ? `Nueva sub-cuenta de ${parent.nombre}` : 'Nueva cuenta'), form);
     name.focus();
   },
 
@@ -465,9 +475,9 @@ const SettingsPage = {
     const form = create('form');
     const from = create('select', { id: 'transfer-from', className: 'form-control' });
     const to = create('select', { id: 'transfer-to', className: 'form-control' });
-    activeAccounts.forEach(account => {
-      from.appendChild(create('option', { value: account.id, textContent: `${account.nombre} (${account.currency})` }));
-      to.appendChild(create('option', { value: account.id, textContent: `${account.nombre} (${account.currency})` }));
+    accountTreeOptions(activeAccounts).forEach(({ account, label }) => {
+      from.appendChild(create('option', { value: account.id, textContent: label }));
+      to.appendChild(create('option', { value: account.id, textContent: label }));
     });
     if (existingTransfer) {
       from.value = existingTransfer.fromAccountId;

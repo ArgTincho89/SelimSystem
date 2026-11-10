@@ -84,7 +84,7 @@ function getLegacyAccount(db, userId, initialize = true) {
   if (!legacyAccount && initialize) {
     const now = new Date().toISOString();
     legacyAccount = db.create('accounts', {
-      nombre: 'Cuenta principal', currency: 'ARS', primary: true, legacyPrimary: true,
+      nombre: 'Cuenta principal', currency: 'ARS', parentId: null, primary: true, legacyPrimary: true,
       activo: true, archivedAt: null, order: 0, openingBalanceMinor: null,
       openingDate: null, reconciled: false, presentation: 'default', createdAt: now
     }, userId);
@@ -219,8 +219,22 @@ function postedDate(movement) {
   return movement.postedAt || movement.fecha || movement.date;
 }
 
+// Parent first, then its children (each keeps its own balance; there is no roll-up).
+function orderAsTree(accounts) {
+  const ids = new Set(accounts.map(account => account.id));
+  const childrenOf = new Map();
+  const roots = [];
+  accounts.forEach(account => {
+    if (account.parentId && ids.has(account.parentId)) {
+      if (!childrenOf.has(account.parentId)) childrenOf.set(account.parentId, []);
+      childrenOf.get(account.parentId).push(account);
+    } else roots.push(account);
+  });
+  return roots.flatMap(root => [root, ...(childrenOf.get(root.id) || [])]);
+}
+
 function getAccountBalances(db, userId, atDate = localDateForUser(db, userId)) {
-  const accounts = accountsForUser(db, userId);
+  const accounts = orderAsTree(accountsForUser(db, userId).map(account => ({ ...account, parentId: account.parentId || null })));
   const transactions = db.findAll('transactions', userId);
   const transfers = db.findAll('transfers', userId);
   return accounts.map(account => {
