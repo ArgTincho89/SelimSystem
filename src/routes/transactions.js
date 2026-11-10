@@ -417,9 +417,9 @@ router.delete('/:id', (req, res) => {
 
   if (transaction.obligationOccurrenceId) return res.status(409).json({ error: 'Los pagos vinculados a obligaciones no se pueden eliminar' });
   if (transaction.rentCollectionId) {
-    const result = rentals.reverseCollection(db, userId, transaction.rentCollectionId);
+    const result = rentals.reverseCollection(db, userId, transaction.rentCollectionId, req.app.locals.documentStorage);
     if (result.error) return res.status(result.status || 409).json({ error: result.error });
-    return res.json({ ok: true, collectionId: result.collectionId, reopenedOccurrenceIds: result.reopenedOccurrenceIds });
+    return res.json({ ok: true, collectionId: result.collectionId, reopenedOccurrenceIds: result.reopenedOccurrenceIds, reconciliationReset: result.reconciliationReset });
   }
 
   const linkedNormalization = db.findAll('transfers', userId).some(transfer => [...(transfer.normalizationAllocations || []), ...(transfer.pendingAllocations || [])].some(item => item.sourceType === 'income' && item.sourceId === transaction.id));

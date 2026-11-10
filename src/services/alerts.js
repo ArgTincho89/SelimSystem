@@ -74,6 +74,8 @@ function readOnlyView(db) {
 
 const isVirtual = id => String(id).startsWith('virtual:');
 
+const RENT_MODALITY = { locacion: 'Locación', comodato: 'Comodato', mutuo: 'Mutuo' };
+
 function build(db, userId, today, filters) {
   const view = readOnlyView(db);
   const settings = ledger.getSettings(db, userId, false);
@@ -168,7 +170,11 @@ function build(db, userId, today, filters) {
     if (alert.type === 'rent_due') {
       const overdue = alert.status === 'overdue';
       alert.title = `Alquiler de ${monthName(alert.period)}${asset ? ` · ${asset}` : ''}`;
-      alert.message = `Falta cobrar el alquiler de ${monthName(alert.period)}${asset ? ` del ${asset}` : ''}. Importe esperado: ${money(alert.amount, alert.currencyCode)}. ${overdue ? `Venció el ${longDate(alert.date)}.` : countdown(daysAway)}`;
+      const open = (alert.parts || []).filter(part => part.remainingAmount > 0);
+      const split = (alert.parts || []).length > 1
+        ? `Importe pendiente: ${(alert.totals || []).filter(item => item.remainingAmount > 0).map(item => money(item.remainingAmount, item.currencyCode)).join(' + ')} (${open.map(part => `${RENT_MODALITY[part.modality] || 'Alquiler'} ${money(part.remainingAmount, part.currencyCode)}`).join(', ')}).`
+        : `Importe esperado: ${money(alert.amount, alert.currencyCode)}.`;
+      alert.message = `Falta cobrar el alquiler de ${monthName(alert.period)}${asset ? ` del ${asset}` : ''}. ${split} ${overdue ? `Venció el ${longDate(alert.date)}.` : countdown(daysAway)}`;
     } else if (alert.type === 'contract_expiry') {
       alert.title = `Vence el contrato${asset ? ` · ${asset}` : ''}`;
       alert.message = `El contrato de alquiler${asset ? ` del ${asset}` : ''} vence el ${longDate(alert.date)}. ${countdown(daysAway)}`;

@@ -76,6 +76,16 @@ export class AssetsPage extends BasePage {
     await this.page.waitForSelector('.modal-overlay', { state: 'hidden', timeout: 10000 });
   }
 
+  /** Opens "Ver historial" and undoes the collected rent month with its inline confirmation. */
+  async undoCollectedMonth(assetName: string): Promise<void> {
+    await this.page.locator('article.card', { hasText: assetName }).getByRole('button', { name: 'Ver historial' }).click();
+    const month = this.modal.locator('[data-rent-month]', { hasText: 'Cobrado' }).first();
+    await month.getByRole('button', { name: 'Deshacer cobro' }).click();
+    await month.getByRole('button', { name: 'Confirmar y deshacer' }).click();
+    await expect(this.modal.locator('[data-rent-month]', { hasText: 'Cobrado' })).toHaveCount(0);
+    await this.modal.getByLabel('Cerrar').click();
+  }
+
   /** Not exported as a step: kept for symmetry with the other page objects. */
   async expectModalityHidden(modality: RentalModality): Promise<void> {
     await expect(this.fieldset(modality)).toBeHidden();

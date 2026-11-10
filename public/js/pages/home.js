@@ -943,7 +943,7 @@ const HomePage = {
     }));
     footer.appendChild(create('button', {
       className: 'btn btn-danger',
-      textContent: tx.isRecurringInstance ? 'Omitir ocurrencia' : 'Eliminar',
+      textContent: tx.isRecurringInstance ? 'Omitir ocurrencia' : tx.rentCollectionId ? 'Deshacer cobro' : 'Eliminar',
       disabled: tx.isRecurringInstance && tx.occurrenceStatus === 'posted'
     }));
 
@@ -952,15 +952,15 @@ const HomePage = {
     on(deleteButton, 'click', async () => {
       if (tx.rentCollectionId && !rentDeleteArmed) {
         rentDeleteArmed = true;
-        deleteButton.textContent = 'Confirmar eliminación';
-        showToast('Al eliminar este cobro de alquiler, el período vuelve a quedar pendiente de cobro. Tocá de nuevo para confirmar.');
+        deleteButton.textContent = 'Confirmar y deshacer';
+        showToast('Al deshacer este cobro de alquiler, el período vuelve a quedar pendiente de cobro. Tocá de nuevo para confirmar.');
         return;
       }
       try {
         if (tx.isRecurringInstance) await API.transactions.skipOccurrence(tx.originalId, tx.fecha);
-        else await API.transactions.delete(tx.id);
+        const result = tx.isRecurringInstance ? null : await API.transactions.delete(tx.id);
         Modal.hide();
-        showToast('Transacción eliminada');
+        showToast(result?.reconciliationReset ? 'Cobro deshecho. La conciliación de la cuenta quedó pendiente de revisar' : tx.rentCollectionId ? 'Cobro deshecho' : 'Transacción eliminada');
         this.render({ month: this.currentMonth });
       } catch (err) {
         showToast(err.message, 'error');
@@ -984,7 +984,7 @@ const HomePage = {
     categoryDetails.appendChild(document.createTextNode(` - ${formatFechaCorta(tx.fecha)}`));
     if (tx.accountName) categoryDetails.appendChild(document.createTextNode(` · ${tx.accountName} (${tx.currencyCode || 'EUR'})`));
     details.appendChild(categoryDetails);
-    if (tx.rentCollectionId) details.appendChild(create('p', { textContent: 'Cobro de alquiler: si lo eliminás, el período vuelve a quedar pendiente de cobro.', style: { color: 'var(--text-secondary)', fontSize: 'var(--font-xs)' } }));
+    if (tx.rentCollectionId) details.appendChild(create('p', { textContent: 'Cobro de alquiler: si lo deshacés, el período vuelve a quedar pendiente de cobro.', style: { color: 'var(--text-secondary)', fontSize: 'var(--font-xs)' } }));
     const amountDetail = create('p', {
       textContent: `${tx.tipo === 'expense' ? '-' : '+'}${formatearMoneda(tx.monto, tx.currencyCode || 'EUR')}`,
       style: { fontSize: 'var(--font-xl)', fontWeight: '700', color: `var(--${tx.tipo === 'expense' ? 'expense' : tx.tipo === 'income' ? 'income' : 'refund'}-color)` }

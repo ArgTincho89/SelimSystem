@@ -7,8 +7,8 @@ const dialogSource = () => {
 };
 
 describe('Evolutivo 3 S2 rent collection UI contract', () => {
-  it('Avisos opens the single-occurrence dialog', () => {
-    expect(read('js/pages/alerts.js')).toContain('{ single: true }');
+  it('Avisos opens the month collection dialog', () => {
+    expect(read('js/pages/alerts.js')).toContain('showRentMonthModal(alert.assetId, alert.monthKey');
   });
   it('the collection dialog has no reusable payment method and uses MoneyInput', () => {
     const dialog = dialogSource();
@@ -23,11 +23,12 @@ describe('Evolutivo 3 S2 rent collection UI contract', () => {
     expect(dialog.match(/const idempotencyKey =/g)).toHaveLength(1);
     expect(dialog.indexOf('const idempotencyKey =')).toBeLessThan(dialog.indexOf('onClick'));
   });
-  it('offers Anular cobro with inline confirmation and no window.confirm', () => {
+  it('offers Deshacer cobro with inline confirmation and no window.confirm', () => {
     const assets = read('js/pages/assets.js');
-    expect(assets).toContain('Anular cobro');
-    expect(assets).toContain('Confirmar anulación');
-    expect(assets.slice(assets.indexOf('reverseButtons('), assets.indexOf('contractTypeLabel(type)'))).not.toContain('confirm(');
+    expect(assets).toContain('Deshacer cobro');
+    expect(assets).toContain('Confirmar y deshacer');
+    expect(assets).not.toContain('Anular cobro');
+    expect(assets.slice(assets.indexOf('undoCollections('), assets.indexOf('contractTypeLabel(type)'))).not.toContain('confirm(');
     expect(read('js/api.js')).toContain('reverseCollection');
   });
   it('the Transacciones delete explains the period returns to pending', () => {

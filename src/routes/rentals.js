@@ -51,6 +51,18 @@ router.get('/', (req, res) => {
   res.json(rows);
 });
 
+// Declaration months (all modalities of the same due date) with per-part status and collection ids.
+router.get('/months', (req, res) => {
+  const db = req.app.locals.db;
+  const userId = req.session.userId;
+  const assetId = req.query.assetId;
+  if (assetId && !db.findById('assets', assetId, userId)) return res.status(400).json({ error: 'El inmueble no es válido' });
+  const today = ledger.localDateForUser(db, userId);
+  const views = db.findAll('rentalContracts', userId).filter(item => (!assetId || item.assetId === assetId) && item.status !== 'draft')
+    .flatMap(item => contractResponse(db, userId, item, upperDate(db, userId, req.query.to)).occurrences);
+  res.json(rentals.monthViews(views, today).reverse());
+});
+
 router.get('/alerts', (req, res) => {
   const db = req.app.locals.db;
   const userId = req.session.userId;
@@ -64,15 +76,19 @@ router.get('/alerts', (req, res) => {
   const rentEnd = rentThrough.toISOString().slice(0, 10);
   const end = expiryThrough.toISOString().slice(0, 10);
   const alerts = [];
-  db.findAll('rentalContracts', userId).forEach(contract => {
-    const response = contractResponse(db, userId, contract, end);
-    if (contract.status === 'active') {
-      response.occurrences.filter(item => ['pending', 'partially_collected'].includes(item.status) && item.date >= today && item.date <= rentEnd).forEach(item => {
-        alerts.push({ id: `rent:${item.id}`, type: 'rent_due', date: item.date, contractId: contract.id, occurrenceId: item.id, assetId: contract.assetId, assetName: response.asset?.name, amount: item.remainingAmount, currencyCode: item.currencyCode });
-      });
-      if (contract.endDate && contract.endDate >= today && contract.endDate <= end) {
-        alerts.push({ id: `expiry:${contract.id}`, type: 'contract_expiry', date: contract.endDate, contractId: contract.id, assetId: contract.assetId, assetName: response.asset?.name });
-      }
+  const active = db.findAll('rentalContracts', userId).filter(contract => contract.status === 'active');
+  const responses = active.map(contract => contractResponse(db, userId, contract, end));
+  // One reminder per declaration month (all modalities with the same due date).
+  rentals.monthViews(responses.flatMap(item => item.occurrences), today)
+    .filter(month => ['pending', 'partially_collected'].includes(month.status) && month.date >= today && month.date <= rentEnd)
+    .forEach(month => {
+      const first = month.parts.find(part => part.remainingMinor > 0) || month.parts[0];
+      const response = responses.find(item => item.id === first.contractId);
+      alerts.push({ id: `rent:${month.key}`, type: 'rent_due', date: month.date, contractId: first.contractId, occurrenceId: first.occurrenceId, monthKey: month.key, assetId: response.assetId, assetName: response.asset?.name, amount: first.remainingAmount, currencyCode: first.currencyCode, parts: month.parts.map(part => ({ occurrenceId: part.occurrenceId, modality: part.modality, remainingAmount: part.remainingAmount, currencyCode: part.currencyCode })) });
+    });
+  responses.forEach(response => {
+    if (response.endDate && response.endDate >= today && response.endDate <= end) {
+      alerts.push({ id: `expiry:${response.id}`, type: 'contract_expiry', date: response.endDate, contractId: response.id, assetId: response.assetId, assetName: response.asset?.name });
     }
   });
   res.json(alerts.sort((a, b) => a.date.localeCompare(b.date)));
@@ -175,7 +191,7 @@ router.post('/collections', (req, res) => {
   const fingerprint = rentals.hash(JSON.stringify({ amount: input.amount, accountId: input.accountId, date: input.date, method: input.method || '', clasificacion: input.clasificacion || null, allocations: input.allocations || [] }));
   const prior = db.findAll('rentCollections', userId).find(item => item.idempotencyKey === keyHash);
   if (prior) {
-    if (prior.reversedAt) return res.status(409).json({ error: 'Ese cobro fue anulado; registrá uno nuevo' });
+    if (prior.reversedAt) return res.status(409).json({ error: 'Ese cobro fue deshecho; registrá uno nuevo' });
     if (prior.fingerprint !== fingerprint) return res.status(409).json({ error: 'La clave de idempotencia ya se utilizó para otro cobro' });
     return res.json({ ...rentals.collectionView(db, userId, prior), replayed: true });
   }
@@ -197,14 +213,10 @@ router.post('/collections', (req, res) => {
   if (allocationResult.error) return res.status(400).json({ error: allocationResult.error });
   const allocatedMinor = allocationResult.allocations.reduce((sum, item) => sum + item.amountMinor, 0);
   if (allocatedMinor > amountMinor) return res.status(400).json({ error: 'Las asignaciones superan el importe real cobrado' });
-  const contractIvas = [...new Set(allocationResult.allocations.map(item => {
-    const occurrence = db.findById('rentOccurrences', item.occurrenceId, userId);
-    const contract = occurrence && db.findById('rentalContracts', occurrence.contractId, userId);
-    return Number(contract?.ivaPercent) || 0;
-  }))];
-  const ivaPercent = contractIvas.length === 1 && contractIvas[0] > 0 ? contractIvas[0] : null;
-  const clasificacion = input.clasificacion || (ivaPercent ? 'A' : null);
-  const ivaApplies = clasificacion === 'A' && ivaPercent !== null;
+  const classification = rentals.classifyCollection(db, userId, allocationResult.allocations, amountMinor, input.clasificacion || null);
+  const { clasificacion, ivaPercent } = classification;
+  const ivaApplies = ivaPercent !== null && (clasificacion === 'A' || clasificacion === 'Mixto');
+  const montoAMinor = clasificacion === 'Mixto' ? classification.montoAMinor : null;
   const collectionId = uuidv4();
   let transaction;
   let collection;
@@ -215,7 +227,7 @@ router.post('/collections', (req, res) => {
       accountId: account.id, currencyCode: account.currency, titulo: 'Cobro de alquiler',
       ...incomeAttribution.incomeHolderSnapshot(db, userId, account),
       categoryId: null, refundSourceId: null, fecha: date, recurrente: false, frecuencia: null, fechaFin: null,
-      clasificacion, montoA: null, montoB: null, ivaPorcentaje: ivaApplies ? ivaPercent : null, ivaIncluded: ivaApplies,
+      clasificacion, montoA: montoAMinor === null ? null : ledger.fromMinorUnits(montoAMinor, account.currency), montoB: montoAMinor === null ? null : ledger.fromMinorUnits(amountMinor - montoAMinor, account.currency), ivaPorcentaje: ivaApplies ? ivaPercent : null, ivaIncluded: ivaApplies,
       rentCollectionId: collectionId, rentCollectionIdempotencyKey: keyHash,
       paymentMethodId: paymentMethod?.id || null, paymentMethod: methodLabel || paymentMethod?.name || ''
     }, userId);
@@ -241,7 +253,7 @@ router.post('/collections', (req, res) => {
 router.post('/collections/:id/reverse', (req, res) => {
   const db = req.app.locals.db;
   const userId = req.session.userId;
-  const result = rentals.reverseCollection(db, userId, req.params.id);
+  const result = rentals.reverseCollection(db, userId, req.params.id, req.app.locals.documentStorage);
   if (result.error) return res.status(result.status || 409).json({ error: result.error });
   res.json(result);
 });

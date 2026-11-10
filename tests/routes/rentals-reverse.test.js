@@ -41,7 +41,7 @@ describe('Reverse a rent collection', () => {
     expect(await status(contract, '2024-04-01')).toBe('overdue');
     const replay = await f.collect(contract, ['2024-03-01', '2024-04-01'], { idempotencyKey: 'multi-period-key-1' });
     expect(replay.status).toBe(409);
-    expect(replay.body.error).toBe('Ese cobro fue anulado; registrá uno nuevo');
+    expect(replay.body.error).toBe('Ese cobro fue deshecho; registrá uno nuevo');
     const again = await f.collect(contract, ['2024-03-01']);
     expect(again.status).toBe(201);
     expect(again.body.id).not.toBe(collected.body.id);
@@ -57,30 +57,35 @@ describe('Reverse a rent collection', () => {
     expect((await f.agent.post('/api/rentals/collections/missing/reverse')).status).toBe(404);
   });
 
-  it('rejects reversal when the account was reconciled after the collection date', async () => {
+  it('undoes a collection on an account reconciled after the collection date and resets the reconciliation', async () => {
     const reconciledId = (await f.agent.post('/api/accounts').send({ name: 'Reconciled ARS', currency: 'ARS' })).body.id;
     const contract = await f.createContract({ startDate: '2022-01-01', endDate: '2022-06-30' });
     const collected = await f.collect(contract, ['2022-01-01'], { accountId: reconciledId });
     await f.agent.post(`/api/accounts/${reconciledId}/reconcile`).send({ openingBalance: 0, openingDate: '2025-06-01', includedMovementIds: [] });
     const res = await f.agent.post(`/api/rentals/collections/${collected.body.id}/reverse`);
-    expect(res.status).toBe(409);
-    expect(res.body.error).toBe('La cuenta fue conciliada; no se puede revertir el cobro');
-    expect(f.db.findById('transactions', collected.body.transactionId, f.userId)).toBeTruthy();
+    expect(res.status).toBe(200);
+    expect(res.body.reconciliationReset).toBe(true);
+    expect(f.db.findById('transactions', collected.body.transactionId, f.userId)).toBeFalsy();
+    expect(f.db.findById('accounts', reconciledId, f.userId).reconciled).toBe(false);
   });
 
   it('rejects reversal when a refund references the transaction', async () => {
     const contract = await f.createContract({ startDate: '2021-01-01', endDate: '2021-06-30' });
     const collected = await f.collect(contract, ['2021-01-01']);
     f.db.create('transactions', { userId: f.userId, tipo: 'refund', refundSourceId: collected.body.transactionId, monto: 1, amountMinor: 100, accountId: f.accountId, currencyCode: 'ARS', fecha: '2025-03-03', titulo: 'refund' }, f.userId);
-    expect((await f.agent.post(`/api/rentals/collections/${collected.body.id}/reverse`)).status).toBe(409);
+    const res = await f.agent.post(`/api/rentals/collections/${collected.body.id}/reverse`);
+    expect(res.status).toBe(409);
+    expect(res.body.error).toContain('un reembolso (refund, 2025-03-03)');
+    expect(f.db.findById('transactions', collected.body.transactionId, f.userId)).toBeTruthy();
   });
 
-  it('keeps receipts detached and flagged, and keeps the tombstone for notes', async () => {
+  it('unlinks receipts that have other targets, and keeps the tombstone for notes', async () => {
     const contract = await f.createContract({ startDate: '2020-01-01', endDate: '2020-06-30' });
     const collected = await f.collect(contract, ['2020-01-01']);
     const doc = f.db.create('documents', { userId: f.userId, assetId: f.assetId, transactionId: collected.body.transactionId, originalName: 'r.txt' }, f.userId);
     await f.agent.post(`/api/rentals/collections/${collected.body.id}/reverse`);
     expect(f.db.findById('documents', doc.id, f.userId)).toMatchObject({ transactionId: null, detachedFromCollectionId: collected.body.id, assetId: f.assetId });
+    expect(f.db.findById('rentCollections', collected.body.id, f.userId)).toBeTruthy();
     expect(f.db.findById('rentCollections', collected.body.id, f.userId)).toBeTruthy();
   });
 

@@ -155,10 +155,9 @@ const AlertsPage = {
     input.click();
   },
 
+  // One alert per declaration month: the dialog collects every modality of that month.
   async collectRent(alert) {
-    const contract = await API.rentals.get(alert.contractId);
-    const occurrence = (contract.occurrences || []).find(item => item.id === alert.rentOccurrenceId) || (contract.occurrences || []).find(item => item.date === alert.date);
-    await AssetsPage.showRentCollectionModal({ id: alert.assetId }, contract, occurrence?.id || null, () => this.reload(), { single: true });
+    await AssetsPage.showRentMonthModal(alert.assetId, alert.monthKey, () => this.reload());
   },
 
   async postInstallment(alert) {

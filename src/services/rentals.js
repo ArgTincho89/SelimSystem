@@ -250,7 +250,7 @@ function occurrenceView(db, userId, occurrence, today) {
     paidAmount: ledger.fromMinorUnits(paidMinor, occurrence.currencyCode),
     remainingAmount: ledger.fromMinorUnits(remainingMinor, occurrence.currencyCode),
     allocations: allocations.map(item => ({ ...item, collection: db.findById('rentCollections', item.collectionId, userId) })),
-    contract: contract ? { id: contract.id, assetId: contract.assetId, type: contract.type, status: contract.status } : null
+    contract: contract ? { id: contract.id, assetId: contract.assetId, type: contract.type, status: contract.status, declarationId: contract.declarationId || null } : null
   };
 }
 
@@ -293,47 +293,142 @@ function validateAllocations(db, userId, input, currencyCode, ignoreCollectionId
     const extra = pending.get(occurrence.id) || 0;
     if (already + extra + amountMinor > occurrence.rentMinor) return { error: 'La asignación supera el saldo pendiente del período' };
     pending.set(occurrence.id, extra + amountMinor);
-    normalized.push({ occurrenceId: occurrence.id, amountMinor });
+    if (entry.clasificacion !== undefined && entry.clasificacion !== null && !['A', 'B'].includes(entry.clasificacion)) return { error: 'La clasificación de cada asignación debe ser A o B' };
+    normalized.push({ occurrenceId: occurrence.id, amountMinor, ...(entry.clasificacion ? { clasificacion: entry.clasificacion } : {}) });
   }
   return { allocations: normalized };
 }
 
-function reverseCollection(db, userId, collectionId) {
+/**
+ * A/B/Mixto classification of one collection. Per allocation: locación -> A (IVA of its contract),
+ * comodato/mutuo -> B (never IVA); an allocation or the whole collection may be overridden to A/B.
+ * A locación without IVA stays unclassified unless the collection mixes classified lines.
+ */
+function classifyCollection(db, userId, allocations, amountMinor, override = null) {
+  const lines = allocations.map(item => {
+    const occurrence = db.findById('rentOccurrences', item.occurrenceId, userId);
+    const contract = occurrence && db.findById('rentalContracts', occurrence.contractId, userId);
+    const locacion = !contract || modalityOf(contract) === 'locacion';
+    const iva = locacion ? Number(contract?.ivaPercent) || 0 : 0;
+    const base = locacion ? (iva > 0 ? 'A' : null) : 'B';
+    const cls = override || item.clasificacion || base;
+    return { amountMinor: item.amountMinor, cls, iva: cls === 'A' ? iva : 0 };
+  });
+  if (!lines.length) return { clasificacion: override, montoAMinor: null, ivaPercent: null };
+  if (!lines.some(line => line.cls)) return { clasificacion: null, montoAMinor: null, ivaPercent: null };
+  lines.forEach(line => { if (!line.cls) line.cls = 'A'; });
+  const hasA = lines.some(line => line.cls === 'A');
+  const hasB = lines.some(line => line.cls === 'B');
+  const ivas = [...new Set(lines.filter(line => line.cls === 'A' && line.iva > 0).map(line => line.iva))];
+  const ivaPercent = ivas.length === 1 ? ivas[0] : null;
+  if (hasA && hasB) return { clasificacion: 'Mixto', montoAMinor: lines.filter(line => line.cls === 'A').reduce((sum, line) => sum + line.amountMinor, 0), ivaPercent };
+  return { clasificacion: hasA ? 'A' : 'B', montoAMinor: null, ivaPercent: hasA ? ivaPercent : null };
+}
+
+function monthStatus(parts, date, today) {
+  if (!parts.length) return 'cancelled';
+  if (parts.every(part => part.status === 'collected')) return 'collected';
+  if (parts.some(part => part.paidMinor > 0)) return 'partially_collected';
+  return date < today ? 'overdue' : 'pending';
+}
+
+/**
+ * Groups occurrence views into declaration months (same declaration, same due date). A legacy
+ * contract without declaration is a one-part month. The month is collected only when every
+ * non-cancelled part is collected.
+ */
+function monthViews(occurrenceViews, today) {
+  const groups = new Map();
+  occurrenceViews.filter(item => !item.cancelled && item.status !== 'cancelled').forEach(item => {
+    const declarationKey = item.contract?.declarationId || `contract:${item.contractId}`;
+    const key = `${declarationKey}|${item.date}`;
+    if (!groups.has(key)) groups.set(key, { key, declarationId: item.contract?.declarationId || null, assetId: item.contract?.assetId || null, date: item.date, period: item.period, parts: [] });
+    groups.get(key).parts.push(item);
+  });
+  return [...groups.values()].map(month => {
+    month.parts.sort((a, b) => MODALITIES.indexOf(a.modality) - MODALITIES.indexOf(b.modality));
+    const totals = new Map();
+    month.parts.forEach(part => {
+      const row = totals.get(part.currencyCode) || { currencyCode: part.currencyCode, rentMinor: 0, paidMinor: 0, remainingMinor: 0 };
+      row.rentMinor += part.rentMinor; row.paidMinor += part.paidMinor; row.remainingMinor += part.remainingMinor;
+      totals.set(part.currencyCode, row);
+    });
+    return {
+      ...month, status: monthStatus(month.parts, month.date, today),
+      totals: [...totals.values()].map(row => ({ ...row, rentAmount: ledger.fromMinorUnits(row.rentMinor, row.currencyCode), paidAmount: ledger.fromMinorUnits(row.paidMinor, row.currencyCode), remainingAmount: ledger.fromMinorUnits(row.remainingMinor, row.currencyCode) })),
+      parts: month.parts.map(part => ({
+        occurrenceId: part.id, contractId: part.contractId, modality: part.modality, currencyCode: part.currencyCode, status: part.status,
+        rentMinor: part.rentMinor, paidMinor: part.paidMinor, remainingMinor: part.remainingMinor, ivaPercent: part.ivaPercent ?? null,
+        rentAmount: part.rentAmount, paidAmount: part.paidAmount, remainingAmount: part.remainingAmount,
+        collectionIds: [...new Set(part.allocations.map(item => item.collectionId))]
+      })),
+      collectionIds: [...new Set(month.parts.flatMap(part => part.allocations.map(item => item.collectionId)))]
+    };
+  }).sort((a, b) => a.date.localeCompare(b.date) || a.key.localeCompare(b.key));
+}
+
+function dependentMovement(db, userId, transaction) {
+  const refund = db.findAll('transactions', userId).find(item => item.tipo === 'refund' && item.refundSourceId === transaction.id);
+  if (refund) return `un reembolso (${refund.titulo || 'sin título'}, ${refund.fecha})`;
+  const transfer = db.findAll('transfers', userId).find(item => [...(item.normalizationAllocations || []), ...(item.pendingAllocations || [])].some(entry => entry.sourceType === 'income' && entry.sourceId === transaction.id));
+  if (transfer) return `una normalización de transferencia (${transfer.fecha || transfer.date || 'sin fecha'})`;
+  if (db.findAll('movementAllocations', userId).some(item => item.transactionId === transaction.id)) return 'una atribución de movimiento';
+  return null;
+}
+
+const NON_TRANSACTION_TARGETS = ['assetId', 'entityId', 'obligationId', 'contractId', 'occurrenceId', 'rentOccurrenceId', 'tenantEntityId'];
+
+/**
+ * "Deshacer cobro": restores the state before the collection. The tombstone only guards idempotent
+ * replays. A reconciled account is never a blocker; its reconciliation is reset instead. Only a
+ * dependent movement (refund, normalization, allocation) blocks the undo. `storage` is optional and
+ * is used to delete stored receipt files.
+ */
+function reverseCollection(db, userId, collectionId, storage = null) {
   const collection = db.findById('rentCollections', collectionId, userId);
   if (!collection) return { status: 404, error: 'Cobro no encontrado' };
-  if (collection.reversedAt) return { status: 409, error: 'Ese cobro ya fue anulado' };
+  if (collection.reversedAt) return { status: 409, error: 'Ese cobro ya fue deshecho' };
   const transaction = db.findById('transactions', collection.transactionId, userId);
-  const account = transaction && db.findById('accounts', transaction.accountId || collection.accountId, userId);
-  if (account && account.reconciled && account.openingDate && (collection.date < account.openingDate || (account.includedMovementIds || []).includes(transaction.id))) {
-    return { status: 409, error: 'La cuenta fue conciliada; no se puede revertir el cobro' };
-  }
   if (transaction) {
-    const linkedNormalization = db.findAll('transfers', userId).some(transfer => [...(transfer.normalizationAllocations || []), ...(transfer.pendingAllocations || [])].some(item => item.sourceType === 'income' && item.sourceId === transaction.id));
-    const linkedRefund = db.findAll('transactions', userId).some(item => item.tipo === 'refund' && item.refundSourceId === transaction.id);
-    const allocated = db.findAll('movementAllocations', userId).some(item => item.transactionId === transaction.id);
-    if (linkedNormalization || linkedRefund || allocated) return { status: 409, error: 'Este cobro tiene referencias activas; resuélvelas antes de anularlo' };
+    const dependent = dependentMovement(db, userId, transaction);
+    if (dependent) return { status: 409, error: `Este cobro tiene ${dependent}; deshacé primero ese movimiento` };
   }
+  const account = transaction && db.findById('accounts', transaction.accountId || collection.accountId, userId);
+  const resetsReconciliation = Boolean(account && account.reconciled && account.openingDate && (collection.date < account.openingDate || (account.includedMovementIds || []).includes(transaction.id)));
   const allocations = db.findAll('rentCollectionAllocations', userId).filter(item => item.collectionId === collection.id);
   const documents = transaction ? db.findAll('documents', userId).filter(item => item.transactionId === transaction.id) : [];
+  const onlyTarget = item => !NON_TRANSACTION_TARGETS.some(field => item[field]);
   const removedAllocations = [];
+  const removedDocuments = [];
   let removedTransaction = null;
   try {
     allocations.forEach(item => { db.remove('rentCollectionAllocations', item.id, userId); removedAllocations.push(item); });
     if (transaction) { db.remove('transactions', transaction.id, userId); removedTransaction = transaction; }
     db.update('rentCollections', collection.id, { reversedAt: new Date().toISOString(), reversedTransactionId: transaction?.id || null }, userId);
-    documents.forEach(item => db.update('documents', item.id, { transactionId: null, detachedFromCollectionId: collection.id }, userId));
+    documents.forEach(item => {
+      if (onlyTarget(item)) { db.remove('documents', item.id, userId); removedDocuments.push(item); }
+      else db.update('documents', item.id, { transactionId: null, detachedFromCollectionId: collection.id }, userId);
+    });
+    if (resetsReconciliation) db.update('accounts', account.id, { reconciled: false, includedMovementIds: (account.includedMovementIds || []).filter(id => id !== transaction.id) }, userId);
   } catch {
     db.clearCache();
     try {
       removedAllocations.forEach(item => { if (!db.findById('rentCollectionAllocations', item.id, userId)) db.create('rentCollectionAllocations', item, userId); });
       if (removedTransaction && !db.findById('transactions', removedTransaction.id, userId)) db.create('transactions', removedTransaction, userId);
+      removedDocuments.forEach(item => { if (!db.findById('documents', item.id, userId)) db.create('documents', item, userId); });
+      documents.filter(item => !onlyTarget(item)).forEach(item => { if (db.findById('documents', item.id, userId)) db.update('documents', item.id, { transactionId: item.transactionId, detachedFromCollectionId: item.detachedFromCollectionId ?? null }, userId); });
       if (db.findById('rentCollections', collection.id, userId)?.reversedAt) db.update('rentCollections', collection.id, { reversedAt: null, reversedTransactionId: null }, userId);
+      if (resetsReconciliation) db.update('accounts', account.id, { reconciled: true, includedMovementIds: account.includedMovementIds || [] }, userId);
     } catch { /* best effort restore */ }
     db.clearCache();
-    return { status: 500, error: 'No se pudo anular el cobro' };
+    return { status: 500, error: 'No se pudo deshacer el cobro' };
   }
+  removedDocuments.forEach(item => { try { storage?.remove(userId, item.storageKey); } catch { /* orphan file is harmless */ } });
   ledger.refreshAlerts(db, userId);
-  return { ok: true, collectionId: collection.id, reopenedOccurrenceIds: [...new Set(allocations.map(item => item.occurrenceId))] };
+  return {
+    ok: true, collectionId: collection.id, reopenedOccurrenceIds: [...new Set(allocations.map(item => item.occurrenceId))],
+    reconciliationReset: resetsReconciliation, deletedDocumentIds: removedDocuments.map(item => item.id)
+  };
 }
 
 function collectionView(db, userId, collection) {
@@ -364,16 +459,29 @@ function rentAlerts(db, userId, { today, leadDays = 5, expiryDays = 30, adjustme
   const expiryEnd = plusDays(today, expiryDays);
   const adjustmentEnd = plusDays(today, adjustmentDays);
   const items = [];
-  db.findAll('rentalContracts', userId).filter(contract => contract.status === 'active').forEach(contract => {
+  const activeContracts = db.findAll('rentalContracts', userId).filter(contract => contract.status === 'active');
+  const views = activeContracts.flatMap(contract => generateOccurrences(db, userId, contract, rentEnd));
+  const contractsById = new Map(activeContracts.map(contract => [contract.id, contract]));
+  monthViews(views.filter(item => contractsById.has(item.contractId)), today)
+    .filter(month => month.status !== 'collected' && (month.date < today || month.date <= rentEnd))
+    .forEach(month => {
+      const open = month.parts.filter(part => part.remainingMinor > 0);
+      const first = open[0] || month.parts[0];
+      const contract = contractsById.get(first.contractId);
+      const declarationKey = month.declarationId || `contract:${first.contractId}`;
+      items.push({
+        contractId: contract.id, assetId: contract.assetId, tenantIds: contract.tenantIds || [],
+        modality: month.parts.length === 1 ? first.modality : null, type: 'rent_due', id: `rent:${declarationKey}:${month.date}`,
+        date: month.date, period: month.period, monthKey: month.key, declarationId: month.declarationId,
+        rentOccurrenceId: String(first.occurrenceId).startsWith('virtual:') ? null : first.occurrenceId,
+        amount: first.remainingAmount, expectedAmount: first.rentAmount, currencyCode: first.currencyCode,
+        totals: month.totals.map(row => ({ currencyCode: row.currencyCode, expectedAmount: row.rentAmount, remainingAmount: row.remainingAmount })),
+        parts: month.parts.map(part => ({ occurrenceId: part.occurrenceId, contractId: part.contractId, modality: part.modality, currencyCode: part.currencyCode, expectedAmount: part.rentAmount, paidAmount: part.paidAmount, remainingAmount: part.remainingAmount, status: part.status })),
+        status: month.date < today ? 'overdue' : month.status
+      });
+    });
+  activeContracts.forEach(contract => {
     const base = { contractId: contract.id, assetId: contract.assetId, tenantIds: contract.tenantIds || [] };
-    generateOccurrences(db, userId, contract, rentEnd)
-      .filter(item => ['pending', 'partially_collected', 'overdue'].includes(item.status) && (item.date < today || item.date <= rentEnd))
-      .forEach(item => items.push({
-        ...base, modality: item.modality, type: 'rent_due', id: `rent:${contract.id}:${item.date}`, date: item.date, period: item.period,
-        rentOccurrenceId: String(item.id).startsWith('virtual:') ? null : item.id,
-        amount: item.remainingAmount, expectedAmount: item.rentAmount, currencyCode: item.currencyCode,
-        status: item.date < today ? 'overdue' : item.status
-      }));
     if (contract.endDate && contract.endDate >= today && contract.endDate <= expiryEnd) {
       items.push({ ...base, type: 'contract_expiry', id: `expiry:${contract.id}`, date: contract.endDate, status: 'expiring', currencyCode: contract.currencyCode });
     }
@@ -389,6 +497,6 @@ module.exports = {
   rentAlerts,
   CONTRACT_TYPES, CONTRACT_STATES, PERIODICITIES, CONDITION_METHODS, validDate, hash,
   validateContract, conditionsFor, applyCondition, generateOccurrences, occurrenceView,
-  validateAllocations, collectionView, reverseCollection, intervalMonths,
+  validateAllocations, collectionView, reverseCollection, intervalMonths, classifyCollection, monthViews,
   CONTRACT_KINDS, MODALITIES, KIND_BY_MODALITY, modalityOf, grossMinor, decimalScaled, activeContractsFor, activeContractFor, hasOccurrences, afterContractWrite, cancelUnpaidOccurrences
 };

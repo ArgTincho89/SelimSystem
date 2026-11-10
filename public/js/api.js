@@ -263,6 +263,7 @@ const API = {
     alerts() { return API.get('/rentals/alerts'); },
     collections(contractId) { return API.get(`/rentals/collections/list${contractId ? `?contractId=${encodeURIComponent(contractId)}` : ''}`); },
     collect(data) { return API.post('/rentals/collections', data); },
+    months(assetId) { return API.get(`/rentals/months${assetId ? `?assetId=${encodeURIComponent(assetId)}` : ''}`); },
     reverseCollection(collectionId) { return API.post(`/rentals/collections/${encodeURIComponent(collectionId)}/reverse`, {}); },
     allocate(collectionId, data) { return API.post(`/rentals/collections/${encodeURIComponent(collectionId)}/allocations`, data); },
     declarations: {

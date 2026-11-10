@@ -29,7 +29,7 @@ describe('Evolutivo S6 UI contract', () => {
     expect(source).toContain('ObligationsPage.pay(');
     expect(source).toContain('ObligationsPage.showResolveModal(');
     expect(source).toContain('API.installments.postOccurrence(');
-    expect(source).toContain('AssetsPage.showRentCollectionModal(');
+    expect(source).toContain('AssetsPage.showRentMonthModal(');
     expect(source).toContain('API.documents.uploadTargets(');
     expect(source).toContain('API.getAlerts(');
   });
