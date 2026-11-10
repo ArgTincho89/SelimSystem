@@ -73,3 +73,8 @@ Notes:
 - Audit: new `account.create-sub` ROUTES entry, selected by `refineRoute` after a successful create -> "Creaste la subcuenta X de Y".
 - Tests: `tests/routes/accounts-subaccounts.test.js`, `tests/routes/payment-context-subaccounts.test.js`, `tests/services/account-balances-tree.test.js`, `tests/services/migrations-evolutivo3-accounts.test.js`, `tests/ui/evolutivo3-s6-contract.test.js`; e2e `features/ui/sub-accounts.feature` (create USD sub-account, income on it).
 - Deviations: transaction creation takes the account's currency, so there is no "currency mismatch 400" on create (existing behaviour); the spec scenario is covered by asserting `currencyCode` equals the sub-account currency. The Home filter select ("Todas las cuentas") is a flat filter built from transactions and was left unchanged.
+
+## S7 — Final verification (2026-11-10)
+
+- 7.1–7.3: full Jest 95 suites / 810 tests green, `npm run test:coverage` thresholds pass, E2E 82/82 scenarios green at 3b99061 (run by the S6 apply); `npx jest --listTests` count equals test file count (no OneDrive-hidden suites). `tests/routes/auth.test.js` showed an intermittent failure under load in S5 runs; passes alone and in the final runs.
+- 7.4: `public/sw.js` = `selimsystem-v38`; migrations run twice on a local data copy report `updated: 0` (idempotent; the copy holds no legacy records). User answers of 2026-11-10 implemented in S4c plus fix 7dd5a87 (locación defaults to A).
