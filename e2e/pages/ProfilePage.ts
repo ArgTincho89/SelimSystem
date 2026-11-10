@@ -68,6 +68,18 @@ export class ProfilePage extends BasePage {
     await this.page.waitForSelector('.modal-overlay', { state: 'hidden', timeout: 10000 });
   }
 
+  async openLogs(): Promise<void> {
+    await this.openAccountActions();
+    await this.page.click('#account-action-logs');
+    await expect(this.modal.locator('#activity-log-list')).toBeVisible();
+  }
+
+  async expectLogEntry(message: string): Promise<void> {
+    const entry = this.modal.locator('.activity-log-item').filter({ hasText: message }).first();
+    await expect(entry).toBeVisible();
+    await expect(entry).toContainText(/\d{2}\/\d{2}\/\d{4} \d{2}:\d{2}/);
+  }
+
   async changePassword(currentPassword: string, newPassword: string): Promise<void> {
     await this.openAccountActions();
     await this.page.click(this.selectors.changePasswordOption);

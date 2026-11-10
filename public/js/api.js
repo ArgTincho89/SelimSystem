@@ -249,6 +249,15 @@ const API = {
     listResolutions(filters = {}) { return API.get(`/obligations/resolutions?${new URLSearchParams(filters)}`); }
   },
 
+  activityLogs: {
+    list(params = {}) {
+      const query = new URLSearchParams();
+      if (params.limit) query.set('limit', params.limit);
+      if (params.before) query.set('before', params.before);
+      const serialized = query.toString();
+      return API.get(`/activity-logs${serialized ? `?${serialized}` : ''}`);
+    }
+  },
   rentals: {
     list(filters = {}) {
       const query = new URLSearchParams(Object.entries(filters).filter(([, value]) => value !== '' && value != null));

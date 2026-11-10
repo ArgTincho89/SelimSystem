@@ -79,6 +79,17 @@ function getToday() {
   return `${parts.year}-${parts.month}-${parts.day}`;
 }
 
+// "dd/mm/aaaa hh:mm" in the user's timezone (24 hours).
+function formatLogDateTime(iso) {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return '';
+  const parts = new Intl.DateTimeFormat('es-AR', {
+    timeZone: localStorage.getItem('pate_timezone') || Intl.DateTimeFormat().resolvedOptions().timeZone,
+    day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23'
+  }).formatToParts(date).reduce((result, part) => ({ ...result, [part.type]: part.value }), {});
+  return `${parts.day}/${parts.month}/${parts.year} ${parts.hour}:${parts.minute}`;
+}
+
 function addMonths(monthStr, delta) {
   const [year, month] = monthStr.split('-').map(Number);
   const date = new Date(year, month - 1 + delta);

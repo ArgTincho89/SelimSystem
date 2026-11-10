@@ -153,6 +153,14 @@ const ProfilePage = {
     on(changePwOption, 'click', () => this.showChangePasswordModal());
     actions.appendChild(changePwOption);
 
+    const logsOption = create('button', {
+      className: 'btn btn-ghost btn-full',
+      textContent: 'LOGS',
+      id: 'account-action-logs'
+    });
+    on(logsOption, 'click', () => this.showLogsModal());
+    actions.appendChild(logsOption);
+
     const deleteOption = create('button', {
       className: 'btn btn-danger btn-full',
       textContent: 'Eliminar mi cuenta',
@@ -169,6 +177,48 @@ const ProfilePage = {
     }));
 
     Modal.show('Acciones de cuenta', actions, { footer });
+  },
+
+  showLogsModal() {
+    const list = create('div', { id: 'activity-log-list', style: { display: 'flex', flexDirection: 'column', gap: '8px' } });
+    const moreBtn = create('button', { className: 'btn btn-ghost btn-full', textContent: 'Cargar más', id: 'activity-log-more' });
+    moreBtn.style.display = 'none';
+    let nextBefore = null;
+    let loaded = 0;
+
+    const load = async () => {
+      moreBtn.disabled = true;
+      try {
+        const page = await API.activityLogs.list({ limit: 50, before: nextBefore });
+        page.items.forEach(item => {
+          const failed = item.outcome === 'failure';
+          list.appendChild(create('div', { className: 'activity-log-item', style: { padding: '8px 0', borderBottom: '1px solid var(--border, #ddd)' } }, [
+            create('div', { textContent: formatLogDateTime(item.timestamp), style: { fontSize: 'var(--font-sm)', opacity: '0.7' } }),
+            create('div', { textContent: item.message }),
+            create('div', { textContent: failed ? 'No se completó' : 'Realizada', style: { fontSize: 'var(--font-sm)', color: failed ? 'var(--danger, #c0392b)' : 'inherit', opacity: failed ? '1' : '0.7' } })
+          ]));
+        });
+        loaded += page.items.length;
+        nextBefore = page.nextBefore;
+        moreBtn.style.display = nextBefore ? '' : 'none';
+        if (!loaded && !list.querySelector('.empty-state')) {
+          list.appendChild(create('p', { className: 'empty-state', textContent: 'Todavía no hay acciones registradas' }));
+        }
+      } catch (err) {
+        showToast(err.message, 'error');
+      } finally {
+        moreBtn.disabled = false;
+      }
+    };
+    on(moreBtn, 'click', load);
+
+    const body = create('div');
+    body.appendChild(list);
+    body.appendChild(moreBtn);
+    const footer = create('div', { style: { display: 'flex', gap: '8px' } });
+    footer.appendChild(create('button', { className: 'btn btn-ghost', textContent: 'Volver', onClick: () => this.showAccountActionsModal() }));
+    Modal.show('LOGS', body, { footer });
+    load();
   },
 
   showChangeEmailModal() {

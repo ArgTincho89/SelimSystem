@@ -12,6 +12,14 @@ Característica: Perfil y cuenta
     Entonces el email mostrado en el perfil es "nuevo_email_ui@example.com"
     Y no hay errores críticos en la consola
 
+  Escenario: Ver mis acciones en LOGS
+    Dado que existe un usuario autenticado en el navegador
+    Cuando abro la página de perfil
+    Y cambio el email a "logs_ui@example.com"
+    Y abro los LOGS de la cuenta
+    Entonces veo en los LOGS la acción "Cambiaste tu email" con día y hora
+    Y no hay errores críticos en la consola
+
   Escenario: Cambiar contraseña
     Dado que existe un usuario autenticado en el navegador
     Cuando abro la página de perfil

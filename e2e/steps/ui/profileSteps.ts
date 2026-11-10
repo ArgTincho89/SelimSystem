@@ -13,3 +13,13 @@ Then('el email mostrado en el perfil es {string}', async function (this: SelimSy
   const profilePage = new ProfilePage(this.page!);
   await expect.poll(async () => profilePage.getEmail()).toBe(email.toLowerCase());
 });
+
+When('abro los LOGS de la cuenta', async function (this: SelimSystemWorld) {
+  const profilePage = new ProfilePage(this.page!);
+  await profilePage.openLogs();
+});
+
+Then('veo en los LOGS la acción {string} con día y hora', async function (this: SelimSystemWorld, message: string) {
+  const profilePage = new ProfilePage(this.page!);
+  await profilePage.expectLogEntry(message);
+});

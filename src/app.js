@@ -27,6 +27,8 @@ const rentalRoutes = require('./routes/rentals');
 const financeRoutes = require('./routes/finance');
 const installmentRoutes = require('./routes/installments');
 const alertRoutes = require('./routes/alerts');
+const activityLogRoutes = require('./routes/activity-logs');
+const activityLogMiddleware = require('./middleware/activity-log');
 
 function createApp(options = {}) {
   const dataDir = options.dataDir || config.dataDir;
@@ -58,6 +60,7 @@ function createApp(options = {}) {
     }
   }));
 
+  app.use(activityLogMiddleware);
   app.use('/api/auth', authRoutes);
   app.use('/api/categories', categoryRoutes);
   app.use('/api/transactions', transactionRoutes);
@@ -75,6 +78,7 @@ function createApp(options = {}) {
   app.use('/api/finance', financeRoutes);
   app.use('/api/installments', installmentRoutes);
   app.use('/api/alerts', alertRoutes);
+  app.use('/api/activity-logs', activityLogRoutes);
 
   app.get('/health', (req, res) => res.status(200).json({ status: 'ok' }));
   app.get('/version.json', (req, res) => res.json({ version }));
