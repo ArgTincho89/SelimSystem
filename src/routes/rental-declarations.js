@@ -20,11 +20,15 @@ router.get('/', (req, res) => {
   res.json(rows);
 });
 
+function failed(res, result) {
+  return res.status(result.status).json({ error: result.error, ...(result.conflict ? { conflict: result.conflict } : {}) });
+}
+
 router.post('/', (req, res) => {
   const db = req.app.locals.db;
   const userId = req.session.userId;
   const result = declarations.create(db, userId, req.body);
-  if (result.error) return res.status(result.status).json({ error: result.error });
+  if (result.error) return failed(res, result);
   respond(res, db, userId, result.value, 201);
 });
 
@@ -34,7 +38,7 @@ router.put('/:id', (req, res) => {
   const declaration = db.findById('rentalDeclarations', req.params.id, userId);
   if (!declaration) return res.status(404).json({ error: 'Declaración de alquiler no encontrada' });
   const result = declarations.update(db, userId, declaration, req.body);
-  if (result.error) return res.status(result.status).json({ error: result.error });
+  if (result.error) return failed(res, result);
   respond(res, db, userId, result.value);
 });
 
@@ -43,8 +47,8 @@ router.post('/:id/end', (req, res) => {
   const userId = req.session.userId;
   const declaration = db.findById('rentalDeclarations', req.params.id, userId);
   if (!declaration) return res.status(404).json({ error: 'Declaración de alquiler no encontrada' });
-  const result = declarations.end(db, userId, declaration);
-  if (result.error) return res.status(result.status).json({ error: result.error });
+  const result = declarations.end(db, userId, declaration, req.body || {});
+  if (result.error) return failed(res, result);
   respond(res, db, userId, result.value);
 });
 

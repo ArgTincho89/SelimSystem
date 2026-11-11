@@ -10,9 +10,9 @@ Given('que no existe un usuario de prueba', async function (this: SelimSystemWor
   this.user = buildTestUser('ui');
 });
 
-Then('la experiencia móvil está seleccionada por defecto', async function (this: SelimSystemWorld) {
-  await expect(this.page!.locator('[data-experience="mobile"]')).toHaveAttribute('aria-pressed', 'true');
-  await expect(this.page!.locator('[data-experience="desktop"]')).toHaveAttribute('aria-pressed', 'false');
+Then('la experiencia de escritorio está seleccionada por defecto', async function (this: SelimSystemWorld) {
+  await expect(this.page!.locator('[data-experience="desktop"]')).toHaveAttribute('aria-pressed', 'true');
+  await expect(this.page!.locator('[data-experience="mobile"]')).toHaveAttribute('aria-pressed', 'false');
 });
 
 When('selecciono la experiencia de escritorio', async function (this: SelimSystemWorld) {

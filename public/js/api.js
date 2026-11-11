@@ -11,7 +11,8 @@ const API = {
     const data = await res.json();
 
     if (!res.ok) {
-      throw new Error(data.error || 'Error de servidor');
+      // `status` and `data` let callers react to structured errors (e.g. a rental overlap conflict).
+      throw Object.assign(new Error(data.error || 'Error de servidor'), { status: res.status, data });
     }
     return data;
   },
@@ -238,6 +239,7 @@ const API = {
     update(id, data) { return API.put(`/obligations/${encodeURIComponent(id)}`, data); },
     delete(id) { return API.delete(`/obligations/${encodeURIComponent(id)}`); },
     setResponsibility(id, responsibilityType) { return API.patch(`/obligations/${encodeURIComponent(id)}/responsibility`, { responsibilityType }); },
+    releasePending(token) { return API.post('/obligations/pending-links/release', { token }); },
     alerts() { return API.get('/obligations/alerts'); },
     confirm(id, occurrenceId) { return API.post(`/obligations/${encodeURIComponent(id)}/occurrences/${encodeURIComponent(occurrenceId)}/confirm`, {}); },
     cancelOccurrence(id, occurrenceId) { return API.post(`/obligations/${encodeURIComponent(id)}/occurrences/${encodeURIComponent(occurrenceId)}/cancel`, {}); },
@@ -254,6 +256,9 @@ const API = {
       const query = new URLSearchParams();
       if (params.limit) query.set('limit', params.limit);
       if (params.before) query.set('before', params.before);
+      if (params.from) query.set('from', params.from);
+      if (params.to) query.set('to', params.to);
+      if (params.timezone) query.set('timezone', params.timezone);
       const serialized = query.toString();
       return API.get(`/activity-logs${serialized ? `?${serialized}` : ''}`);
     }
@@ -273,13 +278,16 @@ const API = {
     collections(contractId) { return API.get(`/rentals/collections/list${contractId ? `?contractId=${encodeURIComponent(contractId)}` : ''}`); },
     collect(data) { return API.post('/rentals/collections', data); },
     months(assetId) { return API.get(`/rentals/months${assetId ? `?assetId=${encodeURIComponent(assetId)}` : ''}`); },
+    schedule(assetId) { return API.get(`/rentals/schedule?assetId=${encodeURIComponent(assetId)}`); },
+    collectMonth(data) { return API.post('/rentals/collections/month', data); },
+    collectionView(id) { return API.get(`/rentals/collections/${encodeURIComponent(id)}/view`); },
     reverseCollection(collectionId) { return API.post(`/rentals/collections/${encodeURIComponent(collectionId)}/reverse`, {}); },
     allocate(collectionId, data) { return API.post(`/rentals/collections/${encodeURIComponent(collectionId)}/allocations`, data); },
     declarations: {
       list(assetId) { return API.get(`/rentals/declarations${assetId ? `?assetId=${encodeURIComponent(assetId)}` : ''}`); },
       create(data) { return API.post('/rentals/declarations', data); },
       update(id, data) { return API.put(`/rentals/declarations/${encodeURIComponent(id)}`, data); },
-      end(id) { return API.post(`/rentals/declarations/${encodeURIComponent(id)}/end`, {}); }
+      end(id, data = {}) { return API.post(`/rentals/declarations/${encodeURIComponent(id)}/end`, data); }
     }
   }
 };

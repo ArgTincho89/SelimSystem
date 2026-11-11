@@ -150,6 +150,8 @@ const AssetsPage = {
   },
 
   // "Obligaciones del bien": list, per-obligation responsibility and shortcut. Rent is declared separately.
+  // `options.onNewObligation` replaces the navigation to Obligaciones (stacked "Nueva obligación" from the
+  // rental declaration); `add()` lists an obligation created there with its responsibility selector.
   renderObligations(slot, asset, options = {}) {
     slot.replaceChildren();
     const items = asset?.obligations || [];
@@ -159,6 +161,7 @@ const AssetsPage = {
     if (!asset?.id) section.appendChild(create('small', { className: 'text-muted', textContent: 'Guardá el bien para asignarle obligaciones.' }));
     else if (!items.length) section.appendChild(create('small', { className: 'text-muted', textContent: 'Este bien todavía no tiene obligaciones asignadas.' }));
     const selectors = new Map();
+    const created = create('div', { dataset: { createdObligations: 'true' } });
     items.forEach(item => {
       const row = create('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', flexWrap: 'wrap', margin: '4px 0' } }, [create('span', { textContent: this.obligationLine(item) })]);
       if (['owner', 'tenant'].includes(item.responsibilityType)) {
@@ -169,11 +172,24 @@ const AssetsPage = {
       } else row.appendChild(create('small', { className: 'text-muted', textContent: 'A cargo de: compartida (solo lectura)' }));
       section.appendChild(row);
     });
+    section.appendChild(created);
     section.appendChild(create('button', { className: 'btn btn-ghost btn-sm', type: 'button', textContent: 'Nueva obligación', disabled: !asset?.id,
-      onClick: () => { Modal.hide(); Router.navigate(`/obligations?newForAsset=${encodeURIComponent(asset.id)}`); } }));
+      onClick: () => {
+        if (options.onNewObligation) return options.onNewObligation();
+        Modal.hide(); Router.navigate(`/obligations?newForAsset=${encodeURIComponent(asset.id)}`);
+      } }));
     slot.appendChild(section);
     return {
-      collect: () => ({ obligationResponsibilities: [...selectors].map(([obligationId, selector]) => ({ obligationId, responsibilityType: selector.value })) })
+      collect: () => ({ obligationResponsibilities: [...selectors].map(([obligationId, selector]) => ({ obligationId, responsibilityType: selector.value })) }),
+      add: (obligation, responsibilityType) => {
+        const selector = this.select([['owner', 'Titular'], ['tenant', 'Inquilino']], responsibilityType === 'tenant' ? 'tenant' : 'owner');
+        selector.setAttribute('aria-label', 'A cargo de');
+        selectors.set(obligation.id, selector);
+        created.appendChild(create('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', flexWrap: 'wrap', margin: '4px 0' }, dataset: { createdObligation: obligation.id } }, [
+          create('span', { textContent: `Nueva: ${this.obligationLine(obligation)}` }),
+          create('label', {}, [create('span', { textContent: 'A cargo de: ' }), selector])
+        ]));
+      }
     };
   },
 
@@ -431,14 +447,15 @@ const AssetsPage = {
             const available = accounts.filter(account => account.activo && account.currency === claim.currencyCode);
             if (!available.length) return showToast('No hay una cuenta activa en la moneda del reclamo', 'error');
             const form = create('div', { style: { display: 'grid', gap: '8px' } });
-            const amount = create('input', { className: 'form-control', type: 'number', min: '0.01', step: ['JPY', 'KRW', 'CLP', 'PYG'].includes(claim.currencyCode) ? '1' : '0.01', value: claim.outstandingAmount });
+            const amount = MoneyInput.create({ currency: claim.currencyCode, value: claim.outstandingAmount, required: true, ariaLabel: 'Importe recibido' });
             const account = this.select(accountTreeOptions(available).map(({ account: item, label }) => [item.id, label]));
             form.append(create('label', {}, [create('span', { textContent: `Importe recibido (pendiente: ${claim.outstandingAmount} ${claim.currencyCode})` }), amount]));
             form.append(create('label', {}, [create('span', { textContent: 'Cuenta de ingreso' }), account]));
             Modal.show('Registrar reintegro', form, { footer: create('div', {}, [create('button', { className: 'btn btn-primary', type: 'button', textContent: 'Guardar ingreso', onClick: async () => {
+              if (!MoneyInput.validate(amount)) return;
               try {
                 await API.finance.collectClaim(claim.id, {
-                  amount: Number(amount.value), accountId: account.value,
+                  amount: MoneyInput.value(amount) ?? NaN, accountId: account.value,
                   idempotencyKey: globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}-recovery`
                 });
                 Modal.hide();
@@ -462,12 +479,12 @@ const AssetsPage = {
         const expense = this.select([['', 'Seleccionar gasto'], ...expenses.map(item => [item.id, `${item.titulo} · ${item.fecha} · ${item.monto} ${item.currencyCode || 'EUR'}`])]);
         const contract = this.select([['', 'Sin contrato'], ...contracts.map(item => [item.id, `${item.startDate} · ${item.tenants.map(tenant => tenant.name).join(', ')}`])]);
         const tenant = this.select([['', 'Sin inquilino'], ...tenants.map(item => [item.id, item.name])]);
-        const amount = create('input', { className: 'form-control', type: 'number', min: '0.01', step: '0.01', placeholder: 'Importe recuperable' });
+        const amount = MoneyInput.create({ currency: 'ARS', required: true, ariaLabel: 'Importe recuperable' });
         const selectedExpense = () => expenses.find(item => item.id === expense.value);
         expense.addEventListener('change', () => {
           const selected = selectedExpense();
-          amount.value = selected?.monto || '';
-          amount.step = ['JPY', 'KRW', 'CLP', 'PYG'].includes(selected?.currencyCode) ? '1' : '0.01';
+          MoneyInput.setCurrency(amount, selected?.currencyCode || 'ARS');
+          MoneyInput.setValue(amount, selected?.monto ?? null);
         });
         form.append(create('label', {}, [create('span', { textContent: 'Gasto de origen' }), expense]));
         form.append(create('label', {}, [create('span', { textContent: 'Contrato de alquiler (opcional)' }), contract]));
@@ -475,8 +492,9 @@ const AssetsPage = {
         form.append(create('label', {}, [create('span', { textContent: 'Importe recuperable' }), amount]));
         Modal.show('Registrar gasto recuperable', form, { footer: create('div', {}, [
           create('button', { className: 'btn btn-primary', type: 'button', textContent: 'Guardar reclamo', onClick: async () => {
+            if (!MoneyInput.validate(amount)) return;
             try {
-              await API.finance.createClaim({ transactionId: expense.value, assetId: asset.id, contractId: contract.value || null, tenantEntityId: tenant.value || null, amount: Number(amount.value) });
+              await API.finance.createClaim({ transactionId: expense.value, assetId: asset.id, contractId: contract.value || null, tenantEntityId: tenant.value || null, amount: MoneyInput.value(amount) ?? NaN });
               Modal.hide();
               await this.showDetails(asset.id);
             } catch (error) { showToast(error.message, 'error'); }
@@ -566,7 +584,8 @@ const AssetsPage = {
     line('Inquilino actual', contract ? `${contract.tenantNames.join(', ') || 'Sin inquilino'} · contrato hasta ${contract.endDate || 'sin fecha de fin'}` : 'Sin contrato vigente');
     line('Alquiler cobrado este mes', totals(file.rentCollectedThisMonthMinorByCurrency));
     line('Costo de mantenimiento (últimos 12 meses)', totals(file.costLast12MonthsMinorByCurrency));
-    list('Próximos vencimientos', file.upcoming, item => `${item.date} · ${item.title}`);
+    // Immovables show "Próximos vencimientos" by collection period in their rentals section.
+    if (asset.type !== 'immovable') list('Próximos vencimientos', file.upcoming, item => `${item.date} · ${item.title}`);
     list('Pendientes', file.pending, item => `${item.dueDate} · ${item.title}${item.type === 'document_pending' ? ' (falta comprobante)' : item.type === 'tenant_obligation_pending' ? ' (comprobante del inquilino pendiente)' : ''}`);
     list('Obligaciones', file.obligations, item => `${item.title} · ${responsibility[item.responsibilityType] || item.responsibilityType}${item.responsibleParty?.name ? ` (${item.responsibleParty.name})` : ''} · ${item.nextDueDate ? `próximo ${item.nextDueDate}` : 'sin próximo vencimiento'}${item.settledBy ? ` · ${settled[item.settledBy]}` : ''}${resolution[item.resolutionStatus] || ''}`);
     const documents = create('div', { style: { display: 'grid', gap: '4px' } }, [create('strong', { textContent: 'Documentos', style: { display: 'block', marginTop: '8px' } })]);
@@ -665,7 +684,69 @@ const AssetsPage = {
     container.appendChild(pending);
   },
 
+  // Current collection period (same rule as the server's rent schedule): from day 01 to 10 it is the
+  // current month; from day 11 on, the next month. Returns its last day (YYYY-MM-DD).
+  currentPeriodEnd(today = getToday()) {
+    const [year, month, day] = today.split('-').map(Number);
+    const period = day <= 10 ? new Date(Date.UTC(year, month - 1, 1)) : new Date(Date.UTC(year, month, 1));
+    return new Date(Date.UTC(period.getUTCFullYear(), period.getUTCMonth() + 1, 0)).toISOString().slice(0, 10);
+  },
+
+  // Months shown in "Contratos y alquileres": collected ones and those up to the current period (never
+  // the future installments of the whole contract).
+  visibleRentMonths(months) {
+    const periodEnd = this.currentPeriodEnd();
+    return months.filter(month => month.date <= periodEnd || month.parts.some(part => part.paidMinor > 0));
+  },
+
+  // "Próximos vencimientos" (rent and obligations of the current period) and "Pagos atrasados"
+  // (previous months still unpaid, in red), each with its "Cobrar mes" / "Pagar" action.
+  async renderSchedule(asset, container) {
+    const section = create('section', { style: { borderTop: '1px solid var(--border-color)', marginTop: '16px', paddingTop: '12px' }, dataset: { rentSchedule: asset.id } });
+    container.appendChild(section);
+    let schedule;
+    try { schedule = await API.rentals.schedule(asset.id); } catch (error) {
+      section.appendChild(create('small', { textContent: `No se pudieron cargar los vencimientos: ${error.message}` }));
+      return;
+    }
+    const upcoming = create('div', { style: { display: 'grid', gap: '6px' }, dataset: { scheduleUpcoming: 'true' } }, [
+      create('h4', { textContent: 'Próximos vencimientos' }),
+      create('small', { className: 'text-muted', textContent: `Período ${formatMonthLabel(schedule.period)} (del día 01 al 10 se muestra el mes en curso; desde el 11, el mes siguiente).` })
+    ]);
+    if (!schedule.upcoming.length) upcoming.appendChild(create('small', { textContent: 'No hay vencimientos pendientes en este período.' }));
+    schedule.upcoming.forEach(item => upcoming.appendChild(this.scheduleRow(asset, item, false)));
+    const overdue = create('div', { style: { display: 'grid', gap: '6px', marginTop: '12px' }, dataset: { scheduleOverdue: 'true' } }, [
+      create('h4', { textContent: 'Pagos atrasados', style: { color: 'var(--danger)' } })
+    ]);
+    if (!schedule.overdue.length) overdue.appendChild(create('small', { textContent: 'No hay pagos atrasados.' }));
+    schedule.overdue.forEach(item => overdue.appendChild(this.scheduleRow(asset, item, true)));
+    section.append(upcoming, overdue);
+  },
+
+  scheduleRow(asset, item, late) {
+    const text = item.kind === 'rent'
+      ? `${item.date} · Alquiler ${formatMonthLabel(item.period)} · ${item.parts.map(part => `${modalityLabel(part.modality) || 'Alquiler'} ${formatearMonedaConCodigo(part.remainingAmount, part.currencyCode)}`).join(' + ')}`
+      : `${item.date} · ${item.title} · ${formatearMonedaConCodigo(item.amount, item.currencyCode)}`;
+    const label = late
+      ? create('strong', { textContent: text, style: { color: 'var(--danger)', fontWeight: '700' } })
+      : create('span', { textContent: text });
+    const action = item.kind === 'rent'
+      ? create('button', { className: 'btn btn-secondary btn-sm', type: 'button', textContent: 'Cobrar mes', onClick: () => this.showRentMonthModal(asset.id, item.monthKey, () => this.showDetails(asset.id)) })
+      : create('button', { className: 'btn btn-secondary btn-sm', type: 'button', textContent: 'Pagar', onClick: () => this.payScheduledObligation(asset, item) });
+    return create('div', { className: 'card', style: { padding: '8px', display: 'flex', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }, dataset: { scheduleItem: item.id, late: String(late) } }, [label, action]);
+  },
+
+  // Same "Registrar pago" dialog as Obligaciones; returns to this property afterwards.
+  async payScheduledObligation(asset, item) {
+    try {
+      await ObligationsPage.loadLookups();
+      ObligationsPage.onChange = () => this.showDetails(asset.id);
+      await ObligationsPage.pay({ id: item.obligationId, categoryId: null }, { id: item.occurrenceId, remainingAmount: item.amount, actualDueAmount: item.amount, currencyCode: item.currencyCode });
+    } catch (error) { showToast(error.message, 'error'); }
+  },
+
   async renderRentals(asset, container) {
+    await this.renderSchedule(asset, container);
     const section = create('section', { style: { borderTop: '1px solid var(--border-color)', marginTop: '16px', paddingTop: '12px' } });
     section.appendChild(create('h4', { textContent: 'Contratos y alquileres' }));
     const contractList = create('div', { style: { display: 'grid', gap: '8px', marginTop: '8px' } });
@@ -674,12 +755,13 @@ const AssetsPage = {
     const active = asset.declaration && asset.declaration.status !== 'ended';
     const declarationActions = create('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '8px' } }, [
       create('button', { className: 'btn btn-primary btn-sm', type: 'button', textContent: active ? 'Editar alquiler' : 'Declarar alquiler', dataset: { declareRental: asset.id }, onClick: () => RentalDeclarationModal.show(this, asset) }),
+      active ? create('button', { className: 'btn btn-secondary btn-sm', type: 'button', textContent: 'Declarar nuevo alquiler', dataset: { declareNewRental: asset.id }, onClick: () => RentalDeclarationModal.show(this, asset, { newDeclaration: true }) }) : null,
       active ? create('button', { className: 'btn btn-ghost btn-sm', type: 'button', textContent: 'Finalizar alquiler', onClick: () => this.endDeclaration(asset) }) : null
     ].filter(Boolean));
     const monthList = create('div', { style: { display: 'grid', gap: '6px', marginTop: '8px' }, dataset: { rentMonths: asset.id } });
     section.append(create('h5', { textContent: 'Meses de alquiler', style: { margin: '8px 0 0' } }), monthList, filter, contractList, declarationActions);
     container.appendChild(section);
-    API.rentals.months(asset.id).then(months => this.renderRentMonths(asset, monthList, months)).catch(error => monthList.appendChild(create('small', { textContent: `No se pudieron cargar los meses: ${error.message}` })));
+    API.rentals.months(asset.id).then(months => this.renderRentMonths(asset, monthList, this.visibleRentMonths(months))).catch(error => monthList.appendChild(create('small', { textContent: `No se pudieron cargar los meses: ${error.message}` })));
     let contracts = [];
     try {
       contracts = await API.rentals.list({ assetId: asset.id });
@@ -687,6 +769,7 @@ const AssetsPage = {
       contractList.appendChild(create('p', { textContent: `No se pudieron cargar los contratos: ${error.message}` }));
       return;
     }
+    const periodEnd = this.currentPeriodEnd();
     const renderList = () => {
       contractList.replaceChildren();
       if (!contracts.length) {
@@ -716,19 +799,29 @@ const AssetsPage = {
         );
         card.appendChild(operations);
         const occurrenceList = create('div', { style: { display: 'grid', gap: '4px', marginTop: '8px' } });
-        const occurrences = contract.occurrences.filter(item => !filter.value || item.status === filter.value);
+        // Future installments of the whole contract are not listed: only collected ones and those up to the current period.
+        const occurrences = contract.occurrences.filter(item => (!filter.value || item.status === filter.value) && (item.date <= periodEnd || item.paidMinor > 0));
         if (!occurrences.length) occurrenceList.appendChild(create('small', { textContent: 'No hay períodos para este filtro.' }));
-        occurrences.forEach(item => occurrenceList.appendChild(create('div', { className: 'card', style: { padding: '8px', display: 'flex', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap' } }, [
-          create('span', { textContent: `${item.date} · ${modalityLabel(item.modality) ? `${modalityLabel(item.modality)} · ` : ''}${item.rentAmount} ${item.currencyCode} · ${this.rentStatusLabel(item.status)} · Pagado ${item.paidAmount}, pendiente ${item.remainingAmount}` }),
-          create('span', { style: { display: 'flex', gap: '6px' } }, [
-            item.remainingMinor > 0 && item.status !== 'cancelled' ? create('button', { className: 'btn btn-ghost btn-sm', type: 'button', textContent: 'Cobrar período', onClick: () => this.showRentCollectionModal(asset, contract, item.id) }) : null,
-            this.undoCollections([...new Set((item.allocations || []).map(entry => entry.collectionId).filter(Boolean))], () => this.showDetails(asset.id), 'El período vuelve a quedar pendiente de cobro.'),
-            item.paidMinor === 0 && item.status !== 'cancelled' ? create('button', { className: 'btn btn-ghost btn-sm', type: 'button', textContent: 'Cancelar período', onClick: async () => {
-              try { await API.rentals.cancelOccurrence(contract.id, item.id); await this.showDetails(asset.id); }
-              catch (error) { showToast(error.message, 'error'); }
-            } }) : null
-          ].filter(Boolean))
-        ])));
+        occurrences.forEach(item => {
+          const collected = item.status === 'collected';
+          const label = collected
+            ? create('span', { style: { display: 'flex', gap: '8px', alignItems: 'baseline' } }, [
+              create('span', { dataset: { rentDate: '' }, textContent: '' }),
+              this.collectedText(`${modalityLabel(item.modality) ? `${modalityLabel(item.modality)} ` : ''}${formatearMonedaConCodigo(item.paidAmount, item.currencyCode)}`)
+            ])
+            : create('span', { textContent: `${item.date} · ${modalityLabel(item.modality) ? `${modalityLabel(item.modality)} · ` : ''}${item.rentAmount} ${item.currencyCode} · ${this.rentStatusLabel(item.status)} · Pagado ${item.paidAmount}, pendiente ${item.remainingAmount}` });
+          occurrenceList.appendChild(create('div', { className: 'card', style: { padding: '8px', display: 'flex', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap' }, dataset: { rentOccurrence: item.id }, title: collected ? `Período ${item.period}` : '' }, [
+            label,
+            create('span', { style: { display: 'flex', gap: '6px' } }, [
+              item.remainingMinor > 0 && item.status !== 'cancelled' ? create('button', { className: 'btn btn-ghost btn-sm', type: 'button', textContent: 'Cobrar período', onClick: () => this.showRentCollectionModal(asset, contract, item.id) }) : null,
+              this.undoCollections([...new Set((item.allocations || []).map(entry => entry.collectionId).filter(Boolean))], () => this.showDetails(asset.id), 'El período vuelve a quedar pendiente de cobro.'),
+              item.paidMinor === 0 && item.status !== 'cancelled' ? create('button', { className: 'btn btn-ghost btn-sm', type: 'button', textContent: 'Cancelar período', onClick: async () => {
+                try { await API.rentals.cancelOccurrence(contract.id, item.id); await this.showDetails(asset.id); }
+                catch (error) { showToast(error.message, 'error'); }
+              } }) : null
+            ].filter(Boolean))
+          ]));
+        });
         card.appendChild(occurrenceList);
         const collectionHistory = create('details', { style: { marginTop: '8px' } }, [create('summary', { textContent: 'Cobros y saldos no aplicados' })]);
         const balances = create('div', { style: { display: 'grid', gap: '4px', marginTop: '6px' } });
@@ -736,7 +829,10 @@ const AssetsPage = {
           if (!rows.length) balances.appendChild(create('small', { textContent: 'Todavía no hay cobros.' }));
           rows.forEach(row => balances.appendChild(create('div', { className: 'card', style: { padding: '8px', display: 'flex', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap', alignItems: 'center' } }, [
             create('span', { textContent: `${row.date} · aplicado a este contrato ${row.contractAllocatedAmount} ${row.currencyCode} · saldo global sin aplicar ${row.unappliedAmount} · ${row.method || 'medio no indicado'}` }),
-            this.undoCollections([row.id], () => this.showDetails(asset.id), 'Los períodos de este cobro vuelven a quedar pendientes de cobro.')
+            create('span', { style: { display: 'flex', gap: '6px', flexWrap: 'wrap' } }, [
+              create('button', { className: 'btn btn-ghost btn-sm', type: 'button', textContent: 'Ver', onClick: () => this.showCollectionView(row.id, { stacked: true }) }),
+              this.undoCollections([row.id], () => this.showDetails(asset.id), 'Los períodos de este cobro vuelven a quedar pendientes de cobro.')
+            ])
           ])));
         }).catch(error => balances.appendChild(create('small', { textContent: `No se pudieron cargar los cobros: ${error.message}` })));
         collectionHistory.appendChild(balances);
@@ -761,31 +857,56 @@ const AssetsPage = {
     renderList();
   },
 
-  // "Finalizar alquiler": confirmation, then ends every modality of the declaration.
-  endDeclaration(asset) {
-    Modal.show('Finalizar alquiler', create('p', { textContent: 'Se finalizan todas las modalidades y se cancelan los períodos futuros sin cobrar. Los cobros registrados se conservan.' }), {
-      footer: create('div', {}, [
-        create('button', { className: 'btn btn-ghost', type: 'button', textContent: 'Volver', onClick: () => this.showDetails(asset.id) }),
-        create('button', { className: 'btn btn-danger', type: 'button', textContent: 'Confirmar y finalizar', onClick: async () => {
-          try { await API.rentals.declarations.end(asset.declaration.id); showToast('Alquiler finalizado'); await this.showDetails(asset.id); }
-          catch (error) { showToast(error.message, 'error'); }
-        } })
-      ])
-    });
+  // "Cobrado" followed by the amount, both in green bold (collected months and periods).
+  collectedText(amountText) {
+    return create('strong', { dataset: { collectedAmount: 'true' }, style: { color: 'var(--income-color)', fontWeight: '700' }, textContent: `Cobrado ${amountText}` });
   },
 
-  // "Deshacer cobro" with inline confirmation: undoes every given collection (same effect as deleting its transaction).
+  // "Finalizar alquiler": confirmation with the termination date. Today by default; an earlier date (or a
+  // future one) declares an early termination and frees the following dates for a new rental.
+  // `options.stacked` opens it on top of the current dialog (e.g. from the declaration overlap error).
+  endDeclaration(asset, options = {}) {
+    const declarationId = options.declarationId || asset.declaration.id;
+    const body = create('div', { style: { display: 'grid', gap: '8px' } });
+    body.appendChild(create('p', { textContent: 'Se finalizan todas las modalidades y se cancelan los períodos sin cobrar posteriores a la fecha de finalización. Los cobros registrados se conservan.' }));
+    const endDate = create('input', { className: 'form-control', type: 'date', value: getToday(), 'aria-label': 'Fecha de finalización' });
+    body.appendChild(create('label', { className: 'form-group', style: { display: 'grid', gap: '4px' } }, [create('span', { textContent: 'Fecha de finalización' }), endDate]));
+    body.appendChild(create('small', { className: 'text-muted', textContent: 'Podés declarar una finalización anticipada: las fechas posteriores quedan libres para declarar un nuevo alquiler.' }));
+    const back = () => (options.stacked ? Modal.hide() : this.showDetails(asset.id));
+    const footer = create('div', {}, [
+      create('button', { className: 'btn btn-ghost', type: 'button', textContent: 'Volver', onClick: back }),
+      create('button', { className: 'btn btn-danger', type: 'button', textContent: 'Confirmar y finalizar', onClick: async () => {
+        try {
+          await API.rentals.declarations.end(declarationId, { endDate: endDate.value || null });
+          showToast('Alquiler finalizado');
+          if (options.stacked) { Modal.hide(); if (options.onDone) await options.onDone(); }
+          else await this.showDetails(asset.id);
+        } catch (error) { showToast(error.message, 'error'); }
+      } })
+    ]);
+    (options.stacked ? Modal.push : Modal.show).call(Modal, 'Finalizar alquiler', body, { footer });
+  },
+
+  // "Deshacer cobro" with inline confirmation: undoes every given collection (same effect as deleting its
+  // transaction). A month collected by modality is one group: undoing any part undoes all of it.
+  // The button is outlined in red to stand out.
   undoCollections(collectionIds, afterDone, note) {
     if (!collectionIds.length) return null;
     const wrapper = create('span', { style: { display: 'inline-flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' } });
-    const start = create('button', { className: 'btn btn-ghost btn-sm', type: 'button', textContent: 'Deshacer cobro' });
+    const start = create('button', { className: 'btn btn-sm', type: 'button', textContent: 'Deshacer cobro', dataset: { undoCollection: 'true' }, style: { border: '1px solid var(--danger)', color: 'var(--danger)', background: 'transparent' } });
     start.addEventListener('click', () => {
       wrapper.replaceChildren(
         create('small', { textContent: note }),
         create('button', { className: 'btn btn-danger btn-sm', type: 'button', textContent: 'Confirmar y deshacer', onClick: async () => {
           try {
             let reset = false;
-            for (const collectionId of collectionIds) reset = Boolean((await API.rentals.reverseCollection(collectionId)).reconciliationReset) || reset;
+            const done = new Set();
+            for (const collectionId of collectionIds) {
+              if (done.has(collectionId)) continue;
+              const result = await API.rentals.reverseCollection(collectionId);
+              reset = Boolean(result.reconciliationReset) || reset;
+              [collectionId, ...(result.collectionIds || [])].forEach(id => done.add(id));
+            }
             showToast(reset ? 'Cobro deshecho. La conciliación de la cuenta quedó pendiente de revisar' : 'Cobro deshecho');
             await afterDone();
           } catch (error) { showToast(error.message, 'error'); }
@@ -797,20 +918,53 @@ const AssetsPage = {
     return wrapper;
   },
 
-  // Month rows: one per declaration month with its status and the per-modality lines collapsed.
+  // Month rows: one per declaration month with its status and the per-modality lines collapsed. A collected
+  // month leaves the date blank and shows "Cobrado" and the amount in green bold.
   renderRentMonths(asset, container, months) {
     container.replaceChildren();
     if (!months.length) return container.appendChild(create('small', { textContent: 'Todavía no hay meses de alquiler.' }));
     months.forEach(month => {
-      const totals = month.totals.map(row => `${row.rentAmount} ${row.currencyCode}`).join(' + ');
-      const parts = create('details', {}, [create('summary', { textContent: `${month.date} · ${statusLabel(month.status)} · ${totals}` })]);
-      month.parts.forEach(part => parts.appendChild(create('small', { style: { display: 'block' }, textContent: `${modalityLabel(part.modality) || 'Alquiler'} · ${part.rentAmount} ${part.currencyCode} · ${statusLabel(part.status)} · Pagado ${part.paidAmount}, pendiente ${part.remainingAmount}` })));
+      const collected = month.status === 'collected';
+      const totals = month.totals.map(row => (collected ? formatearMonedaConCodigo(row.paidAmount, row.currencyCode) : `${row.rentAmount} ${row.currencyCode}`)).join(' + ');
+      const summary = collected
+        ? create('summary', { title: `Mes ${month.date}` }, [create('span', { dataset: { rentDate: '' }, textContent: '' }), this.collectedText(totals)])
+        : create('summary', { textContent: `${month.date} · ${statusLabel(month.status)} · ${totals}` });
+      const parts = create('details', {}, [summary]);
+      month.parts.forEach(part => parts.appendChild(create('small', { style: { display: 'block' }, textContent: `${modalityLabel(part.modality) || 'Alquiler'} · período ${month.period} · ${part.rentAmount} ${part.currencyCode} · ${statusLabel(part.status)} · Pagado ${part.paidAmount}, pendiente ${part.remainingAmount}` })));
       const actions = create('span', { style: { display: 'flex', gap: '6px', flexWrap: 'wrap' } }, [
         month.parts.some(part => part.remainingMinor > 0) ? create('button', { className: 'btn btn-ghost btn-sm', type: 'button', textContent: 'Cobrar mes', onClick: () => this.showRentMonthModal(asset.id, month.key, () => this.showDetails(asset.id)) }) : null,
         this.undoCollections(month.collectionIds, () => this.showDetails(asset.id), 'Se deshacen los cobros de este mes y vuelve a quedar pendiente de cobro.')
       ].filter(Boolean));
-      container.appendChild(create('div', { className: 'card', style: { padding: '8px', display: 'flex', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap' }, dataset: { rentMonth: month.key } }, [parts, actions]));
+      container.appendChild(create('div', { className: 'card', style: { padding: '8px', display: 'flex', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap' }, dataset: { rentMonth: month.key, collected: String(collected) } }, [parts, actions]));
     });
+  },
+
+  // "Ver" a rent collection (read-only): per modality payment date, amount, IVA (locación), payment
+  // method and destination account, plus totals and the rental/property/period. Legacy collections too.
+  async showCollectionView(id, options = {}) {
+    let detail;
+    try { detail = await API.rentals.collectionView(id); } catch (error) { showToast(error.message, 'error'); return; }
+    const money = (amount, currency) => formatearMonedaConCodigo(amount, currency);
+    const body = create('div', { style: { display: 'grid', gap: '8px', maxHeight: '65vh', overflowY: 'auto' }, dataset: { collectionView: detail.id } });
+    [['Inmueble', detail.asset?.name], ['Inquilino', detail.tenants.join(', ')], ['Período', detail.periods.map(formatMonthLabel).join(', ')]]
+      .forEach(([label, value]) => { if (value) body.appendChild(create('p', { style: { margin: '2px 0' }, textContent: `${label}: ${value}` })); });
+    if (detail.reversed) body.appendChild(create('p', { className: 'text-danger', textContent: 'Este cobro fue deshecho.' }));
+    detail.lines.forEach(line => {
+      const card = create('section', { className: 'card', style: { padding: '8px' }, dataset: { collectionLine: line.modality || 'sin-asignar' } });
+      card.appendChild(create('strong', { textContent: line.unapplied ? 'Sin asignar a un período' : (modalityLabel(line.modality) || 'Alquiler') }));
+      [
+        ['Fecha de cobro', line.date],
+        ['Importe', money(line.amount, line.currencyCode)],
+        ...(line.ivaAmount ? [['IVA', `${money(line.ivaAmount, line.currencyCode)} (${line.ivaPercent}% incluido)`], ['Neto', money(line.netAmount, line.currencyCode)]] : []),
+        ['Clasificación', line.clasificacion || 'Sin clasificar'],
+        ['Medio de cobro', line.method || 'No indicado'],
+        ['Cuenta de destino', line.accountName || 'Sin cuenta']
+      ].forEach(([label, value]) => card.appendChild(create('p', { style: { margin: '2px 0' }, textContent: `${label}: ${value}` })));
+      body.appendChild(card);
+    });
+    detail.totals.forEach(total => body.appendChild(create('p', { style: { fontWeight: '700', margin: '4px 0' }, dataset: { collectionTotal: total.currencyCode }, textContent: `Total ${total.currencyCode}: ${money(total.amount, total.currencyCode)}${total.ivaAmount ? ` · IVA incluido ${money(total.ivaAmount, total.currencyCode)}` : ''}` })));
+    const footer = create('div', {}, [create('button', { className: 'btn btn-primary', type: 'button', textContent: 'Cerrar', onClick: () => Modal.hide() })]);
+    (options.stacked ? Modal.push : Modal.show).call(Modal, 'Cobro de alquiler', body, { footer });
   },
 
   contractTypeLabel(type) {
@@ -843,7 +997,9 @@ const AssetsPage = {
     const method = this.select([['manual', 'Importe manual'], ['percentage', 'Porcentaje ingresado'], ['index', 'Índice ingresado']]);
     body.append(create('label', { className: 'form-group' }, [create('span', { textContent: 'Tipo de actualización' }), method]));
     const effectiveDate = this.rentalField(body, 'Fecha efectiva (debe coincidir con un vencimiento)', { type: 'date' });
-    const amount = this.rentalField(body, `Nuevo alquiler (${contract.currencyCode})`, { type: 'number', min: '0.01', step: '0.01' });
+    const amountLabel = `Nuevo alquiler (${contract.currencyCode})`;
+    const amount = MoneyInput.create({ currency: contract.currencyCode, ariaLabel: amountLabel });
+    body.append(create('label', { className: 'form-group', style: { display: 'grid', gap: '4px' } }, [create('span', { textContent: amountLabel }), amount]));
     const percentage = this.rentalField(body, 'Porcentaje de ajuste', { type: 'number', step: '0.01' });
     const indexValue = this.rentalField(body, 'Valor de índice ingresado', { type: 'number', min: '0.000001', step: '0.000001' });
     const baseIndexValue = this.rentalField(body, 'Valor de índice base ingresado', { type: 'number', min: '0.000001', step: '0.000001' });
@@ -858,7 +1014,10 @@ const AssetsPage = {
     method.dispatchEvent(new Event('change'));
     const footer = create('div', {}, [create('button', { className: 'btn btn-primary', type: 'button', textContent: 'Guardar condición', onClick: async () => {
       const data = { method: method.value, effectiveDate: effectiveDate.value, periodicity: periodicity.value || undefined };
-      if (method.value === 'manual') data.rentAmount = Number(amount.value);
+      if (method.value === 'manual') {
+        if (!MoneyInput.validate(amount)) return;
+        data.rentAmount = MoneyInput.value(amount) ?? NaN;
+      }
       if (method.value === 'percentage') data.percentage = Number(percentage.value);
       if (method.value === 'index') { data.indexValue = Number(indexValue.value); data.baseIndexValue = Number(baseIndexValue.value); }
       try { await API.rentals.addCondition(contract.id, data); showToast('Condición guardada'); await this.showDetails(asset.id); }
@@ -867,67 +1026,81 @@ const AssetsPage = {
     Modal.show('Actualizar condición de alquiler', body, { footer });
   },
 
-  // Collects every modality of one declaration month (Avisos and month rows): one line per part, grouped per currency.
+  // "Cobrar mes" (Avisos, month rows and the property schedule): one line per modality with its own amount
+  // (prefilled from the contract), A/B classification (IVA shown for locación), payment date, payment method
+  // and destination account. Each line becomes its own income transaction; all of them are grouped in one
+  // collection, so "Deshacer cobro" undoes them together.
   async showRentMonthModal(assetId, monthKey, onDone = null) {
     try {
-      const [months, accounts] = await Promise.all([API.rentals.months(assetId), API.accounts.list()]);
+      const [months, accounts, paymentMethods] = await Promise.all([API.rentals.months(assetId), API.accounts.list(), API.finance.paymentMethods().catch(() => [])]);
       const month = (months || []).find(item => item.key === monthKey);
       const open = month ? month.parts.filter(part => part.remainingMinor > 0) : [];
       if (!open.length) { showToast('Ese mes ya no tiene saldo pendiente de cobro', 'error'); return; }
-      const body = create('div', { style: { maxHeight: '65vh', overflowY: 'auto' } });
-      body.appendChild(create('p', { textContent: `Mes ${month.date}: el mes figura como cobrado cuando se cobran todas sus modalidades.` }));
-      const date = this.rentalField(body, 'Fecha de cobro', { type: 'date', value: new Date().toISOString().slice(0, 10) });
-      const method = this.rentalField(body, 'Medio de cobro (opcional)');
-      const groups = [...new Set(open.map(part => part.currencyCode))].map(currency => {
+      const body = create('div', { style: { maxHeight: '65vh', overflowY: 'auto', display: 'grid', gap: '10px' } });
+      body.appendChild(create('p', { textContent: `Mes ${month.date}: cada modalidad se registra como un ingreso propio en su cuenta. El mes figura como cobrado cuando se cobran todas sus modalidades.` }));
+      const methodList = create('datalist', { id: `rent-methods-${month.date}` });
+      [...new Set(['Transferencia', 'Efectivo', ...paymentMethods.map(item => item.name)])].forEach(name => methodList.appendChild(create('option', { value: name })));
+      body.appendChild(methodList);
+      const today = getToday();
+      const ivaOf = (gross, percent) => Math.round((gross - gross / (1 + percent / 100)) * 100) / 100;
+      const field = (label, control) => create('label', { className: 'form-group', style: { display: 'grid', gap: '4px', margin: 0 } }, [create('span', { textContent: label }), control]);
+      const lines = open.map(part => {
+        const label = modalityLabel(part.modality) || 'Alquiler';
+        const currency = part.currencyCode;
         const eligible = accounts.filter(item => item.activo && item.currency === currency);
-        const account = this.select([['', 'Seleccionar cuenta'], ...accountTreeOptions(eligible).map(({ account: item, label }) => [item.id, label])]);
+        const amount = MoneyInput.create({ currency, value: part.remainingAmount, ariaLabel: `Importe ${label}` });
+        const kind = this.select([['A', 'A (declarado)'], ['B', 'B (sin facturar)']]);
+        kind.value = part.modality === 'locacion' ? 'A' : 'B';
+        kind.setAttribute('aria-label', `Clasificación ${label}`);
+        const iva = create('small', { className: 'text-muted', dataset: { rentLineIva: 'true' } });
+        const sync = () => {
+          const value = MoneyInput.value(amount);
+          iva.textContent = kind.value === 'A' && part.ivaPercent > 0 ? `IVA ${part.ivaPercent}% incluido${value > 0 ? `: ${formatearMonedaConCodigo(ivaOf(value, part.ivaPercent), currency)}` : ''}` : '';
+        };
+        kind.addEventListener('change', sync);
+        ['input', 'change', 'blur'].forEach(name => amount.addEventListener(name, sync));
+        sync();
+        const date = create('input', { className: 'form-control', type: 'date', value: today, max: today, 'aria-label': `Fecha de cobro (${label})` });
+        const method = create('input', { className: 'form-control', type: 'text', maxLength: 100, placeholder: 'Transferencia, efectivo…', list: methodList.id, 'aria-label': `Medio de cobro (${label})` });
+        const account = this.select([['', 'Seleccionar cuenta'], ...accountTreeOptions(eligible).map(({ account: item, label: text }) => [item.id, text])]);
+        account.setAttribute('aria-label', `Cuenta (${label})`);
         account.value = (eligible.find(item => item.primary) || (eligible.length === 1 ? eligible[0] : null))?.id || '';
-        const section = create('section', { style: { display: 'grid', gap: '6px', marginTop: '10px' }, dataset: { rentMonthCurrency: currency } }, [
-          create('strong', { textContent: `Cobro en ${currency}` }),
-          create('label', { className: 'form-group' }, [create('span', { textContent: `Cuenta (${currency})` }), account])
-        ]);
-        const lines = open.filter(part => part.currencyCode === currency).map(part => {
-          const label = modalityLabel(part.modality) || 'Alquiler';
-          const amount = MoneyInput.create({ currency, value: part.remainingAmount, ariaLabel: `Importe ${label}` });
-          const kind = this.select([['A', 'A (declarado)'], ['B', 'B (sin facturar)']]);
-          kind.value = part.modality === 'locacion' ? 'A' : 'B';
-          kind.setAttribute('aria-label', `Clasificación ${label}`);
-          const iva = create('small', { className: 'text-muted' });
-          const sync = () => { iva.textContent = kind.value === 'A' && part.ivaPercent > 0 ? `IVA ${part.ivaPercent}% incluido` : ''; };
-          kind.addEventListener('change', sync);
-          sync();
-          section.appendChild(create('div', { className: 'card', style: { padding: '8px', display: 'grid', gridTemplateColumns: '1fr minmax(90px, 150px) auto', gap: '8px', alignItems: 'center' } }, [
-            create('span', { textContent: `${label} · pendiente ${part.remainingAmount} ${currency}` }), amount, kind, iva
-          ]));
-          return { part, amount, kind };
-        });
-        body.appendChild(section);
-        return { currency, account, lines, done: false, idempotencyKey: crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}-${currency}` };
+        body.appendChild(create('fieldset', { className: 'card', style: { padding: '10px', display: 'grid', gap: '6px' }, dataset: { rentLine: part.modality || 'alquiler' } }, [
+          create('legend', { textContent: `${label} · pendiente ${formatearMonedaConCodigo(part.remainingAmount, currency)}` }),
+          field(`Importe (${currency})`, amount), field('Clasificación', kind), iva,
+          field('Fecha de cobro', date), field('Medio de cobro', method), field(`Cuenta de destino (${currency})`, account)
+        ]));
+        return { part, label, amount, kind, date, method, account };
       });
-      const result = create('div', { style: { display: 'grid', gap: '4px', marginTop: '10px' } });
-      body.appendChild(result);
-      const footer = create('div', {}, [create('button', { className: 'btn btn-primary', type: 'button', textContent: 'Registrar cobro', onClick: async () => {
-        if (!MoneyInput.validateAll(groups.flatMap(group => group.lines.map(line => line.amount)))) return;
-        const outcomes = [];
-        for (const group of groups.filter(item => !item.done)) {
-          const allocations = group.lines.map(line => ({ occurrenceId: line.part.occurrenceId, amount: MoneyInput.value(line.amount), clasificacion: line.kind.value })).filter(item => item.amount > 0);
-          if (!allocations.length) continue;
-          if (!group.account.value) { outcomes.push(`${group.currency}: seleccioná una cuenta`); continue; }
-          try {
-            await API.rentals.collect({ amount: Number(allocations.reduce((sum, item) => sum + item.amount, 0).toFixed(2)), accountId: group.account.value, date: date.value, method: method.value.trim(), allocations, idempotencyKey: group.idempotencyKey });
-            group.done = true;
-          } catch (error) { outcomes.push(`${group.currency}: ${error.message}`); }
-        }
-        if (!outcomes.length && !groups.some(group => group.done)) return showToast('Ingresá el importe a cobrar', 'error');
-        if (!outcomes.length) {
+      const errorBox = create('p', { className: 'text-danger', role: 'alert', style: { display: 'none', margin: 0 } });
+      body.appendChild(errorBox);
+      const showError = message => { errorBox.textContent = message; errorBox.style.display = message ? '' : 'none'; };
+      const idempotencyKey = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}-rent-month`;
+      const submit = create('button', { className: 'btn btn-primary', type: 'button', textContent: 'Registrar cobro' });
+      submit.addEventListener('click', async () => {
+        showError('');
+        if (!MoneyInput.validateAll(lines.map(line => line.amount))) return;
+        const chosen = lines.filter(line => MoneyInput.value(line.amount) > 0);
+        if (!chosen.length) return showError('Ingresá el importe a cobrar');
+        const missing = chosen.find(line => !line.account.value);
+        if (missing) return showError(`${missing.label}: seleccioná la cuenta de destino`);
+        const payload = chosen.map(line => {
+          const methodText = line.method.value.trim();
+          const known = paymentMethods.find(item => item.name.toLowerCase() === methodText.toLowerCase());
+          return {
+            occurrenceId: line.part.occurrenceId, amount: MoneyInput.value(line.amount), accountId: line.account.value, date: line.date.value || today,
+            clasificacion: line.kind.value, method: methodText, ...(known ? { paymentMethodId: known.id } : {})
+          };
+        });
+        submit.disabled = true;
+        try {
+          await API.rentals.collectMonth({ idempotencyKey, lines: payload });
           showToast('Cobro registrado en los ingresos reales');
           Modal.hide();
-          await (onDone ? onDone() : null);
-          return;
-        }
-        result.replaceChildren(...groups.filter(item => item.done).map(item => create('small', { textContent: `${item.currency}: cobro registrado` })), ...outcomes.map(text => create('small', { className: 'text-danger', textContent: text })));
-      } })]);
-      Modal.show(`Registrar cobro · mes ${month.date}`, body, { footer });
+          if (onDone) await onDone();
+        } catch (error) { submit.disabled = false; showError(error.message); }
+      });
+      Modal.show(`Registrar cobro · mes ${month.date}`, body, { footer: create('div', {}, [submit]) });
     } catch (error) { showToast(`No se pudo abrir el cobro: ${error.message}`, 'error'); }
   },
 

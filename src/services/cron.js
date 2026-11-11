@@ -62,4 +62,18 @@ function startCronJobs(db) {
   console.log('[CRON] Jobs programados (backup semanal dom 03:00)');
 }
 
-module.exports = { startCronJobs };
+// Daily (00:10 Buenos Aires): tenant obligations of ended rentals go back to the owner and abandoned
+// "Declaración de alquiler" drafts release their pending obligations.
+function startResponsibilityJob(db) {
+  const obligations = require('./obligations');
+  return new CronJob('10 0 * * *', () => {
+    try {
+      const changed = obligations.runResponsibilityMaintenance(db);
+      if (changed) console.log(`[CRON] Responsables de obligaciones actualizados: ${changed}`);
+    } catch (err) {
+      console.error('[CRON] Error al reasignar responsables:', err.message);
+    }
+  }, null, true, 'America/Argentina/Buenos_Aires');
+}
+
+module.exports = { startCronJobs, startResponsibilityJob };

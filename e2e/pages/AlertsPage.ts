@@ -27,11 +27,15 @@ export class AlertsPage extends BasePage {
     for (const label of labels) await expect(this.rentAlerts.first()).toContainText(label);
   }
 
-  /** Collects every modality of the first rent month with the dialog defaults. */
+  /** Collects every modality of the first rent month (one line per modality) into the given ARS account. */
   async collectFirstRentAlert(accountName: string): Promise<void> {
     await this.rentAlerts.first().getByRole('button', { name: 'Registrar cobro' }).click();
-    await expect(this.modal.getByText('Cobro en ARS')).toBeVisible();
-    await this.modal.getByLabel('Cuenta (ARS)').selectOption({ label: `${accountName} (ARS)` });
+    const lines = this.modal.locator('[data-rent-line]');
+    await expect(lines.first()).toBeVisible();
+    const count = await lines.count();
+    for (let index = 0; index < count; index += 1) {
+      await lines.nth(index).locator('select[aria-label^="Cuenta"]').selectOption({ label: `${accountName} (ARS)` });
+    }
     await this.modal.getByRole('button', { name: 'Registrar cobro' }).click();
     await this.page.waitForSelector('.modal-overlay', { state: 'hidden', timeout: 10000 });
   }

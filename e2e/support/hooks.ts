@@ -66,12 +66,24 @@ AfterAll(async function () {
   }
 });
 
-Before(async function (this: SelimSystemWorld) {
+Before(async function (this: SelimSystemWorld, scenario: ITestCaseHookParameter) {
   this.context = await browser.newContext({
     baseURL: this.baseURL,
     ...devices['Desktop Chrome'],
     serviceWorkers: 'block',
   });
+  // The app defaults to the desktop experience; existing scenarios were written for the mobile one,
+  // so seed it unless the scenario explicitly checks the default (@default-experience).
+  const checksDefaultExperience = scenario.pickle.tags.some((tag) => tag.name === '@default-experience');
+  if (!checksDefaultExperience) {
+    await this.context.addInitScript(() => {
+      try {
+        if (!localStorage.getItem('pate_experience')) localStorage.setItem('pate_experience', 'mobile');
+      } catch {
+        // Storage may be unavailable on about:blank.
+      }
+    });
+  }
   this.page = await this.context.newPage();
   this.api = await request.newContext({ baseURL: this.baseURL });
 

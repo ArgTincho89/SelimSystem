@@ -7,6 +7,39 @@ const TOUCHED = ['rentalDeclarations', 'rentalContracts', 'rentOccurrences', 'as
 const COLLECTED_OUT_OF_RANGE = 'Hay períodos cobrados fuera del nuevo rango; anulá esos cobros primero';
 
 const fail = (error, status = 400) => ({ error, status });
+const OPEN_END = '9999-12-31';
+
+function displayDate(date) {
+  return date ? date.split('-').reverse().join('/') : '';
+}
+
+function overlaps(aStart, aEnd, bStart, bEnd) {
+  return aStart <= (bEnd || OPEN_END) && bStart <= (aEnd || OPEN_END);
+}
+
+/**
+ * One rental per date range: a modality may not overlap any non-cancelled contract of another
+ * rental of the same asset (any modality). Contracts of the declaration being edited are ignored,
+ * so an edit never conflicts with itself. Returns a 409 failure with the conflicting rental or null.
+ */
+function findOverlap(db, userId, assetId, declarationId, entries) {
+  const others = db.findAll('rentalContracts', userId)
+    .filter(item => item.assetId === assetId && !['cancelled', 'draft'].includes(item.status) && (!declarationId || item.declarationId !== declarationId));
+  for (const entry of entries) {
+    const other = others.find(item => overlaps(entry.value.startDate, entry.value.endDate, item.startDate, item.endDate));
+    if (!other) continue;
+    const siblings = other.declarationId ? others.filter(item => item.declarationId === other.declarationId) : [other];
+    const startDate = siblings.map(item => item.startDate).sort()[0];
+    const endDate = siblings.some(item => !item.endDate) ? null : siblings.map(item => item.endDate).sort().pop();
+    const active = siblings.some(isActive);
+    const range = `del ${displayDate(startDate)} ${endDate ? `al ${displayDate(endDate)}` : 'sin fecha de finalización'}`;
+    const error = active
+      ? `Las fechas se superponen con el alquiler vigente de este inmueble (${range}). Primero declará la finalización de ese alquiler para liberar esas fechas.`
+      : `Las fechas se superponen con un alquiler finalizado de este inmueble (${range}). Elegí fechas posteriores a su finalización.`;
+    return { error, status: 409, conflict: { declarationId: other.declarationId || null, contractId: other.id, startDate, endDate, active } };
+  }
+  return null;
+}
 
 function contractsOf(db, userId, declarationId) {
   return db.findAll('rentalContracts', userId).filter(item => item.declarationId === declarationId)
@@ -134,10 +167,14 @@ function plan(db, userId, body, existing) {
     if (parsed.error) return fail(parsed.error);
     entries.push({ kind: item.kind, previous, value: parsed.value });
   }
+  const overlap = findOverlap(db, userId, asset.id, existing ? existing.id : null, entries);
+  if (overlap) return overlap;
   const responsibilities = validateResponsibilities(db, userId, body.obligationResponsibilities, asset);
   if (responsibilities.error) return responsibilities;
+  const token = body.pendingObligationToken;
+  if (token !== undefined && token !== null && (typeof token !== 'string' || token.length < 8 || token.length > 120)) return fail('El vínculo con las obligaciones pendientes no es válido');
   const kinds = new Set(list.map(item => item.kind));
-  return { value: { asset, notes: notes.trim(), tenantIds: entries[0].value.tenantIds, entries, removed: current.filter(contract => !kinds.has(rentals.modalityOf(contract))), responsibilities: responsibilities.value } };
+  return { value: { asset, notes: notes.trim(), tenantIds: entries[0].value.tenantIds, entries, removed: current.filter(contract => !kinds.has(rentals.modalityOf(contract))), responsibilities: responsibilities.value, pendingToken: token || null } };
 }
 
 function rebuildOccurrences(db, userId, contract) {
@@ -149,11 +186,20 @@ function rebuildOccurrences(db, userId, contract) {
   removable.forEach(item => db.remove('rentOccurrences', item.id, userId));
 }
 
-/** Ends one contract (cancelling unpaid future periods) and re-points tenant obligations that referenced it. */
-function endContract(db, userId, contract) {
+/**
+ * Ends one contract (cancelling unpaid future periods) and re-points tenant obligations that referenced it.
+ * `endOn` (optional) is an early termination date: when it is still in the future the contract stays
+ * active until then (only its end date moves); obligations go back to the owner once it passes.
+ */
+function endContract(db, userId, contract, endOn = null) {
   const today = ledger.localDateForUser(db, userId);
-  const notStarted = contract.startDate > today;
-  const endDate = notStarted ? contract.endDate : (contract.endDate && contract.endDate < today ? contract.endDate : today);
+  if (endOn && contract.startDate <= endOn && endOn >= today) {
+    db.update('rentalContracts', contract.id, { endDate: endOn }, userId);
+    rentals.cancelUnpaidOccurrences(db, userId, contract.id, endOn);
+    return;
+  }
+  const notStarted = endOn ? contract.startDate > endOn : contract.startDate > today;
+  const endDate = endOn && !notStarted ? endOn : notStarted ? contract.endDate : (contract.endDate && contract.endDate < today ? contract.endDate : today);
   db.update('rentalContracts', contract.id, { status: notStarted ? 'cancelled' : 'ended', endDate }, userId);
   rentals.cancelUnpaidOccurrences(db, userId, contract.id, notStarted ? null : endDate);
   const successor = rentals.activeContractsFor(db, userId, contract.assetId)[0] || null;
@@ -198,14 +244,22 @@ function applyResponsibilities(db, userId, items) {
   });
 }
 
+// Obligations created from the (unsaved) declaration modal become tenant obligations now that the
+// rental exists; explicit choices in `obligationResponsibilities` win.
+function finalizePending(db, userId, planned) {
+  if (!planned.pendingToken) return;
+  obligations.finalizePendingRentalLinks(db, userId, planned.pendingToken, planned.asset.id, new Set(planned.responsibilities.map(item => item.obligationId)));
+}
+
+// Overlapping rentals are rejected by `plan`; a non-overlapping rental may be declared while another one is in force.
 function create(db, userId, body) {
   const planned = plan(db, userId, body, null);
   if (planned.error) return planned;
   const { asset, notes, tenantIds, entries, responsibilities } = planned.value;
-  if (rentals.activeContractFor(db, userId, asset.id)) return fail('El bien ya tiene un alquiler vigente; editá la declaración existente', 409);
   const written = withRollback(db, userId, () => {
     const declaration = db.create('rentalDeclarations', { assetId: asset.id, tenantIds, notes, endedAt: null }, userId);
     entries.forEach(entry => rentals.afterContractWrite(db, userId, db.create('rentalContracts', { ...entry.value, declarationId: declaration.id }, userId)));
+    finalizePending(db, userId, planned.value);
     applyResponsibilities(db, userId, responsibilities);
     return declaration;
   });
@@ -227,6 +281,7 @@ function update(db, userId, declaration, body) {
     });
     removed.forEach(contract => endContract(db, userId, contract));
     db.update('rentalDeclarations', declaration.id, { tenantIds, notes }, userId);
+    finalizePending(db, userId, planned.value);
     applyResponsibilities(db, userId, responsibilities);
     settle(db, userId, asset.id, declaration.id);
     return db.findById('rentalDeclarations', declaration.id, userId);
@@ -234,15 +289,30 @@ function update(db, userId, declaration, body) {
   return written.error ? written : { value: written.value };
 }
 
-function end(db, userId, declaration) {
+/**
+ * "Finalizar alquiler": ends every active modality. `body.endDate` (optional, defaults to today) declares
+ * an early termination: it frees the dates after it for a new rental. It must fall within the rental and
+ * after every collected period.
+ */
+function end(db, userId, declaration, body = {}) {
   const active = contractsOf(db, userId, declaration.id).filter(isActive);
   if (!active.length) return fail('El alquiler ya está finalizado', 409);
+  const endOn = body && body.endDate !== undefined && body.endDate !== null && body.endDate !== '' ? body.endDate : null;
+  if (endOn !== null) {
+    if (!rentals.validDate(endOn)) return fail('La fecha de finalización no es válida');
+    if (endOn < active.map(item => item.startDate).sort()[0]) return fail('La fecha de finalización no puede ser anterior al inicio del alquiler');
+    const agreed = active.every(item => item.endDate) ? active.map(item => item.endDate).sort().pop() : null;
+    if (agreed && endOn > agreed) return fail('La fecha de finalización no puede ser posterior a la pactada; editá el alquiler para extenderlo');
+    const today = ledger.localDateForUser(db, userId);
+    const collectedAfter = db.findAll('rentOccurrences', userId).some(item => active.some(contract => contract.id === item.contractId) && item.date > endOn && !item.cancelled && rentals.occurrenceView(db, userId, item, today).paidMinor > 0);
+    if (collectedAfter) return fail('Hay períodos cobrados posteriores a esa fecha; deshacé esos cobros primero', 409);
+  }
   const written = withRollback(db, userId, () => {
-    active.forEach(contract => endContract(db, userId, contract));
+    active.forEach(contract => endContract(db, userId, contract, endOn));
     settle(db, userId, declaration.assetId, declaration.id);
     return db.findById('rentalDeclarations', declaration.id, userId);
   });
   return written.error ? written : { value: written.value };
 }
 
-module.exports = { view, contractsOf, activeDeclarationFor, backfillDeclarations, create, update, end };
+module.exports = { view, contractsOf, activeDeclarationFor, backfillDeclarations, create, update, end, findOverlap };

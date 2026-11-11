@@ -53,7 +53,7 @@ describe('Evolutivo 3 S4b rental declaration modal UI contract', () => {
     expect(modal).toContain('API.rentals.declarations.update(');
     expect(modal).toContain('API.rentals.declarations.create(');
     const api = read('js/api.js');
-    ['list(assetId)', 'create(data)', 'update(id, data)', 'end(id)'].forEach(signature => expect(api).toContain(signature));
+    ['list(assetId)', 'create(data)', 'update(id, data)', 'end(id, data = {})'].forEach(signature => expect(api).toContain(signature));
   });
 
   it('wires the actions in the assets page and loads the script', () => {

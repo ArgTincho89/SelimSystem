@@ -1,16 +1,33 @@
+// Dialogs. `show` replaces every open dialog; `push` opens a dialog on top of the current one (the
+// dialogs below keep their state); `hide` closes the top dialog only. `options.onClose` runs when its
+// dialog is closed or replaced.
 const Modal = {
   previousFocus: null,
+  layers: [],
+
   show(title, content, options = {}) {
-    const root = $('#modal-root');
-    clearElement(root);
+    this.discard();
     this.previousFocus = document.activeElement;
+    this.open(title, content, options);
+  },
+
+  push(title, content, options = {}) {
+    if (!this.layers.length) return this.show(title, content, options);
+    this.open(title, content, options);
+  },
+
+  open(title, content, options) {
+    const root = $('#modal-root');
+    const depth = this.layers.length;
+    const titleId = depth ? `modal-title-${depth}` : 'modal-title';
 
     const overlay = create('div', {
       className: 'modal-overlay',
+      dataset: { modalDepth: String(depth) },
       style: {
         position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
         background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center',
-        justifyContent: 'center', zIndex: 150, padding: '16px'
+        justifyContent: 'center', zIndex: 150 + depth * 10, padding: '16px'
       }
     });
 
@@ -18,7 +35,7 @@ const Modal = {
       className: 'card fade-in',
       role: 'dialog',
       'aria-modal': 'true',
-      'aria-labelledby': 'modal-title',
+      'aria-labelledby': titleId,
       tabindex: '-1',
       style: { width: '100%', maxWidth: '440px', maxHeight: '90vh', overflowY: 'auto' }
     });
@@ -26,7 +43,7 @@ const Modal = {
     const header = create('div', {
       style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }
     }, [
-      create('h3', { id: 'modal-title', textContent: title, style: { fontSize: 'var(--font-lg)', fontWeight: '700' } }),
+      create('h3', { id: titleId, textContent: title, style: { fontSize: 'var(--font-lg)', fontWeight: '700' } }),
       create('button', {
         type: 'button',
         'aria-label': 'Cerrar',
@@ -61,6 +78,7 @@ const Modal = {
     on(modal, 'keydown', event => {
       if (event.key === 'Escape') {
         event.preventDefault();
+        event.stopPropagation();
         this.hide();
         return;
       }
@@ -82,15 +100,30 @@ const Modal = {
       if (e.target === overlay) this.hide();
     });
 
+    this.layers.push({ overlay, onClose: options.onClose || null, returnFocus: depth ? document.activeElement : null });
     root.appendChild(overlay);
     const firstFocusable = $('button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])', modal);
     (firstFocusable || modal).focus();
   },
 
+  // Closes the top dialog; the one below (if any) becomes active again.
   hide() {
-    const root = $('#modal-root');
-    clearElement(root);
+    const layer = this.layers.pop();
+    if (layer) layer.overlay.remove();
+    if (layer && layer.onClose) { try { layer.onClose(); } catch { /* a close hook never blocks closing */ } }
+    if (this.layers.length) {
+      if (layer?.returnFocus?.isConnected) layer.returnFocus.focus();
+      return;
+    }
+    clearElement($('#modal-root'));
     if (this.previousFocus?.isConnected) this.previousFocus.focus();
     this.previousFocus = null;
+  },
+
+  // Drops every open dialog (running their close hooks), without restoring focus.
+  discard() {
+    const layers = this.layers.splice(0);
+    clearElement($('#modal-root'));
+    layers.reverse().forEach(layer => { if (layer.onClose) { try { layer.onClose(); } catch { /* ignore */ } } });
   }
 };

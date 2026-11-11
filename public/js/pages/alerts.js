@@ -161,9 +161,12 @@ const AlertsPage = {
   },
 
   async postInstallment(alert) {
-    const amount = prompt(`Importe de la cuota ${alert.installmentNumber} (previsto: ${alert.amount} ${alert.currencyCode})`, String(alert.amount));
-    if (amount === null) return;
-    await API.installments.postOccurrence(alert.planId, alert.occurrenceId, { amount: Number(amount) });
+    const expected = MoneyInput.format(alert.amount, alert.currencyCode);
+    const amountText = prompt(`Importe de la cuota ${alert.installmentNumber} (previsto: ${expected} ${alert.currencyCode})`, expected);
+    if (amountText === null) return;
+    const amount = MoneyInput.parse(amountText, alert.currencyCode);
+    if (amount === null) return showToast(MoneyInput.INVALID_MESSAGE, 'error');
+    await API.installments.postOccurrence(alert.planId, alert.occurrenceId, { amount });
     showToast('Cuota contabilizada');
     await this.reload();
   },

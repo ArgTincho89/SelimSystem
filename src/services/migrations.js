@@ -127,4 +127,13 @@ function migrateEvolutivo3(db) {
   return { updated };
 }
 
-module.exports = { migrateEvolutivo, migrateEvolutivo2, migrateEvolutivo3 };
+/**
+ * Startup pass of the rental batch: tenant obligations whose rental already ended go back to the
+ * owner, and pending links of abandoned declaration drafts are cleared. Idempotent (the daily job and
+ * the obligation reads apply the same rules).
+ */
+function migrateRentalResponsibilities(db) {
+  return { updated: require('./obligations').runResponsibilityMaintenance(db) };
+}
+
+module.exports = { migrateEvolutivo, migrateEvolutivo2, migrateEvolutivo3, migrateRentalResponsibilities };

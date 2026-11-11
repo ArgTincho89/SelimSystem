@@ -921,6 +921,13 @@ const HomePage = {
       textContent: 'Cancelar',
       onClick: () => Modal.hide()
     }));
+    // "Ver": read-only detail of the whole rent collection (every modality), stacked on top of this dialog.
+    if (tx.rentCollectionId) {
+      footer.appendChild(create('button', {
+        className: 'btn btn-secondary', type: 'button', textContent: 'Ver', dataset: { viewRentCollection: tx.rentCollectionId },
+        onClick: () => AssetsPage.showCollectionView(tx.rentCollectionId, { stacked: true })
+      }));
+    }
     if (tx.isRecurringInstance && tx.occurrenceStatus !== 'posted' && tx.occurrenceStatus !== 'skipped' && tx.fecha <= getToday()) {
       footer.appendChild(create('button', {
         className: 'btn btn-primary', type: 'button', textContent: 'Contabilizar ocurrencia',

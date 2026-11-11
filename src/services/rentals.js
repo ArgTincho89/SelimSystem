@@ -147,13 +147,22 @@ function validateContract(db, userId, input, existing = null, assetHint = null) 
   } };
 }
 
-/** Active contracts of an asset (or of one declaration), in modality order: locación, comodato, mutuo. */
+/**
+ * Active contracts of an asset (or of one declaration), in modality order: locación, comodato, mutuo.
+ * Non-overlapping rentals may coexist (e.g. a future one): the earliest rental comes first.
+ */
 function activeContractsFor(db, userId, scope) {
   const declarationId = scope && typeof scope === 'object' ? scope.id : null;
   const assetId = scope && typeof scope === 'object' ? scope.assetId : scope;
-  return db.findAll('rentalContracts', userId)
-    .filter(item => item.assetId === assetId && item.status === 'active' && (!declarationId || item.declarationId === declarationId))
-    .sort((a, b) => MODALITIES.indexOf(modalityOf(a)) - MODALITIES.indexOf(modalityOf(b)) || String(a.createdAt).localeCompare(String(b.createdAt)));
+  const contracts = db.findAll('rentalContracts', userId)
+    .filter(item => item.assetId === assetId && item.status === 'active' && (!declarationId || item.declarationId === declarationId));
+  const firstStart = new Map();
+  contracts.forEach(item => {
+    if (item.declarationId && (!firstStart.has(item.declarationId) || item.startDate < firstStart.get(item.declarationId))) firstStart.set(item.declarationId, item.startDate);
+  });
+  const byRental = (a, b) => (a.declarationId && b.declarationId && a.declarationId !== b.declarationId
+    ? firstStart.get(a.declarationId).localeCompare(firstStart.get(b.declarationId)) : 0);
+  return contracts.sort((a, b) => byRental(a, b) || MODALITIES.indexOf(modalityOf(a)) - MODALITIES.indexOf(modalityOf(b)) || String(a.createdAt).localeCompare(String(b.createdAt)));
 }
 
 function activeContractFor(db, userId, assetId) {
@@ -387,8 +396,17 @@ const NON_TRANSACTION_TARGETS = ['assetId', 'entityId', 'obligationId', 'contrac
  */
 function reverseCollection(db, userId, collectionId, storage = null) {
   const collection = db.findById('rentCollections', collectionId, userId);
-  if (!collection) return { status: 404, error: 'Cobro no encontrado' };
+  if (!collection) {
+    // A "Cobrar mes" group id undoes every modality of the month at once.
+    const group = db.findById('rentCollectionGroups', collectionId, userId);
+    return group ? require('./rent-collections').reverseGroup(db, userId, group, storage) : { status: 404, error: 'Cobro no encontrado' };
+  }
   if (collection.reversedAt) return { status: 409, error: 'Ese cobro ya fue deshecho' };
+  const group = collection.groupId ? db.findById('rentCollectionGroups', collection.groupId, userId) : null;
+  if (group) {
+    const result = require('./rent-collections').reverseGroup(db, userId, group, storage);
+    return result.error ? result : { ...result, collectionId: collection.id };
+  }
   const transaction = db.findById('transactions', collection.transactionId, userId);
   if (transaction) {
     const dependent = dependentMovement(db, userId, transaction);

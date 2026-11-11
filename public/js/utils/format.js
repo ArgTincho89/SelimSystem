@@ -79,6 +79,17 @@ function getToday() {
   return `${parts.year}-${parts.month}-${parts.day}`;
 }
 
+// Day ("YYYY-MM-DD") of an ISO timestamp in the user's timezone; '' when invalid.
+function logDayKey(iso) {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return '';
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: localStorage.getItem('pate_timezone') || Intl.DateTimeFormat().resolvedOptions().timeZone,
+    year: 'numeric', month: '2-digit', day: '2-digit'
+  }).formatToParts(date).reduce((result, part) => ({ ...result, [part.type]: part.value }), {});
+  return `${parts.year}-${parts.month}-${parts.day}`;
+}
+
 // "dd/mm/aaaa hh:mm" in the user's timezone (24 hours).
 function formatLogDateTime(iso) {
   const date = new Date(iso);

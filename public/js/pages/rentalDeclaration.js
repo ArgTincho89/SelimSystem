@@ -15,7 +15,8 @@ const RentalDeclarationModal = {
   buildFieldset(kind, title, data = {}) {
     const box = create('fieldset', { className: 'card', dataset: { modality: kind }, style: { padding: '10px', marginBottom: '10px', display: 'none' } });
     box.appendChild(create('legend', { textContent: title }));
-    const currencyValue = data.currencyCode || localStorage.getItem('pate_app_currency') || 'ARS';
+    // New declarations default to ARS; editing keeps the saved currency.
+    const currencyValue = data.currencyCode || 'ARS';
     const startDate = create('input', { className: 'form-control', type: 'date', value: data.startDate || this.today(), 'aria-label': `Fecha de inicio (${title})` });
     const endDate = create('input', { className: 'form-control', type: 'date', value: data.endDate || '', 'aria-label': `Fecha de finalización (${title})` });
     const amount = MoneyInput.create({ currency: currencyValue, value: data.amount ?? null, ariaLabel: `Monto original (${title})` });
@@ -59,10 +60,15 @@ const RentalDeclarationModal = {
     };
   },
 
+  // `options.newDeclaration` declares another (non-overlapping) rental even when one is in force.
   async show(page, asset, options = {}) {
     const readOnly = Boolean(options.readOnly);
-    const declaration = asset.declaration && asset.declaration.status !== 'ended' ? asset.declaration : null;
+    const declaration = !options.newDeclaration && asset.declaration && asset.declaration.status !== 'ended' ? asset.declaration : null;
     const editing = Boolean(declaration);
+    // Obligations created from this (unsaved) declaration are linked to it through this token.
+    const pendingToken = editing ? null : (globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}-declaration`);
+    let createdObligations = 0;
+    let saved = false;
     let owners;
     try { owners = await API.owners.list(); } catch (error) { showToast(error.message, 'error'); return; }
     const body = create('div', { style: { maxHeight: '65vh', overflowY: 'auto', paddingRight: '4px' } });
@@ -104,7 +110,18 @@ const RentalDeclarationModal = {
 
     const slot = create('div', { dataset: { slot: 'obligations' } });
     body.appendChild(slot);
-    const obligations = page.renderObligations(slot, asset, { allowTenant: true });
+    // "Nueva obligación" opens the same obligation form stacked on top of this modal: no navigation and
+    // the declaration keeps its data. The tenant entered here can be its responsible.
+    const obligations = page.renderObligations(slot, asset, {
+      allowTenant: true,
+      onNewObligation: () => ObligationsPage.showStackedCreate({
+        assetId: asset.id,
+        tenantNames: [...tenantSelect.selectedOptions].map(option => option.textContent),
+        pendingDeclarationToken: pendingToken,
+        activeContractId: editing ? asset.activeContract?.id || null : null,
+        onCreated: (obligation, responsibilityType) => { createdObligations += 1; obligations.add(obligation, responsibilityType); }
+      })
+    });
     const notes = create('textarea', { className: 'form-control', rows: 3, maxLength: 4000, 'aria-label': 'Notas' });
     notes.value = declaration?.notes || '';
     this.field(body, 'Notas', notes);
@@ -133,14 +150,23 @@ const RentalDeclarationModal = {
         return;
       }
       confirmed = false;
-      const payload = { assetId: asset.id, tenantIds: [...tenantSelect.selectedOptions].map(option => option.value), notes: notes.value.trim(), modalities, ...obligations.collect() };
+      const payload = { assetId: asset.id, tenantIds: [...tenantSelect.selectedOptions].map(option => option.value), notes: notes.value.trim(), modalities, ...obligations.collect(), ...(pendingToken ? { pendingObligationToken: pendingToken } : {}) };
       try {
         if (editing) await API.rentals.declarations.update(declaration.id, payload);
         else await API.rentals.declarations.create(payload);
+        saved = true;
         Modal.hide();
         showToast(editing ? 'Alquiler actualizado' : 'Alquiler declarado');
         await (options.onDone ? options.onDone() : page.showDetails(asset.id));
-      } catch (error) { showError(error.message); }
+      } catch (error) {
+        showError(error.message);
+        // Overlapping rental: offer to declare the termination of the rental in force (stacked, keeps this form).
+        const conflict = error.data?.conflict;
+        if (conflict?.active && conflict.declarationId) {
+          errorBox.appendChild(create('button', { className: 'btn btn-secondary btn-sm', type: 'button', textContent: 'Declarar la finalización del alquiler vigente', style: { display: 'block', marginTop: '6px' },
+            onClick: () => page.endDeclaration(asset, { declarationId: conflict.declarationId, stacked: true }) }));
+        }
+      }
     };
     on(save, 'click', submit);
     const footer = readOnly
@@ -151,6 +177,12 @@ const RentalDeclarationModal = {
         save
       ]);
     if (readOnly) body.querySelectorAll('input, select, textarea, button').forEach(control => { control.disabled = true; });
-    Modal.show(readOnly ? 'Ver declaración de alquiler' : 'Declaración de alquiler', body, { footer });
+    // Closed without saving: obligations created here stay with the owner (the server also expires the link).
+    const onClose = () => {
+      if (saved || !pendingToken || !createdObligations) return;
+      API.obligations.releasePending(pendingToken).catch(() => {});
+      showToast('La declaración no se guardó: las obligaciones creadas quedan a cargo del propietario');
+    };
+    Modal.show(readOnly ? 'Ver declaración de alquiler' : 'Declaración de alquiler', body, { footer, onClose });
   }
 };

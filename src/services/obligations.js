@@ -226,9 +226,10 @@ function responsibilityFor(obligation, occurrence) {
   return { responsibilityType: obligation?.responsibilityType || 'owner', responsibilitySplit: obligation?.responsibilitySplit || null };
 }
 
-// Switches the live responsibility between owner and tenant. Past-dated or settled occurrences
-// are pinned to the previous responsibility first so their history does not change.
-function setResponsibility(db, userId, obligation, type) {
+// Switches the live responsibility between owner and tenant. Occurrences dated before `pinBefore`
+// (default: today) or already settled are pinned to the previous responsibility first so their
+// history does not change.
+function setResponsibility(db, userId, obligation, type, { pinBefore = null } = {}) {
   if (type !== 'owner' && type !== 'tenant') return failure('El tipo de responsabilidad no es válido');
   let rentalContractId = obligation.rentalContractId || null;
   if (type === 'tenant') {
@@ -237,13 +238,102 @@ function setResponsibility(db, userId, obligation, type) {
     rentalContractId = contract.id;
   }
   const today = ledger.localDateForUser(db, userId);
-  if (obligation.status !== 'cancelled') generateOccurrences(db, userId, obligation, null, addDaysDateOnly(today, -1));
+  const cutoff = pinBefore && pinBefore < today ? pinBefore : today;
+  if (obligation.status !== 'cancelled') generateOccurrences(db, userId, obligation, null, addDaysDateOnly(cutoff, -1));
   db.findAll(OCCURRENCES, userId).filter(item => item.obligationId === obligation.id && !item.responsibilityType
-    && (item.date < today || paymentTransactions(db, userId, item.id).length || activeResolution(db, userId, item.id))).forEach(item => {
+    && (item.date < cutoff || paymentTransactions(db, userId, item.id).length || activeResolution(db, userId, item.id))).forEach(item => {
     db.update(OCCURRENCES, item.id, { responsibilityType: obligation.responsibilityType || 'owner', responsibilitySplit: obligation.responsibilitySplit || null }, userId);
   });
   const updated = db.update(COLLECTION, obligation.id, { responsibilityType: type, responsibilitySplit: null, responsibleThirdEntityId: null, rentalContractId }, userId);
   return { obligation: updated };
+}
+
+/**
+ * Automatic reassignment: a tenant obligation goes back to the owner once its rental is over.
+ * "Over" means the linked contract's end date has passed, or the contract was ended/cancelled, or it
+ * no longer exists. A tenant obligation without a linked contract is re-linked to the asset's current
+ * active contract when there is one, otherwise it goes back to the owner. Occurrences up to the rental
+ * end stay pinned to the tenant. Idempotent; returns the number of obligations changed.
+ */
+function reassignEndedTenantObligations(db, userId) {
+  const today = ledger.localDateForUser(db, userId);
+  let changed = 0;
+  db.findAll(COLLECTION, userId).filter(item => item.status !== 'cancelled' && item.responsibilityType === 'tenant').forEach(obligation => {
+    const contract = obligation.rentalContractId ? db.findById('rentalContracts', obligation.rentalContractId, userId) : null;
+    let endedOn = null;
+    if (contract) {
+      if (contract.endDate && contract.endDate < today) endedOn = contract.endDate;
+      else if (contract.status === 'ended' || contract.status === 'cancelled') endedOn = addDaysDateOnly(today, -1);
+      if (!endedOn) return;
+    } else {
+      const current = obligation.assetId ? rentals.activeContractFor(db, userId, obligation.assetId) : null;
+      if (current && current.startDate <= today && (!current.endDate || current.endDate >= today)) {
+        db.update(COLLECTION, obligation.id, { rentalContractId: current.id }, userId);
+        changed += 1;
+        return;
+      }
+      endedOn = addDaysDateOnly(today, -1);
+    }
+    setResponsibility(db, userId, obligation, 'owner', { pinBefore: addDaysDateOnly(endedOn, 1) });
+    changed += 1;
+  });
+  return changed;
+}
+
+// Pending rental link: an obligation created from a "Declaración de alquiler" that is not saved yet.
+// It is stored with owner responsibility (the rental and its tenant do not exist yet) and only becomes
+// a tenant obligation when the declaration carrying the same token is saved. An abandoned draft
+// therefore never leaves an obligation pointing at a non-existent rental or tenant.
+const PENDING_LINK_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+
+function validPendingToken(token) {
+  return typeof token === 'string' && token.length >= 8 && token.length <= 120;
+}
+
+function pendingObligations(db, userId, token) {
+  if (!validPendingToken(token)) return [];
+  const tokenHash = idempotencyDigest(token);
+  return db.findAll(COLLECTION, userId).filter(item => item.pendingRentalLink && item.pendingRentalLink.tokenHash === tokenHash);
+}
+
+/** Declaration cancelled: the obligations keep the owner as responsible and lose the pending link. */
+function releasePendingRentalLinks(db, userId, token) {
+  const items = pendingObligations(db, userId, token);
+  items.forEach(item => db.update(COLLECTION, item.id, { pendingRentalLink: null }, userId));
+  return items.length;
+}
+
+/**
+ * Declaration saved: obligations created for it (same token and asset) become tenant obligations
+ * linked to the new active contract, unless `explicitIds` already decides their responsibility.
+ * Throws (inside the declaration rollback) when the tenant cannot be assigned.
+ */
+function finalizePendingRentalLinks(db, userId, token, assetId, explicitIds = new Set()) {
+  const items = pendingObligations(db, userId, token).filter(item => item.assetId === assetId);
+  items.forEach(item => {
+    const current = db.update(COLLECTION, item.id, { pendingRentalLink: null }, userId);
+    if (explicitIds.has(item.id)) return;
+    const result = setResponsibility(db, userId, current, 'tenant');
+    if (result.error) throw Object.assign(new Error(result.error), { userMessage: result.error });
+  });
+  return items.length;
+}
+
+/** Clears pending links older than 24 hours (abandoned drafts). The obligation stays with the owner. */
+function expirePendingRentalLinks(db, userId, now = Date.now()) {
+  const stale = db.findAll(COLLECTION, userId).filter(item => item.pendingRentalLink && now - (Date.parse(item.pendingRentalLink.createdAt) || 0) > PENDING_LINK_MAX_AGE_MS);
+  stale.forEach(item => db.update(COLLECTION, item.id, { pendingRentalLink: null }, userId));
+  return stale.length;
+}
+
+/** Daily maintenance for every user: automatic reassignment plus abandoned draft cleanup. */
+function runResponsibilityMaintenance(db) {
+  let changed = 0;
+  for (const user of db.findAll('users')) {
+    try { changed += reassignEndedTenantObligations(db, user.id) + expirePendingRentalLinks(db, user.id); }
+    catch (error) { console.error('[obligations] responsibility maintenance failed:', error.message); }
+  }
+  return changed;
 }
 
 function validateResponsibility(db, userId, body, existing = null) {
@@ -300,9 +390,20 @@ function validateDefinition(db, userId, body, existing = null) {
 }
 
 function createObligation(db, userId, body) {
-  const parsed = validateDefinition(db, userId, { recurrenceFrequency: null, endDate: null, reminderLeadDays: 7, paymentMethod: '', notes: '', responsibilityType: 'owner', ...body });
+  const input = { recurrenceFrequency: null, endDate: null, reminderLeadDays: 7, paymentMethod: '', notes: '', responsibilityType: 'owner', ...body };
+  let pendingRentalLink = null;
+  if (body.pendingDeclarationToken !== undefined && body.pendingDeclarationToken !== null) {
+    if (!validPendingToken(body.pendingDeclarationToken)) return { error: 'El vínculo con la declaración de alquiler no es válido' };
+    if (!input.assetId || !db.findById('assets', input.assetId, userId)) return { error: 'La obligación vinculada a un alquiler requiere un bien' };
+    // Tenant requested while the rental is still a draft: owner until the declaration is saved.
+    if (input.responsibilityType === 'tenant' && !rentals.activeContractFor(db, userId, input.assetId)) {
+      pendingRentalLink = { tokenHash: idempotencyDigest(body.pendingDeclarationToken), responsibilityType: 'tenant', createdAt: new Date().toISOString() };
+      Object.assign(input, { responsibilityType: 'owner', responsibilitySplit: null, rentalContractId: null });
+    }
+  }
+  const parsed = validateDefinition(db, userId, input);
   if (parsed.error) return parsed;
-  const obligation = db.create(COLLECTION, parsed.value, userId);
+  const obligation = db.create(COLLECTION, { ...parsed.value, ...(pendingRentalLink ? { pendingRentalLink } : {}) }, userId);
   return { obligation };
 }
 
@@ -497,5 +598,6 @@ function idempotencyDigest(key) {
 
 module.exports = {
   COLLECTION, OCCURRENCES, RESOLUTIONS, validDate, occurrenceView, activeResolution, createResolution, voidResolution, listResolutions, occurrencesFor,
-  validateDefinition, validateResponsibility, portionsFor, responsibilityFor, setResponsibility, RESPONSIBILITY_TYPES, EXTERNAL_IDENTIFIER_TYPES, createObligation, updateOccurrence, paymentTransactions, getAlerts, idempotencyDigest, isScheduledOn, paymentContext, categoryChain
+  validateDefinition, validateResponsibility, portionsFor, responsibilityFor, setResponsibility, RESPONSIBILITY_TYPES,
+  reassignEndedTenantObligations, releasePendingRentalLinks, finalizePendingRentalLinks, expirePendingRentalLinks, runResponsibilityMaintenance, PENDING_LINK_MAX_AGE_MS, EXTERNAL_IDENTIFIER_TYPES, createObligation, updateOccurrence, paymentTransactions, getAlerts, idempotencyDigest, isScheduledOn, paymentContext, categoryChain
 };

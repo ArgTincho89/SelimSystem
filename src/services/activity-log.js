@@ -50,6 +50,7 @@ const ROUTES = [
   r('DELETE', '/owners/:id', 'owner.delete', 'Eliminaste a', 'eliminar una persona o entidad', 'owner', { id: 'id', join: '' }),
   r('POST', '/documents', 'document.create', 'Adjuntaste un documento', 'adjuntar un documento', 'document'),
   r('POST', '/notes', 'note.create', 'Agregaste una nota', 'agregar una nota', null),
+  r('POST', '/obligations/pending-links/release', 'obligation.pending-release', 'Dejaste a cargo del propietario las obligaciones de un alquiler no guardado', 'liberar las obligaciones de un alquiler no guardado', null),
   r('POST', '/obligations', 'obligation.create', 'Creaste la obligación', 'crear una obligación', 'obligation', { join: '' }),
   r('PATCH', '/obligations/:id/responsibility', 'obligation.responsibility', 'Cambiaste el responsable de la obligación', 'cambiar el responsable de una obligación', 'obligation', { id: 'id', join: '' }),
   r('PUT', '/obligations/:id', 'obligation.update', 'Modificaste la obligación', 'modificar una obligación', 'obligation', { id: 'id', join: '' }),
@@ -65,6 +66,7 @@ const ROUTES = [
   r('PUT', '/rentals/declarations/:id', 'rental.declaration-update', 'Modificaste el alquiler de', 'modificar un alquiler', 'declaration', { id: 'id', join: '' }),
   r('POST', '/rentals/collections/:id/reverse', 'rental.collection-undo', 'Deshiciste el cobro del alquiler', 'deshacer un cobro de alquiler', 'collection', { id: 'id', withAmount: true }),
   r('POST', '/rentals/collections/:id/allocations', 'rental.collection-allocate', 'Asignaste un cobro al alquiler', 'asignar un cobro a un alquiler', 'collection', { id: 'id' }),
+  r('POST', '/rentals/collections/month', 'rental.collection', 'Registraste el cobro del alquiler', 'registrar el cobro del alquiler', 'collection'),
   r('POST', '/rentals/collections', 'rental.collection', 'Registraste el cobro del alquiler', 'registrar el cobro del alquiler', 'collection'),
   r('POST', '/rentals/:id/conditions', 'rental.condition', 'Registraste un ajuste en el alquiler', 'registrar un ajuste en un alquiler', 'contract', { id: 'id' }),
   r('POST', '/rentals/:id/occurrences/:occurrenceId/cancel', 'rental.occurrence-cancel', 'Cancelaste un período del alquiler', 'cancelar un período de un alquiler', 'contract', { id: 'id' }),
@@ -117,7 +119,8 @@ const LABELS = {
   collection: (db, userId, id) => {
     const periods = new Set();
     let assetName = '';
-    db.findAll('rentCollectionAllocations', userId).filter(item => item.collectionId === id).forEach(item => {
+    const ids = new Set(collectionIdsOf(db, userId, id));
+    db.findAll('rentCollectionAllocations', userId).filter(item => ids.has(item.collectionId)).forEach(item => {
       const occurrence = db.findById('rentOccurrences', item.occurrenceId, userId);
       if (!occurrence) return;
       periods.add(occurrence.period);
@@ -159,10 +162,19 @@ function matchRoute(method, path) {
   return null;
 }
 
-// Undo entries keep the amount that was collected.
+// A "Cobrar mes" group (or any of its modality collections) stands for all of its collections.
+function collectionIdsOf(db, userId, id) {
+  const groupId = db.findById('rentCollectionGroups', id, userId) ? id : db.findById('rentCollections', id, userId)?.groupId;
+  const group = groupId ? db.findById('rentCollectionGroups', groupId, userId) : null;
+  return group ? group.collectionIds : [id];
+}
+
+// Undo entries keep the amount that was collected (per currency for a multi-modality month).
 function withAmount(db, userId, collectionId, label) {
-  const collection = db.findById('rentCollections', collectionId, userId);
-  const amount = collection ? `importe ${collection.currencyCode} ${collection.amount}` : '';
+  const totals = new Map();
+  collectionIdsOf(db, userId, collectionId).map(id => db.findById('rentCollections', id, userId)).filter(Boolean)
+    .forEach(item => totals.set(item.currencyCode, Math.round(((totals.get(item.currencyCode) || 0) + item.amount) * 100) / 100));
+  const amount = totals.size ? `importe ${[...totals].map(([currency, value]) => `${currency} ${value}`).join(' + ')}` : '';
   return [label, amount].filter(Boolean).join(', ');
 }
 
@@ -231,12 +243,44 @@ function append(db, userId, entry) {
   return created;
 }
 
-function list(db, userId, { limit, before } = {}) {
+// True for a real calendar date written as YYYY-MM-DD.
+function isIsoDate(value) {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const date = new Date(`${value}T00:00:00Z`);
+  return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
+}
+
+function isValidTimezone(value) {
+  if (typeof value !== 'string' || !value) return false;
+  try { new Intl.DateTimeFormat('en', { timeZone: value }); return true; } catch { return false; }
+}
+
+// Returns a function mapping an ISO timestamp to its YYYY-MM-DD day in the given timezone.
+function dayIn(timezone) {
+  const formatter = new Intl.DateTimeFormat('en-CA', { timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit' });
+  return iso => {
+    const parts = formatter.formatToParts(new Date(iso)).reduce((result, part) => ({ ...result, [part.type]: part.value }), {});
+    return `${parts.year}-${parts.month}-${parts.day}`;
+  };
+}
+
+// from/to are inclusive YYYY-MM-DD days evaluated in `timezone` (callers validate them first).
+function list(db, userId, { limit, before, from, to, timezone = 'UTC' } = {}) {
   const size = Math.min(200, Math.max(1, Number.parseInt(limit, 10) || 50));
   const beforeValid = typeof before === 'string' && !Number.isNaN(Date.parse(before)) ? new Date(before).toISOString() : null;
-  const sorted = db.findAll(COLLECTION, userId).filter(item => !beforeValid || item.timestamp < beforeValid).sort((a, b) => (a.timestamp < b.timestamp ? 1 : -1));
+  const fromDay = isIsoDate(from) ? from : null;
+  const toDay = isIsoDate(to) ? to : null;
+  const localDay = fromDay || toDay ? dayIn(isValidTimezone(timezone) ? timezone : 'UTC') : null;
+  const inRange = item => {
+    if (!localDay) return true;
+    const day = localDay(item.timestamp);
+    return (!fromDay || day >= fromDay) && (!toDay || day <= toDay);
+  };
+  const sorted = db.findAll(COLLECTION, userId)
+    .filter(item => (!beforeValid || item.timestamp < beforeValid) && inRange(item))
+    .sort((a, b) => (a.timestamp < b.timestamp ? 1 : -1));
   const items = sorted.slice(0, size);
   return { items, nextBefore: sorted.length > size ? items[items.length - 1].timestamp : null };
 }
 
-module.exports = { COLLECTION, ROUTES, refineRoute, labelFor, buildMessage, append, pruneOld, list, resolveContext, isSkipped, normalizePath, periodLabel };
+module.exports = { COLLECTION, ROUTES, refineRoute, labelFor, buildMessage, append, pruneOld, list, resolveContext, isSkipped, normalizePath, periodLabel, isIsoDate, isValidTimezone };

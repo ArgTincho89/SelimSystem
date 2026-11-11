@@ -192,12 +192,26 @@ const ObligationsPage = {
     } catch { return null; }
   },
 
-  async showCreateModal(existing = null, defaults = {}) {
+  // "Nueva obligación" stacked on top of the rental declaration (same form, no navigation). `context`:
+  // { assetId, tenantNames, pendingDeclarationToken, activeContractId, onCreated(obligation, responsibilityType) }.
+  async showStackedCreate(context) {
+    try {
+      const [assets, owners, categories] = await Promise.all([API.assets.list(), API.owners.list(), API.categories.list()]);
+      this.assets = assets;
+      this.owners = owners;
+      this.categories = categories;
+    } catch (error) { showToast(error.message, 'error'); return; }
+    await this.showCreateModal(null, { assetId: context.assetId }, { stacked: context });
+  },
+
+  async showCreateModal(existing = null, defaults = {}, options = {}) {
+    const stacked = options.stacked || null;
     const form = create('form', { style: { display: 'grid', gap: '10px', maxHeight: '70vh', overflowY: 'auto' } });
     const title = this.field(form, 'Nombre', { required: true, value: existing?.title || '' });
     const type = this.select([['utility', 'Servicios'], ['insurance', 'Seguro'], ['tax', 'Impuesto'], ['loan', 'Préstamo'], ['maintenance', 'Mantenimiento'], ['subscription', 'Suscripción'], ['other', 'Otro']], existing?.type || 'utility');
     this.fieldWrap(form, 'Tipo', type);
     const asset = this.select([['', 'Sin bien vinculado'], ...this.assets.map(item => [item.id, item.name])], existing?.assetId || defaults.assetId || '');
+    if (stacked) asset.disabled = true;
     this.fieldWrap(form, 'Bien', asset);
     const providers = this.owners.filter(item => (item.roles || []).includes('provider'));
     const providerCategory = id => providers.find(item => item.id === id)?.expenseCategoryId || '';
@@ -218,6 +232,16 @@ const ObligationsPage = {
     const reminder = this.select([['0', 'El mismo día'], ['7', '7 días antes'], ['15', '15 días antes'], ['30', '30 días antes'], ['custom', 'Personalizado']], reminderValues.includes(String(existing?.reminderLeadDays ?? 7)) ? String(existing?.reminderLeadDays ?? 7) : 'custom');
     this.fieldWrap(form, 'Aviso', reminder);
     const customLead = this.field(form, 'Días de anticipación personalizados', { type: 'text', value: existing?.reminderLeadDays ?? 7 });
+    const customLeadWrap = customLead.parentNode;
+    // The custom lead days are only shown (and submitted) when "Aviso" is "Personalizado".
+    const syncCustomLead = () => {
+      const isCustom = reminder.value === 'custom';
+      customLeadWrap.style.display = isCustom ? '' : 'none';
+      customLead.disabled = !isCustom;
+      customLead.required = isCustom;
+    };
+    on(reminder, 'change', syncCustomLead);
+    syncCustomLead();
     const currencies = ['ARS', 'EUR', 'USD'];
     const currency = this.select(currencies.map(code => [code, code]), existing?.currencyCode || 'ARS');
     if (existing?.currencyCode && !currencies.includes(existing.currencyCode)) {
@@ -244,6 +268,18 @@ const ObligationsPage = {
     responsibilityWrap.appendChild(responsibilityHint);
     let activeContract = null;
     const syncResponsibility = async () => {
+      if (stacked) {
+        // The tenant typed in the (maybe unsaved) declaration can be responsible; it is confirmed when the declaration is saved.
+        const names = (stacked.tenantNames || []).join(', ');
+        const tenantOption = [...responsibilityType.options].find(option => option.value === 'tenant');
+        tenantOption.textContent = names ? `Inquilino (${names})` : 'Inquilino';
+        tenantOption.disabled = !names;
+        activeContract = stacked.activeContractId ? { id: stacked.activeContractId } : null;
+        if (names && !existing) responsibilityType.value = 'tenant';
+        responsibilityHint.textContent = !names ? 'Elegí el inquilino en la declaración para poder asignarle la obligación.'
+          : activeContract ? '' : 'Queda a cargo del inquilino al guardar la declaración de alquiler; si la cancelás, queda a cargo del propietario.';
+        return;
+      }
       activeContract = await this.activeContractFor(asset.value);
       const tenantOption = [...responsibilityType.options].find(option => option.value === 'tenant');
       tenantOption.disabled = !activeContract;
@@ -253,8 +289,6 @@ const ObligationsPage = {
     on(asset, 'change', syncResponsibility);
     await syncResponsibility();
     const notes = this.field(form, 'Notas', { multiline: true, value: existing?.notes || '' });
-    on(reminder, 'change', () => { customLead.disabled = reminder.value !== 'custom'; });
-    customLead.disabled = reminder.value !== 'custom';
     let effectiveFromDate;
     if (existing) effectiveFromDate = this.field(form, 'Aplicar cambios desde (obligatorio si hay pagos)', { type: 'date' });
     const submit = create('button', { className: 'btn btn-primary', type: 'submit', textContent: existing ? 'Guardar cambios' : 'Crear obligación' });
@@ -262,6 +296,8 @@ const ObligationsPage = {
     on(form, 'submit', async event => {
       event.preventDefault();
       if (!this.validMoney(amount)) return;
+      const isCustomLead = reminder.value === 'custom';
+      if (isCustomLead && !/^\d+$/.test(String(customLead.value).trim())) { alert('Ingresá los días de anticipación'); return; }
       try {
         const identifier = externalIdentifier.value.trim();
         const data = {
@@ -269,7 +305,7 @@ const ObligationsPage = {
           categoryId: category.value || null,
           currencyCode: currency.value, estimatedAmount: MoneyInput.value(amount),
           startDate: date.value, endDate: endDate.value || null, recurrenceFrequency: frequency.value || null,
-          reminderLeadDays: Number(reminder.value === 'custom' ? customLead.value : reminder.value), notes: notes.value,
+          reminderLeadDays: Number(isCustomLead ? customLead.value : reminder.value), notes: notes.value,
           externalIdentifier: identifier || null, externalIdentifierType: identifier ? identifierKind.value : null
         };
         // Legacy shared/third/none stay untouched unless the user picks Titular or Inquilino.
@@ -279,11 +315,19 @@ const ObligationsPage = {
           data.responsibleThirdEntityId = null;
           data.rentalContractId = responsibilityType.value === 'tenant' ? activeContract?.id || null : null;
         }
+        if (stacked && responsibilityType.value === 'tenant' && stacked.pendingDeclarationToken && !activeContract) data.pendingDeclarationToken = stacked.pendingDeclarationToken;
         if (existing && effectiveFromDate.value) {
           data.effectiveFromDate = effectiveFromDate.value;
           if (frequency.value !== (existing.recurrenceFrequency || '') && date.value === existing.startDate) {
             data.startDate = effectiveFromDate.value;
           }
+        }
+        if (stacked) {
+          const created = await API.obligations.create(data);
+          Modal.hide();
+          stacked.onCreated(created, responsibilityType.value);
+          showToast('Obligación creada');
+          return;
         }
         if (existing) await API.obligations.update(existing.id, data);
         else await API.obligations.create(data);
@@ -291,16 +335,18 @@ const ObligationsPage = {
         await this.render();
       } catch (error) { alert(error.message); }
     });
-    Modal.show(existing ? 'Editar obligación' : 'Nueva obligación', form);
+    (stacked ? Modal.push : Modal.show).call(Modal, existing ? 'Editar obligación' : 'Nueva obligación', form);
   },
 
   async editOccurrence(obligation, occurrence) {
-    const amount = prompt('Importe real del vencimiento', String(occurrence.actualDueAmount));
-    if (amount === null) return;
+    const amountText = prompt('Importe real del vencimiento', MoneyInput.format(occurrence.actualDueAmount, occurrence.currencyCode));
+    if (amountText === null) return;
+    const amount = MoneyInput.parse(amountText, occurrence.currencyCode);
+    if (amount === null) { alert(MoneyInput.INVALID_MESSAGE); return; }
     const scopeInput = prompt('Escribe "this" para editar solo este vencimiento o "future" para este y los futuros', 'this');
     if (scopeInput === null) return;
     const scope = scopeInput.trim().toLowerCase();
-    await this.runAction(() => API.obligations.updateOccurrence(obligation.id, occurrence.id, { actualDueAmount: Number(amount), scope }));
+    await this.runAction(() => API.obligations.updateOccurrence(obligation.id, occurrence.id, { actualDueAmount: amount, scope }));
   },
 
   async showResolveModal(obligation, occurrence) {

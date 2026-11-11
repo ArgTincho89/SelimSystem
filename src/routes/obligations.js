@@ -31,6 +31,8 @@ router.get('/', (req, res) => {
     return res.status(400).json({ error: 'El período de consulta no es válido' });
   }
   if (req.query.assetId && !db.findById('assets', req.query.assetId, userId)) return res.status(400).json({ error: 'El bien no es válido' });
+  // Lazy automatic reassignment (the daily job does the same): ended rentals hand obligations back to the owner.
+  obligations.reassignEndedTenantObligations(db, userId);
   if (req.query.providerEntityId) {
     const provider = db.findById('legalOwners', req.query.providerEntityId, userId);
     if (!provider || !(provider.roles || ['owner']).includes('provider')) return res.status(400).json({ error: 'El proveedor no es válido' });
@@ -65,6 +67,13 @@ router.get('/resolutions', (req, res) => {
 
 router.get('/alerts', (req, res) => res.json(obligations.getAlerts(req.app.locals.db, req.session.userId)));
 
+// "Declaración de alquiler" closed without saving: obligations created from it stay with the owner.
+router.post('/pending-links/release', (req, res) => {
+  const token = (req.body || {}).token;
+  if (typeof token !== 'string' || token.length < 8 || token.length > 120) return res.status(400).json({ error: 'El vínculo con la declaración de alquiler no es válido' });
+  res.json({ released: obligations.releasePendingRentalLinks(req.app.locals.db, req.session.userId, token) });
+});
+
 router.post('/', (req, res) => {
   const db = req.app.locals.db;
   const result = obligations.createObligation(db, req.session.userId, req.body || {});
@@ -75,8 +84,9 @@ router.post('/', (req, res) => {
 router.get('/:id', (req, res) => {
   const db = req.app.locals.db;
   const userId = req.session.userId;
+  if (!db.findById('obligations', req.params.id, userId)) return res.status(404).json({ error: 'Obligación no encontrada' });
+  obligations.reassignEndedTenantObligations(db, userId);
   const obligation = db.findById('obligations', req.params.id, userId);
-  if (!obligation) return res.status(404).json({ error: 'Obligación no encontrada' });
   const options = listOptions(req.query);
   if ((options.from && !obligations.validDate(options.from)) || (options.to && !obligations.validDate(options.to)) || (options.from && options.to && options.from > options.to)) return res.status(400).json({ error: 'El período de consulta no es válido' });
   res.json(responseFor(db, userId, obligation, options));

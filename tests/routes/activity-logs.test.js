@@ -100,6 +100,48 @@ describe('Activity logs', () => {
     expect((await logs(agent, '?limit=5')).items).toHaveLength(5);
   });
 
+  it('filters by inclusive from/to days in the requested timezone', async () => {
+    const agent = request.agent(f.app);
+    await agent.post('/api/auth/register').send({ email: 'audit-range@test.com', password: '123456', nombre: 'audit range' });
+    const id = f.db.findUserByEmail('audit-range@test.com').id;
+    f.db.replace('activityLogs', id, []);
+    const add = (timestamp, message) => activityLog.append(f.db, id, { timestamp, method: 'POST', route: '/goals', action: 'goal.create', outcome: 'success', statusCode: 201, message });
+    add('2026-03-01T10:00:00.000Z', 'Marzo 1');
+    add('2026-03-02T02:30:00.000Z', 'Marzo 2 UTC, marzo 1 en Buenos Aires');
+    add('2026-03-03T12:00:00.000Z', 'Marzo 3');
+    add('2026-03-05T12:00:00.000Z', 'Marzo 5');
+    const messagesOf = async query => (await logs(agent, query)).items.map(item => item.message);
+
+    expect(await messagesOf('?from=2026-03-02&to=2026-03-03&timezone=UTC')).toEqual(['Marzo 3', 'Marzo 2 UTC, marzo 1 en Buenos Aires']);
+    expect(await messagesOf('?from=2026-03-01&to=2026-03-01&timezone=America/Argentina/Buenos_Aires')).toEqual(['Marzo 2 UTC, marzo 1 en Buenos Aires', 'Marzo 1']);
+    expect(await messagesOf('?from=2026-03-04&timezone=UTC')).toEqual(['Marzo 5']);
+    expect(await messagesOf('?to=2026-03-01&timezone=UTC')).toEqual(['Marzo 1']);
+    expect(await messagesOf('?from=&to=')).toHaveLength(4);
+  });
+
+  it('paginates within a date range', async () => {
+    const agent = request.agent(f.app);
+    await agent.post('/api/auth/register').send({ email: 'audit-range-page@test.com', password: '123456', nombre: 'audit range page' });
+    const id = f.db.findUserByEmail('audit-range-page@test.com').id;
+    f.db.replace('activityLogs', id, []);
+    for (let i = 0; i < 5; i += 1) {
+      activityLog.append(f.db, id, { timestamp: `2026-04-10T1${i}:00:00.000Z`, method: 'POST', route: '/goals', action: 'goal.create', outcome: 'success', statusCode: 201, message: `Abril ${i}` });
+    }
+    activityLog.append(f.db, id, { timestamp: '2026-04-11T10:00:00.000Z', method: 'POST', route: '/goals', action: 'goal.create', outcome: 'success', statusCode: 201, message: 'Fuera de rango' });
+    const p1 = await logs(agent, '?from=2026-04-10&to=2026-04-10&timezone=UTC&limit=3');
+    expect(p1.items.map(item => item.message)).toEqual(['Abril 4', 'Abril 3', 'Abril 2']);
+    const p2 = await logs(agent, `?from=2026-04-10&to=2026-04-10&timezone=UTC&limit=3&before=${encodeURIComponent(p1.nextBefore)}`);
+    expect(p2.items.map(item => item.message)).toEqual(['Abril 1', 'Abril 0']);
+    expect(p2.nextBefore).toBeNull();
+  });
+
+  it('rejects invalid date filters and timezones', async () => {
+    expect((await f.agent.get('/api/activity-logs?from=2026-02-30')).status).toBe(400);
+    expect((await f.agent.get('/api/activity-logs?to=ayer')).status).toBe(400);
+    expect((await f.agent.get('/api/activity-logs?from=2026-03-05&to=2026-03-01')).status).toBe(400);
+    expect((await f.agent.get('/api/activity-logs?from=2026-03-01&timezone=Marte/Olympus')).status).toBe(400);
+  });
+
   it('swallows a logging error without affecting the response', async () => {
     const spy = jest.spyOn(activityLog, 'append').mockImplementation(() => { throw new Error('disk full'); });
     const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});

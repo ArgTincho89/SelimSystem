@@ -11,10 +11,11 @@ Característica: Registro y login
     Y inicio sesión con el usuario de prueba
     Entonces veo la barra de navegación
 
+  @default-experience
   Escenario: Elegir y recordar la experiencia de escritorio
     Dado que existe un usuario registrado
     Cuando abro la página de login
-    Entonces la experiencia móvil está seleccionada por defecto
+    Entonces la experiencia de escritorio está seleccionada por defecto
     Cuando selecciono la experiencia de escritorio
     Entonces la elección de escritorio queda guardada
     Y la preferencia de escritorio se conserva al recargar

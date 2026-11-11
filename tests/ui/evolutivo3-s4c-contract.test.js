@@ -12,22 +12,24 @@ describe('Evolutivo 3 S4c month-level rent UI contract', () => {
     expect(alerts).toContain('showRentMonthModal(alert.assetId, alert.monthKey');
     expect(alerts).not.toContain('{ single: true }');
   });
-  it('the month dialog has one MoneyInput + A/B line per modality, grouped per currency with an account each', () => {
+  // Rental batch: each modality now has its own date, payment method and destination account.
+  it('the month dialog has one MoneyInput + A/B line per modality with its own date, method and account', () => {
     const dialog = monthDialog();
     expect(dialog).toContain('MoneyInput.create');
     expect(dialog).toContain("'A (declarado)'");
     expect(dialog).toContain("'B (sin facturar)'");
-    expect(dialog).toContain('Cobro en ${currency}');
-    expect(dialog).toContain('Cuenta (${currency})');
+    expect(dialog).toContain('Cuenta de destino (${currency})');
+    expect(dialog).toContain("'Fecha de cobro'");
+    expect(dialog).toContain("'Medio de cobro'");
     expect(dialog).toContain("part.modality === 'locacion' ? 'A' : 'B'");
     expect(dialog).toContain('incluido');
     expect(dialog).toContain('kind.value === \'A\' && part.ivaPercent > 0');
   });
-  it('generates one idempotency key per currency group and keeps going after a partial failure', () => {
+  it('sends every modality in one grouped request with one idempotency key per dialog', () => {
     const dialog = monthDialog();
-    expect(dialog).toContain('idempotencyKey: crypto.randomUUID');
-    expect(dialog).toContain('group.done = true');
-    expect(dialog).toContain('cobro registrado');
+    expect(dialog).toContain('const idempotencyKey = crypto.randomUUID');
+    expect(dialog).toContain('API.rentals.collectMonth({ idempotencyKey, lines: payload })');
+    expect(dialog).toContain('seleccioná la cuenta de destino');
   });
   it('shows month rows in the history with the per-modality lines collapsed', () => {
     const assets = read('js/pages/assets.js');

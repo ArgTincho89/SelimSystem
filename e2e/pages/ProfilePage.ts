@@ -68,14 +68,20 @@ export class ProfilePage extends BasePage {
     await this.page.waitForSelector('.modal-overlay', { state: 'hidden', timeout: 10000 });
   }
 
+  // LOGS is its own Perfil section: date filter on top, collapsed day panels below.
   async openLogs(): Promise<void> {
-    await this.openAccountActions();
-    await this.page.click('#account-action-logs');
-    await expect(this.modal.locator('#activity-log-list')).toBeVisible();
+    const section = this.page.locator('#activity-log-section');
+    await section.scrollIntoViewIfNeeded();
+    await expect(section.locator('#activity-log-list')).toBeVisible();
+    await expect(section.locator('.activity-log-day').first()).toBeVisible();
   }
 
   async expectLogEntry(message: string): Promise<void> {
-    const entry = this.modal.locator('.activity-log-item').filter({ hasText: message }).first();
+    const section = this.page.locator('#activity-log-section');
+    // Today's panel is the newest one; entries only render once it is expanded.
+    const panel = section.locator('.activity-log-day').first();
+    if (!(await panel.evaluate(el => (el as HTMLDetailsElement).open))) await panel.locator('summary').click();
+    const entry = panel.locator('.activity-log-item').filter({ hasText: message }).first();
     await expect(entry).toBeVisible();
     await expect(entry).toContainText(/\d{2}\/\d{2}\/\d{4} \d{2}:\d{2}/);
   }

@@ -35,7 +35,7 @@ describe('Evolutivo 3 S6 sub-accounts UI contract', () => {
     expect(read('js/pages/settings.js')).toContain('accountTreeOptions(activeAccounts)');
   });
 
-  it('bumps the service worker cache to v38', () => {
-    expect(read('sw.js')).toContain("CACHE_NAME = 'selimsystem-v38'");
+  it('bumps the service worker cache to v38 or later', () => {
+    expect(Number(read('sw.js').match(/CACHE_NAME = 'selimsystem-v(\d+)'/)[1])).toBeGreaterThanOrEqual(38);
   });
 });

@@ -4,6 +4,8 @@ const { requireAuth } = require('../middleware/auth');
 const ledger = require('../services/account-ledger');
 const incomeAttribution = require('../services/income-attribution');
 const rentals = require('../services/rentals');
+const rentCollections = require('../services/rent-collections');
+const rentSchedule = require('../services/rent-schedule');
 
 const router = express.Router();
 router.use(requireAuth);
@@ -61,6 +63,15 @@ router.get('/months', (req, res) => {
   const views = db.findAll('rentalContracts', userId).filter(item => (!assetId || item.assetId === assetId) && item.status !== 'draft')
     .flatMap(item => contractResponse(db, userId, item, upperDate(db, userId, req.query.to)).occurrences);
   res.json(rentals.monthViews(views, today).reverse());
+});
+
+// "Próximos vencimientos" and "Pagos atrasados" of one property (rent months and owner obligations).
+router.get('/schedule', (req, res) => {
+  const db = req.app.locals.db;
+  const userId = req.session.userId;
+  const asset = typeof req.query.assetId === 'string' ? db.findById('assets', req.query.assetId, userId) : null;
+  if (!asset || asset.type !== 'immovable') return res.status(400).json({ error: 'El inmueble no es válido' });
+  res.json(rentSchedule.build(db, userId, asset));
 });
 
 router.get('/alerts', (req, res) => {
@@ -248,6 +259,22 @@ router.post('/collections', (req, res) => {
     return res.status(500).json({ error: 'No se pudo registrar el cobro' });
   }
   res.status(201).json(rentals.collectionView(db, userId, collection));
+});
+
+// "Cobrar mes" split by modality: one transaction per modality, grouped in one collection.
+router.post('/collections/month', (req, res) => {
+  const db = req.app.locals.db;
+  const userId = req.session.userId;
+  const result = rentCollections.createMonthCollection(db, userId, req.body || {});
+  if (result.error) return res.status(result.status).json({ error: result.error });
+  res.status(result.value.replayed ? 200 : 201).json(result.value);
+});
+
+// "Ver": read-only detail of a collection (group, child collection or transaction id; legacy collections too).
+router.get('/collections/:id/view', (req, res) => {
+  const detail = rentCollections.collectionDetail(req.app.locals.db, req.session.userId, req.params.id);
+  if (!detail) return res.status(404).json({ error: 'Cobro no encontrado' });
+  res.json(detail);
 });
 
 router.post('/collections/:id/reverse', (req, res) => {

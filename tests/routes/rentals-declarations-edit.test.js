@@ -158,7 +158,11 @@ describe('PUT /api/rentals/declarations/:id and POST .../end', () => {
     expect(f.db.findById('obligations', obligation.id, f.userId).responsibilityType).toBe('owner');
     expect(f.db.findById('assets', f.assetId, f.userId)).toMatchObject({ condition: 'not_rented', usageStatus: 'vacant' });
     expect((await f.agent.post(`/api/rentals/declarations/${created.id}/end`)).status).toBe(409);
-    const again = await f.declare([f.modality('comodato', { startDate: `${year}-01-01`, endDate: `${year}-12-31` })]);
+    // One rental per date range: the ended rental keeps its dates; the following ones are free.
+    const overlapping = await f.declare([f.modality('comodato', { startDate: `${year}-01-01`, endDate: `${year}-12-31` })]);
+    expect(overlapping.status).toBe(409);
+    const tomorrow = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
+    const again = await f.declare([f.modality('comodato', { startDate: tomorrow, endDate: `${year + 2}-12-31` })]);
     expect(again.status).toBe(201);
   });
 

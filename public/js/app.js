@@ -3,7 +3,8 @@ const App = {
   experienceKey: 'pate_experience',
 
   getExperience() {
-    return localStorage.getItem(this.experienceKey) === 'desktop' ? 'desktop' : 'mobile';
+    // Desktop is the default; only an explicitly remembered "mobile" choice selects the mobile experience.
+    return localStorage.getItem(this.experienceKey) === 'mobile' ? 'mobile' : 'desktop';
   },
 
   isDesktop() {
