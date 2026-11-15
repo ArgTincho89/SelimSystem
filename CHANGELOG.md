@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.12.0] - 2026-11-15
+
+### Added
+- Pantalla de Logs (botón en Perfil) con búsqueda sin distinguir acentos, filtros opcionales Desde/Hasta y la fecha y hora a la izquierda de cada acción.
+- Historial de obligaciones del bien: selector de mes (o todos desde la creación), agrupado por mes y tipo, con detalle de cada registro y visor de comprobantes con zoom.
+- Tipo de transacción "Transferencia" entre cuentas (cuenta de salida, cuenta de ingreso, monto, título y nota): afecta los saldos pero no ingresos, gastos ni ahorro.
+- Registro de pago de obligaciones con título, notas, medio de pago precargado y comprobante opcional.
+
+### Changed
+- Obligaciones: estados "Pendiente" (naranja dentro del mes de vencimiento) y "Vencido" (rojo y negrita), sin "Confirmar" ni "Previsto".
+- Tarjeta de obligación con etiquetas en negrita (Tipo, Inmueble, Proveedor, Responsabilidad, Cuenta, Monto estimado, Frecuencia, Aviso), y acciones Editar, Eliminar y Registrar pago.
+- Bienes: "Ver historial" abre el historial de obligaciones; la ficha completa pasa al botón "Ficha".
+- Inicio: se quitó el bloque "Movimientos entre cuentas".
+
 ## [1.11.17] - 2026-11-05
 
 ### Added

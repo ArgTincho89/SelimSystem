@@ -1,6 +1,6 @@
 {
   "name": "selimsystem",
-  "version": "1.11.20",
+  "version": "1.12.0",
   "description": "Herramienta de finanzas personales multiusuario",
   "main": "src/server.js",
   "scripts": {

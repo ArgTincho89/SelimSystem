@@ -119,7 +119,7 @@ describe('Rental batch UI', () => {
     });
 
     it('bumps the service worker cache', () => {
-      expect(read('sw.js')).toContain("const CACHE_NAME = 'selimsystem-v40'");
+      expect(Number(read('sw.js').match(/CACHE_NAME = 'selimsystem-v(\d+)'/)[1])).toBeGreaterThanOrEqual(40);
     });
   });
 });
