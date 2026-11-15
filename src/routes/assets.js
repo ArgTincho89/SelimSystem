@@ -296,6 +296,14 @@ router.get('/:id/monthly-view', (req, res) => {
   res.json(result);
 });
 
+router.get('/:id/obligation-history', (req, res) => {
+  const db = req.app.locals.db;
+  const userId = req.session.userId;
+  const asset = db.findById('assets', req.params.id, userId);
+  if (!asset) return res.status(404).json({ error: 'Bien no encontrado' });
+  res.json(economicOverview.obligationHistory(db, userId, asset));
+});
+
 router.get('/:id/file', (req, res) => {
   const db = req.app.locals.db;
   const userId = req.session.userId;

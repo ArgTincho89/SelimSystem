@@ -446,6 +446,32 @@ function resolutionState(occurrence, resolution) {
 }
 
 /**
+ * One obligation occurrence as a monthly-view row: amounts, documents (occurrence, payment and
+ * resolution receipts) and payments. Shared by the monthly view and the obligation history.
+ */
+function obligationRow(db, userId, obligation, item, allDocuments) {
+  const state = resolutionState(item, item.resolution);
+  const paymentIds = new Set(item.paymentIds || []);
+  const resolutionDocIds = new Set(item.resolution?.documentIds || []);
+  const rowDocuments = allDocuments.filter(doc => doc.occurrenceId === item.id || paymentIds.has(doc.transactionId) || resolutionDocIds.has(doc.id))
+    .map(doc => ({ id: doc.id, title: doc.title, fileName: doc.fileName, contentType: doc.contentType, mimeType: doc.contentType }));
+  const rowPayments = (item.paymentIds || []).map(id => db.findById('transactions', id, userId)).filter(Boolean).map(tx => ({
+    transactionId: tx.id, date: tx.fecha, amountMinor: Number.isSafeInteger(tx.amountMinor) ? tx.amountMinor : ledger.toMinorUnits(tx.monto, tx.currencyCode || item.currencyCode),
+    accountName: db.findById('accounts', tx.accountId, userId)?.nombre || null, paymentMethod: tx.paymentMethod || ''
+  }));
+  return {
+    occurrenceId: item.id, obligationId: obligation.id, title: item.title || obligation.title,
+    responsibilityType: obligations.responsibilityFor(obligation, item).responsibilityType, date: item.date,
+    estimatedMinor: ledger.toMinorUnits(item.actualDueAmount, item.currencyCode),
+    actualMinor: ledger.toMinorUnits(item.totalPaid, item.currencyCode),
+    status: item.status, currencyCode: item.currencyCode,
+    documentIds: allDocuments.filter(doc => doc.occurrenceId === item.id).map(doc => doc.id),
+    documents: rowDocuments, payments: rowPayments, resolvedAt: item.resolution?.resolvedAt || null,
+    resolutionStatus: state.status, resolutionAmountMinor: state.amountMinor
+  };
+}
+
+/**
  * Read-only month-by-month economic table for an asset. Lazily generated occurrences are kept in
  * memory only (see alerts.readOnlyView); tenant resolutions are never added to expenses.
  */
@@ -498,25 +524,7 @@ function monthlyView(db, userId, asset, options = {}) {
     occurrences.filter(item => item.status !== 'cancelled' && inRange(item.date)).forEach(item => {
       dateOf.set(`occurrenceId:${item.id}`, item.date);
       const bucket = byMonth.get(item.date.slice(0, 7));
-      const state = resolutionState(item, item.resolution);
-      const paymentIds = new Set(item.paymentIds || []);
-      const resolutionDocIds = new Set(item.resolution?.documentIds || []);
-      const rowDocuments = allDocuments.filter(doc => doc.occurrenceId === item.id || paymentIds.has(doc.transactionId) || resolutionDocIds.has(doc.id))
-        .map(doc => ({ id: doc.id, title: doc.title, fileName: doc.fileName, contentType: doc.contentType, mimeType: doc.contentType }));
-      const rowPayments = (item.paymentIds || []).map(id => db.findById('transactions', id, userId)).filter(Boolean).map(tx => ({
-        transactionId: tx.id, date: tx.fecha, amountMinor: Number.isSafeInteger(tx.amountMinor) ? tx.amountMinor : ledger.toMinorUnits(tx.monto, tx.currencyCode || item.currencyCode),
-        accountName: db.findById('accounts', tx.accountId, userId)?.nombre || null, paymentMethod: tx.paymentMethod || ''
-      }));
-      bucket.obligations.push({
-        occurrenceId: item.id, obligationId: obligation.id, title: item.title || obligation.title,
-        responsibilityType: obligations.responsibilityFor(obligation, item).responsibilityType, date: item.date,
-        estimatedMinor: ledger.toMinorUnits(item.actualDueAmount, item.currencyCode),
-        actualMinor: ledger.toMinorUnits(item.totalPaid, item.currencyCode),
-        status: item.status, currencyCode: item.currencyCode,
-        documentIds: allDocuments.filter(doc => doc.occurrenceId === item.id).map(doc => doc.id),
-        documents: rowDocuments, payments: rowPayments, resolvedAt: item.resolution?.resolvedAt || null,
-        resolutionStatus: state.status, resolutionAmountMinor: state.amountMinor
-      });
+      bucket.obligations.push(obligationRow(db, userId, obligation, item, allDocuments));
       if (item.resolution?.notes) bucket.notes.push(`${item.title || obligation.title}: ${item.resolution.notes}`);
     });
   });
@@ -567,8 +575,57 @@ function monthlyView(db, userId, asset, options = {}) {
   };
 }
 
+/**
+ * Lean obligation history of an asset: every non-cancelled occurrence grouped by month, newest month
+ * first, from the asset creation (or its earliest obligation) up to the current month (at most 120 months).
+ */
+function obligationHistory(db, userId, asset) {
+  const current = ledger.localDateForUser(db, userId).slice(0, 7);
+  const assetObligations = db.findAll('obligations', userId).filter(obligation => obligation.assetId === asset.id);
+  const starts = [String(asset.createdAt || '').slice(0, 7), ...assetObligations.map(obligation => String(obligation.startDate || '').slice(0, 7))]
+    .filter(month => validMonth(month) && month <= current);
+  let from = starts.length ? starts.reduce((min, month) => (month < min ? month : min)) : current;
+  const earliest = shiftMonth(current, -(MAX_MONTHLY_MONTHS - 1));
+  if (from < earliest) from = earliest;
+  const months = monthsBetween(`${from}-01`, `${current}-01`);
+  const range = { from: `${from}-01`, to: monthRange(current).to };
+  const view = alerts.readOnlyView(db);
+  const byMonth = new Map(months.map(month => [month, []]));
+  const allDocuments = db.findAll('documents', userId);
+  const providers = new Map(db.findAll('legalOwners', userId).map(owner => [owner.id, owner.name]));
+  assetObligations.forEach(obligation => {
+    let occurrences;
+    try {
+      occurrences = obligations.occurrencesFor(view, userId, obligation, range);
+    } catch {
+      return;
+    }
+    occurrences.filter(item => item.status !== 'cancelled' && byMonth.has(item.date.slice(0, 7))).forEach(item => {
+      const row = obligationRow(db, userId, obligation, item, allDocuments);
+      byMonth.get(item.date.slice(0, 7)).push({
+        ...row,
+        type: obligation.type || 'other',
+        providerName: providers.get(obligation.providerEntityId) || null,
+        obligationTitle: obligation.title,
+        dueState: item.dueState,
+        payments: row.payments.map(payment => {
+          const tx = db.findById('transactions', payment.transactionId, userId);
+          return { ...payment, title: tx?.titulo || '', notes: tx?.comments || '' };
+        })
+      });
+    });
+  });
+  return {
+    assetId: asset.id, from, to: current,
+    months: [...months].reverse().map(month => ({
+      month,
+      rows: byMonth.get(month).sort((a, b) => a.date.localeCompare(b.date) || String(a.title).localeCompare(String(b.title)))
+    }))
+  };
+}
+
 module.exports = {
-  monthlyView,
+  monthlyView, obligationRow, obligationHistory,
   validMonth, monthRange, monthsBetween, postedMovements, actualMovements, globalOverview, allocationsForTransaction,
   movementAttributions, refundAllocations, periodForAsset, assetEconomics
 };

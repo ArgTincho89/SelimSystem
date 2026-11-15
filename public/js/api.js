@@ -144,6 +144,9 @@ const API = {
       return API.get(`/assets/${encodeURIComponent(id)}/economics${query.toString() ? `?${query}` : ''}`);
     },
     file(id, horizonDays) { return API.get(`/assets/${encodeURIComponent(id)}/file${horizonDays ? `?horizonDays=${encodeURIComponent(horizonDays)}` : ''}`); },
+    obligationHistory(id) {
+      return API.get(`/assets/${encodeURIComponent(id)}/obligation-history`);
+    },
     monthlyView(id, filters = {}) {
       const query = new URLSearchParams(Object.entries(filters).filter(([, value]) => value !== '' && value != null));
       return API.get(`/assets/${encodeURIComponent(id)}/monthly-view${query.toString() ? `?${query}` : ''}`);
