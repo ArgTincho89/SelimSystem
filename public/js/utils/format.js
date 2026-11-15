@@ -134,8 +134,8 @@ const STATUS_LABELS = {
   paid: 'Pagado',
   resolved: 'Resuelto',
   cancelled: 'Cancelado',
-  expected: 'Esperado',
-  confirmed: 'Confirmado',
+  expected: 'Pendiente',
+  confirmed: 'Pendiente',
   posted: 'Contabilizado',
   active: 'Activo',
   ended: 'Finalizado',
@@ -144,6 +144,17 @@ const STATUS_LABELS = {
   scheduled: 'Programado',
   reversed: 'Anulado'
 };
+
+// Badge for an obligation occurrence: { label, className }. Uses the server `dueState`
+// (paid | cancelled | overdue | due-soon | pending); anything else reads as "Pendiente".
+function dueBadge(occurrence) {
+  const state = occurrence && occurrence.dueState;
+  if (state === 'paid') return { label: 'Pagado', className: 'badge-resolved' };
+  if (state === 'cancelled') return { label: 'Cancelado', className: 'due-cancelled' };
+  if (state === 'overdue') return { label: 'Vencido', className: 'due-overdue' };
+  if (state === 'due-soon') return { label: 'Pendiente', className: 'due-soon' };
+  return { label: 'Pendiente', className: 'due-pending' };
+}
 
 // Spanish label for a status code. Unknown or empty values never leak the raw code.
 function statusLabel(status) {

@@ -603,3 +603,66 @@ body.desktop-mode .fab {
   color: var(--success, #2e7d32);
   font-weight: 600;
 }
+
+/* Obligation due states: orange within the due month, bold red once overdue. */
+.due-soon {
+  color: var(--due-soon, #FF9F43);
+  font-weight: 600;
+}
+
+.due-overdue {
+  color: var(--danger);
+  font-weight: 700;
+}
+
+.due-pending,
+.due-cancelled {
+  color: var(--text-muted);
+}
+
+/* Label/value rows (bold label, plain value). */
+.label-value {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  font-size: var(--font-sm);
+}
+
+.label-value > strong {
+  font-weight: 700;
+}
+
+/* Activity log row: date/time on the left, description on the right. */
+.log-row {
+  display: grid;
+  grid-template-columns: 150px 1fr;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border, rgba(255, 255, 255, 0.08));
+  font-size: var(--font-sm);
+}
+
+/* Receipt viewer (image zoom + pdf iframe). */
+.receipt-viewer {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 60vh;
+}
+
+.receipt-viewer iframe {
+  width: 100%;
+  height: 70vh;
+  border: 0;
+  background: #fff;
+}
+
+.receipt-viewer .receipt-image-frame {
+  overflow: auto;
+  max-height: 70vh;
+}
+
+.receipt-viewer img {
+  transform-origin: top left;
+  max-width: 100%;
+}

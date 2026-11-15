@@ -37,7 +37,7 @@ const Modal = {
       'aria-modal': 'true',
       'aria-labelledby': titleId,
       tabindex: '-1',
-      style: { width: '100%', maxWidth: '440px', maxHeight: '90vh', overflowY: 'auto' }
+      style: { width: '100%', maxWidth: options.width || '440px', maxHeight: '90vh', overflowY: 'auto' }
     });
 
     const header = create('div', {

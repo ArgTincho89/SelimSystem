@@ -16,7 +16,7 @@ describe('Evolutivo 3 S1 format helpers', () => {
   it.each([
     ['pending', 'Pendiente'], ['overdue', 'Vencido'], ['partially_collected', 'Parcial'], ['partial', 'Parcial'],
     ['collected', 'Cobrado'], ['paid', 'Pagado'], ['resolved', 'Resuelto'], ['cancelled', 'Cancelado'],
-    ['expected', 'Esperado'], ['confirmed', 'Confirmado'], ['posted', 'Contabilizado'], ['active', 'Activo'],
+    ['expected', 'Pendiente'], ['confirmed', 'Pendiente'], ['posted', 'Contabilizado'], ['active', 'Activo'],
     ['ended', 'Finalizado'], ['draft', 'Borrador'], ['expiring', 'Por vencer'], ['scheduled', 'Programado'], ['reversed', 'Anulado']
   ])('maps %s to %s', (code, label) => {
     expect(statusLabel(code)).toBe(label);
