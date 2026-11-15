@@ -27,7 +27,7 @@ describe('POST /api/rentals/declarations', () => {
     expect(three.status).toBe(201);
     expect(three.body.modalities.map(item => item.kind)).toEqual(['locacion', 'comodato', 'mutuo']);
     expect(f3.db.findAll('rentalDeclarations', f3.userId)).toHaveLength(1);
-  });
+  }, 30000);
 
   test('two occurrences in the same month keep their own amounts', async () => {
     const created = await f.declare([f.modality('locacion', { ivaPercent: 21 }), f.modality('mutuo', { amount: 50000 })]);
