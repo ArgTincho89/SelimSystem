@@ -249,10 +249,14 @@ router.post('/:id/occurrences/:occurrenceId/payments', (req, res) => {
   const occurrence = db.findById('obligationOccurrences', req.params.occurrenceId, userId);
   if (!obligation || !occurrence || occurrence.obligationId !== obligation.id) return res.status(404).json({ error: 'Ocurrencia no encontrada' });
   if (occurrence.status === 'cancelled') return res.status(409).json({ error: 'La ocurrencia está cancelada' });
-  const { amount, accountId, categoryId, idempotencyKey, paymentMethodId, paymentMethod } = req.body || {};
+  const { amount, accountId, categoryId, idempotencyKey, paymentMethodId, paymentMethod, title, notes } = req.body || {};
   if (typeof idempotencyKey !== 'string' || idempotencyKey.length < 8 || idempotencyKey.length > 120) return res.status(400).json({ error: 'Se requiere una clave de idempotencia válida' });
+  if (title !== undefined && title !== null && (typeof title !== 'string' || title.trim().length > 100)) return res.status(400).json({ error: 'El título no es válido' });
+  if (notes !== undefined && notes !== null && (typeof notes !== 'string' || notes.length > 1000)) return res.status(400).json({ error: 'Las notas no son válidas' });
+  const paymentTitle = typeof title === 'string' ? title.trim() : '';
+  const paymentNotes = typeof notes === 'string' ? notes.trim() : '';
   const keyHash = obligations.idempotencyDigest(idempotencyKey);
-  const fingerprint = obligations.idempotencyDigest(JSON.stringify({ amount, accountId: accountId || null, categoryId: categoryId || null, date: req.body.date || null, paymentMethodId: paymentMethodId || null, paymentMethod: paymentMethod || null }));
+  const fingerprint = obligations.idempotencyDigest(JSON.stringify({ amount, accountId: accountId || null, categoryId: categoryId || null, date: req.body.date || null, paymentMethodId: paymentMethodId || null, paymentMethod: paymentMethod || null, title: paymentTitle || null, notes: paymentNotes || null }));
   const existing = db.findAll('transactions', userId).find(tx => tx.obligationIdempotencyKey === keyHash);
   if (existing) {
     if (existing.obligationOccurrenceId !== occurrence.id || existing.obligationPaymentFingerprint !== fingerprint) return res.status(409).json({ error: 'La clave de idempotencia ya fue utilizada para otro pago' });
@@ -279,7 +283,7 @@ router.post('/:id/occurrences/:occurrenceId/payments', (req, res) => {
   try {
     transaction = db.create('transactions', {
       userId, tipo: 'expense', monto: ledger.fromMinorUnits(amountMinor, account.currency), amountMinor,
-      accountId: account.id, currencyCode: account.currency, titulo: occurrence.title || obligation.title,
+      accountId: account.id, currencyCode: account.currency, titulo: paymentTitle || occurrence.title || obligation.title, comments: paymentNotes,
       categoryId: category.id, fecha: paymentDate, recurrente: false, frecuencia: null, fechaFin: null,
       clasificacion: 'variable', obligationId: obligation.id, obligationOccurrenceId: occurrence.id,
       obligationIdempotencyKey: keyHash, obligationPaymentFingerprint: fingerprint,

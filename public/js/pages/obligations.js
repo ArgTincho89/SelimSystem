@@ -502,8 +502,12 @@ const ObligationsPage = {
     const category = this.select([['', 'Seleccionar categoría'], ...this.categories.map(item => [item.id, item.nombre])], context.categoryId || obligation.categoryId || '');
     category.required = true;
     this.fieldWrap(form, 'Categoría', category);
-    const method = this.select([['', 'Sin medio de pago'], ...this.paymentMethods.map(item => [item.id, `${item.name}${item.lastFour ? ` ···· ${item.lastFour}` : ''}`])], '');
+    const method = this.select([['', 'Sin medio de pago'], ...this.paymentMethods.map(item => [item.id, `${item.name}${item.lastFour ? ` ···· ${item.lastFour}` : ''}`])], context.suggestedPaymentMethodId || '');
     this.fieldWrap(form, 'Medio de pago (opcional)', method);
+    const payTitle = this.field(form, 'Título (opcional)', { value: occurrence.title || obligation.title || '' });
+    payTitle.maxLength = 100;
+    const payNotes = this.field(form, 'Notas (opcional)', { multiline: true });
+    payNotes.maxLength = 1000;
     const file = create('input', { className: 'form-control', type: 'file', accept: '.pdf,.png,.jpg,.jpeg,.webp,.txt' });
     this.fieldWrap(form, 'Comprobante (opcional)', file);
     const submit = create('button', { className: 'btn btn-primary', type: 'submit', textContent: 'Registrar pago' });
@@ -518,7 +522,9 @@ const ObligationsPage = {
       try {
         result = await API.obligations.pay(obligation.id, occurrence.id, {
           amount: MoneyInput.value(amount), accountId: accountSelect.value, categoryId: category.value, date: date.value,
-          ...(method.value ? { paymentMethodId: method.value } : {}), idempotencyKey
+          ...(method.value ? { paymentMethodId: method.value } : {}),
+          ...(payTitle.value.trim() ? { title: payTitle.value.trim() } : {}),
+          ...(payNotes.value.trim() ? { notes: payNotes.value.trim() } : {}), idempotencyKey
         });
       } catch (error) { submit.disabled = false; alert(error.message); return; }
       Modal.hide();

@@ -589,6 +589,7 @@ function paymentContext(db, userId, obligation, occurrence) {
     occurrence: { id: occurrence.id, date: occurrence.date, currencyCode: occurrence.currencyCode, remainingAmount: view.remainingAmount },
     responsibilityType, categoryId: categoryChain(db, userId, obligation, occurrence),
     accounts: accounts.map(item => ({ id: item.id, name: item.nombre || item.name, currency: item.currency, ownerId: item.ownerId || null, parentId: item.parentId || null, ownerName: owners.get(item.ownerId) || null, primary: Boolean(item.primary) })),
+    suggestedPaymentMethodId: obligation.paymentMethodId && db.findById('paymentMethods', obligation.paymentMethodId, userId) ? obligation.paymentMethodId : null,
     suggestedAccountId: null, accountSource: 'none', warning: null, blocked: false, blockedReason: null,
     paymentMethods: db.findAll('paymentMethods', userId)
   };
