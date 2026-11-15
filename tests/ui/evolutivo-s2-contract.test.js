@@ -14,7 +14,7 @@ describe('Evolutivo S2 UI contract', () => {
   });
 
   it('shows the responsibility in the obligation list', () => {
-    expect(read('js/pages/obligations.js')).toContain('Responsabilidad: ${this.responsibilityLabel(item)}');
+    expect(read('js/pages/obligations.js')).toContain("this.labelValue('Responsabilidad', this.responsibilityLabel(item))");
   });
 
   it('lets the API client link documents to the new targets', () => {

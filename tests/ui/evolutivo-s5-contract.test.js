@@ -13,7 +13,8 @@ describe('Evolutivo S5 UI contract', () => {
     const source = read('js/pages/obligations.js');
     expect(source).toContain("resolved: 'Resuelto por inquilino'");
     expect(source).toContain("['resolved', 'Resueltas por inquilino']");
-    expect(source).toContain('badge-resolved');
+    expect(source).toContain('dueBadge(occurrence)');
+    expect(read('js/utils/format.js')).toContain('badge-resolved');
     expect(source).toContain('Propietario ${occurrence.ownerDueAmount}');
     expect(source).toContain('Inquilino ${occurrence.tenantDueAmount}');
     expect(source).toContain('Resolver (pagó el inquilino)');

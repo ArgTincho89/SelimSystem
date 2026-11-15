@@ -1,3 +1,10 @@
+// Obligation types (value, Spanish label). Unknown or empty types read as "Otro".
+const OBLIGATION_TYPES = [['utility', 'Servicios'], ['insurance', 'Seguro'], ['tax', 'Impuesto'], ['loan', 'Préstamo'], ['maintenance', 'Mantenimiento'], ['subscription', 'Suscripción'], ['other', 'Otro']];
+
+function obligationTypeLabel(value) {
+  return OBLIGATION_TYPES.find(([code]) => code === value)?.[1] || 'Otro';
+}
+
 const ObligationsPage = {
   items: [],
   assets: [],
@@ -73,24 +80,25 @@ const ObligationsPage = {
     const form = create('form', { className: 'card', style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(145px, 1fr))', gap: '10px', marginBottom: '16px' } });
     const asset = this.filterSelect('Bien', [['', 'Todos los bienes'], ...this.assets.map(item => [item.id, item.name])], filters.assetId || '');
     const provider = this.filterSelect('Proveedor', [['', 'Todos los proveedores'], ...this.owners.filter(item => (item.roles || []).includes('provider')).map(item => [item.id, item.name])], filters.providerEntityId || '');
-    const status = this.filterSelect('Estado', [['', 'Todos'], ['expected', 'Previstas'], ['confirmed', 'Confirmadas'], ['partial', 'Parciales'], ['paid', 'Pagadas'], ['resolved', 'Resueltas por inquilino'], ['overdue', 'Vencidas'], ['cancelled', 'Canceladas']], filters.status || '');
-    const type = this.filterInput('Tipo', filters.type || '');
+    const status = this.filterSelect('Estado', [['', 'Todos'], ['pending', 'Pendientes'], ['partial', 'Parciales'], ['paid', 'Pagadas'], ['resolved', 'Resueltas por inquilino'], ['overdue', 'Vencidas']], filters.status || '');
+    const type = this.filterSelect('Tipo', [['', 'Todos los tipos'], ...OBLIGATION_TYPES], filters.type || '');
     const from = this.filterInput('Desde (AAAA-MM-DD)', filters.from || '', 'date');
     const to = this.filterInput('Hasta (AAAA-MM-DD)', filters.to || '', 'date');
     [asset, provider, status, type, from, to].forEach(field => form.appendChild(field));
     form.append(create('button', { className: 'btn btn-secondary', type: 'submit', textContent: 'Filtrar' }), create('button', { className: 'btn btn-ghost', type: 'button', textContent: 'Limpiar', onClick: () => this.render() }));
     on(form, 'submit', event => {
       event.preventDefault();
-      this.render({ assetId: asset.value, providerEntityId: provider.value, status: status.value, type: type.value.trim(), from: from.value, to: to.value });
+      this.render({ assetId: asset.value, providerEntityId: provider.value, status: status.value, type: type.value, from: from.value, to: to.value });
     });
     content.appendChild(form);
 
-    if (!this.items.length) {
+    const visibleItems = this.items.filter(item => item.status !== 'cancelled');
+    if (!visibleItems.length) {
       content.appendChild(create('div', { className: 'empty-state', innerHTML: '<div class="empty-state-icon">📅</div><p class="empty-state-text">No hay obligaciones que coincidan con la búsqueda</p>' }));
       return;
     }
     const list = create('div', { style: { display: 'grid', gap: '12px' } });
-    this.items.forEach(obligation => list.appendChild(this.renderObligation(obligation)));
+    visibleItems.forEach(obligation => list.appendChild(this.renderObligation(obligation)));
     content.appendChild(list);
   },
 
@@ -116,33 +124,81 @@ const ObligationsPage = {
     return this.IDENTIFIER_TYPES.find(([value]) => value === type)?.[1] || 'Identificador';
   },
 
+  // One "Label: value" line (bold label); null when there is no value.
+  labelValue(label, value) {
+    if (value === undefined || value === null || value === '') return null;
+    return create('div', { className: 'label-value' }, [
+      create('strong', { textContent: `${label}:` }),
+      create('span', { textContent: value })
+    ]);
+  },
+
+  // Occurrences shown on a card: every unpaid overdue one, plus the first pending one from today on.
+  selectOccurrences(occurrences, today = getToday()) {
+    const open = (occurrences || []).filter(occurrence => !['paid', 'resolved', 'cancelled'].includes(occurrence.status));
+    const sorted = [...open].sort((a, b) => a.date.localeCompare(b.date));
+    const overdue = sorted.filter(occurrence => occurrence.status === 'overdue');
+    const next = sorted.find(occurrence => occurrence.status !== 'overdue' && occurrence.date >= today);
+    return next ? [...overdue, next] : overdue;
+  },
+
+  // The occurrence a card-level "Registrar pago" pays: the oldest unpaid one shown.
+  oldestPayable(shown) {
+    return [...shown].sort((a, b) => a.date.localeCompare(b.date)).find(occurrence => !this.isPaidOccurrence(occurrence)) || null;
+  },
+
+  isPaidOccurrence(occurrence) {
+    return ['paid', 'resolved', 'cancelled'].includes(occurrence.status);
+  },
+
+  reminderLabel(days) {
+    const value = Number(days);
+    if (!value) return 'El mismo día';
+    return `${value} ${value === 1 ? 'día' : 'días'}`;
+  },
+
   renderObligation(item) {
     const asset = this.assets.find(record => record.id === item.assetId)?.name;
     const provider = this.owners.find(record => record.id === item.providerEntityId)?.name;
-    const details = create('div', {}, [
+    const account = this.accounts.find(record => record.id === item.accountId);
+    const amount = Number.isFinite(Number(item.estimatedAmount)) ? formatearMonedaConCodigo(item.estimatedAmount, item.currencyCode) : '';
+    const identifier = item.externalIdentifier ? `${this.identifierTypeLabel(item.externalIdentifierType)}: ${item.externalIdentifier}` : '';
+    const lines = [
+      this.labelValue('Tipo', obligationTypeLabel(item.type)),
+      this.labelValue('Inmueble', asset),
+      this.labelValue('Proveedor', provider),
+      this.labelValue('Responsabilidad', this.responsibilityLabel(item)),
+      this.labelValue('Cuenta', account ? (account.nombre || account.name) : ''),
+      this.labelValue('Identificador', identifier),
+      this.labelValue('Monto estimado', amount),
+      this.labelValue('Frecuencia', item.recurrenceFrequency ? this.frequencyLabel(item.recurrenceFrequency) : 'Única vez'),
+      this.labelValue('Aviso', this.reminderLabel(item.reminderLeadDays))
+    ].filter(Boolean);
+    const details = create('div', { style: { display: 'grid', gap: '2px' } }, [
       create('h3', { textContent: item.title, style: { marginBottom: '4px' } }),
-      create('div', { className: 'text-muted', textContent: [item.type, asset, provider].filter(Boolean).join(' · ') }),
-      create('div', { className: 'text-muted', textContent: `Responsabilidad: ${this.responsibilityLabel(item)}` }),
-      ...(item.externalIdentifier ? [create('div', { className: 'text-muted', textContent: `${this.identifierTypeLabel(item.externalIdentifierType)}: ${item.externalIdentifier}` })] : []),
-      create('div', { className: 'text-muted', textContent: `${item.estimatedAmount} ${item.currencyCode} estimado · ${item.recurrenceFrequency ? this.frequencyLabel(item.recurrenceFrequency) : 'Única vez'} · Aviso ${item.reminderLeadDays} días` })
+      ...lines
     ]);
     const card = create('article', { className: 'card', style: { display: 'grid', gap: '10px' }, dataset: { obligationId: item.id } }, [details]);
-    const occurrences = (item.occurrences || []).filter(occurrence => occurrence.status !== 'cancelled').slice(-8);
+    const occurrences = this.selectOccurrences(item.occurrences);
     if (occurrences.length) {
       const table = create('div', { style: { display: 'grid', gap: '6px' } });
       occurrences.forEach(occurrence => {
         const portions = occurrence.tenantDueAmount !== undefined
           ? ` · Propietario ${occurrence.ownerDueAmount} (pendiente ${occurrence.remainingAmount}) · Inquilino ${occurrence.tenantDueAmount} (${occurrence.resolution ? 'resuelto' : 'pendiente'})`
           : '';
-        const label = create('span', { className: occurrence.status === 'resolved' ? 'badge-resolved' : '', textContent: `${occurrence.date} · ${this.statusLabel(occurrence.status)} · Pagado ${occurrence.totalPaid}/${occurrence.actualDueAmount} ${occurrence.currencyCode}${portions}` });
+        const badge = dueBadge(occurrence);
+        const label = create('span', {}, [
+          create('span', { textContent: `${occurrence.date} · ` }),
+          create('span', { className: badge.className, textContent: badge.label }),
+          create('span', { textContent: ` · Pagado ${occurrence.totalPaid}/${occurrence.actualDueAmount} ${occurrence.currencyCode}${portions}` })
+        ]);
         const row = create('div', { style: { display: 'flex', gap: '8px', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap' } }, [label]);
         const actions = create('div', { style: { display: 'flex', gap: '6px', flexWrap: 'wrap' } });
         const hasTenantPortion = occurrence.tenantDueAmount !== undefined;
         const tenantOnly = this.isTenantOnly(item, occurrence);
-        if (!['paid', 'resolved', 'cancelled'].includes(occurrence.status)) {
-          if (!occurrence.resolution) actions.append(create('button', { className: 'btn btn-ghost btn-sm', textContent: 'Confirmar', onClick: () => this.runAction(() => API.obligations.confirm(item.id, occurrence.id)) }));
+        if (!this.isPaidOccurrence(occurrence)) {
           if (!occurrence.resolution) actions.append(create('button', { className: 'btn btn-ghost btn-sm', textContent: 'Editar', onClick: () => this.editOccurrence(item, occurrence) }));
-          if (!tenantOnly && (!hasTenantPortion || occurrence.remainingAmount > 0)) actions.append(create('button', { className: 'btn btn-ghost btn-sm', textContent: 'Pagar', onClick: () => this.pay(item, occurrence) }));
+          if (!tenantOnly && (!hasTenantPortion || occurrence.remainingAmount > 0)) actions.append(create('button', { className: 'btn btn-ghost btn-sm', textContent: 'Registrar pago', onClick: () => this.pay(item, occurrence) }));
           if (!occurrence.resolution) actions.append(create('button', { className: 'btn btn-ghost btn-sm', textContent: 'Cancelar', onClick: () => this.runAction(() => API.obligations.cancelOccurrence(item.id, occurrence.id)) }));
         }
         if (hasTenantPortion && !occurrence.resolution && occurrence.status !== 'cancelled') {
@@ -157,14 +213,16 @@ const ObligationsPage = {
       });
       card.appendChild(table);
     } else {
-      card.appendChild(create('div', { className: 'text-muted', textContent: 'No hay vencimientos generados para el período seleccionado.' }));
+      card.appendChild(create('div', { className: 'text-muted', textContent: 'No hay vencimientos pendientes.' }));
     }
+    const payable = this.oldestPayable(occurrences);
     const controls = create('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap' } }, [
+      ...(payable ? [create('button', { className: 'btn btn-primary btn-sm', textContent: 'Registrar pago', onClick: () => this.pay(item, payable) })] : []),
+      create('button', { className: 'btn btn-secondary btn-sm', textContent: 'Editar', onClick: () => this.showCreateModal(item) }),
+      create('button', { className: 'btn btn-ghost btn-sm', textContent: 'Eliminar', style: { color: 'var(--danger)' }, onClick: () => this.deleteObligation(item) }),
       create('button', { className: 'btn btn-secondary btn-sm', textContent: 'Nota', onClick: () => this.addNote(item) }),
       create('button', { className: 'btn btn-secondary btn-sm', textContent: 'Adjuntar documento', onClick: () => this.addDocument(item) }),
-      create('button', { className: 'btn btn-secondary btn-sm', textContent: 'Ver notas y documentos', onClick: () => this.viewAttachments(item) }),
-      create('button', { className: 'btn btn-secondary btn-sm', textContent: 'Editar', onClick: () => this.showCreateModal(item) }),
-      create('button', { className: 'btn btn-ghost btn-sm', textContent: 'Cancelar obligación', onClick: () => this.runAction(() => API.obligations.delete(item.id)) })
+      create('button', { className: 'btn btn-secondary btn-sm', textContent: 'Ver notas y documentos', onClick: () => this.viewAttachments(item) })
     ]);
     card.appendChild(controls);
     const allocationPanel = create('details', { style: { marginTop: '4px' } }, [create('summary', { textContent: 'Movimientos atribuidos' })]);
@@ -208,7 +266,7 @@ const ObligationsPage = {
     const stacked = options.stacked || null;
     const form = create('form', { style: { display: 'grid', gap: '10px', maxHeight: '70vh', overflowY: 'auto' } });
     const title = this.field(form, 'Nombre', { required: true, value: existing?.title || '' });
-    const type = this.select([['utility', 'Servicios'], ['insurance', 'Seguro'], ['tax', 'Impuesto'], ['loan', 'Préstamo'], ['maintenance', 'Mantenimiento'], ['subscription', 'Suscripción'], ['other', 'Otro']], existing?.type || 'utility');
+    const type = this.select(OBLIGATION_TYPES, existing?.type || 'utility');
     this.fieldWrap(form, 'Tipo', type);
     const asset = this.select([['', 'Sin bien vinculado'], ...this.assets.map(item => [item.id, item.name])], existing?.assetId || defaults.assetId || '');
     if (stacked) asset.disabled = true;
@@ -473,6 +531,12 @@ const ObligationsPage = {
     Modal.show('Registrar pago', form);
   },
 
+  // Soft delete: the obligation is cancelled (payment history stays) and disappears from the list.
+  async deleteObligation(obligation) {
+    if (!confirm(`¿Eliminar la obligación "${obligation.title}"? Se conservará el historial de pagos.`)) return;
+    await this.runAction(() => API.obligations.delete(obligation.id));
+  },
+
   async addNote(obligation) {
     const content = prompt('Nota para esta obligación');
     if (!content?.trim()) return;
@@ -566,6 +630,6 @@ const ObligationsPage = {
   },
 
   statusLabel(value) {
-    return ({ expected: 'Previsto', confirmed: 'Confirmado', paid: 'Pagado', resolved: 'Resuelto por inquilino', partial: 'Parcial', overdue: 'Vencido', cancelled: 'Cancelado' })[value] || statusLabel(value);
+    return ({ expected: 'Pendiente', confirmed: 'Pendiente', paid: 'Pagado', resolved: 'Resuelto por inquilino', partial: 'Parcial', overdue: 'Vencido', cancelled: 'Cancelado' })[value] || statusLabel(value);
   }
 };

@@ -24,7 +24,21 @@ function activeResolution(db, userId, occurrenceId) {
   return db.findAll(RESOLUTIONS, userId).find(item => item.occurrenceId === occurrenceId && item.status === 'active') || null;
 }
 
+// Due state of an occurrence for display: paid | cancelled | overdue | due-soon (due in the current month,
+// the due day included) | pending (a later month). `status` already is 'overdue' once the due day has passed.
+function dueStateFor(status, date, today) {
+  if (status === 'paid' || status === 'resolved') return 'paid';
+  if (status === 'cancelled') return 'cancelled';
+  if (status === 'overdue') return 'overdue';
+  return String(date).slice(0, 7) === String(today).slice(0, 7) ? 'due-soon' : 'pending';
+}
+
 function occurrenceView(db, userId, occurrence, today) {
+  const view = baseOccurrenceView(db, userId, occurrence, today);
+  return { ...view, dueState: dueStateFor(view.status, occurrence.date, today) };
+}
+
+function baseOccurrenceView(db, userId, occurrence, today) {
   const payments = paymentTransactions(db, userId, occurrence.id);
   const paidMinor = payments
     .reduce((total, tx) => total + (Number.isSafeInteger(tx.amountMinor) ? tx.amountMinor : ledger.toMinorUnits(tx.monto, tx.currencyCode || occurrence.currencyCode) || 0), 0);
@@ -597,7 +611,7 @@ function idempotencyDigest(key) {
 }
 
 module.exports = {
-  COLLECTION, OCCURRENCES, RESOLUTIONS, validDate, occurrenceView, activeResolution, createResolution, voidResolution, listResolutions, occurrencesFor,
+  COLLECTION, OCCURRENCES, RESOLUTIONS, validDate, occurrenceView, dueStateFor, activeResolution, createResolution, voidResolution, listResolutions, occurrencesFor,
   validateDefinition, validateResponsibility, portionsFor, responsibilityFor, setResponsibility, RESPONSIBILITY_TYPES,
   reassignEndedTenantObligations, releasePendingRentalLinks, finalizePendingRentalLinks, expirePendingRentalLinks, runResponsibilityMaintenance, PENDING_LINK_MAX_AGE_MS, EXTERNAL_IDENTIFIER_TYPES, createObligation, updateOccurrence, paymentTransactions, getAlerts, idempotencyDigest, isScheduledOn, paymentContext, categoryChain
 };

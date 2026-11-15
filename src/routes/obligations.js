@@ -47,6 +47,7 @@ router.get('/', (req, res) => {
   ).map(item => responseFor(db, userId, item, options)).filter(item => {
     if (!req.query.status) return true;
     if (req.query.status === 'active' || req.query.status === 'cancelled') return item.status === req.query.status;
+    if (req.query.status === 'pending') return item.occurrences.some(occurrence => ['expected', 'confirmed', 'partial'].includes(occurrence.status));
     return item.occurrences.some(occurrence => occurrence.status === req.query.status);
   });
   res.json(rows);

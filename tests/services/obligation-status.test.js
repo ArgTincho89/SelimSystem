@@ -14,7 +14,7 @@ function legacyView(db, occurrence, today) {
   const dueMinor = Number.isSafeInteger(occurrence.dueAmountMinor) ? occurrence.dueAmountMinor : 0;
   const status = occurrence.status === 'cancelled' ? 'cancelled' : paidMinor >= dueMinor && paidMinor > 0 ? 'paid' : occurrence.date < today ? 'overdue' : paidMinor > 0 ? 'partial' : occurrence.status === 'confirmed' ? 'confirmed' : 'expected';
   return {
-    ...occurrence, status, actualDueAmount: ledger.fromMinorUnits(dueMinor, occurrence.currencyCode),
+    ...occurrence, status, dueState: obligations.dueStateFor(status, occurrence.date, today), actualDueAmount: ledger.fromMinorUnits(dueMinor, occurrence.currencyCode),
     totalPaid: ledger.fromMinorUnits(paidMinor, occurrence.currencyCode),
     remainingAmount: ledger.fromMinorUnits(Math.max(0, dueMinor - paidMinor), occurrence.currencyCode),
     paymentIds: payments.map(tx => tx.id)
