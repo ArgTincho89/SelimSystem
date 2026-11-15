@@ -108,6 +108,15 @@ const ProfilePage = {
 
     content.appendChild(infoSection);
 
+    const logsBtn = create('button', {
+      className: 'btn btn-ghost btn-full',
+      textContent: 'Logs',
+      id: 'profile-logs-button',
+      style: { marginBottom: '12px' }
+    });
+    on(logsBtn, 'click', () => Router.navigate('/logs'));
+    content.appendChild(logsBtn);
+
     const accountActionsBtn = create('button', {
       className: 'btn btn-ghost btn-full',
       textContent: 'Acciones de cuenta',
@@ -131,7 +140,6 @@ const ProfilePage = {
     });
     content.appendChild(logoutBtn);
 
-    content.appendChild(this.renderLogsSection());
   },
 
   showAccountActionsModal() {
@@ -171,119 +179,6 @@ const ProfilePage = {
     }));
 
     Modal.show('Acciones de cuenta', actions, { footer });
-  },
-
-  LOGS_PAGE_SIZE: 200,
-  LOGS_MAX_PAGES: 50,
-  LOGS_DEFAULT_DAYS: 30,
-
-  // Shifts a "YYYY-MM-DD" day by whole days.
-  shiftDay(day, delta) {
-    const date = new Date(`${day}T00:00:00Z`);
-    date.setUTCDate(date.getUTCDate() + delta);
-    return date.toISOString().slice(0, 10);
-  },
-
-  // "YYYY-MM-DD" -> "dd/mm/aaaa".
-  formatDayLabel(day) {
-    const [year, month, date] = day.split('-');
-    return `${date}/${month}/${year}`;
-  },
-
-  // Groups log entries (newest first) by day in the user's timezone, keeping that order.
-  groupLogsByDay(items) {
-    const groups = new Map();
-    items.forEach(item => {
-      const day = logDayKey(item.timestamp);
-      if (!day) return;
-      if (!groups.has(day)) groups.set(day, []);
-      groups.get(day).push(item);
-    });
-    return [...groups].map(([day, entries]) => ({ day, entries }));
-  },
-
-  renderLogItem(item) {
-    const failed = item.outcome === 'failure';
-    return create('div', { className: 'activity-log-item', style: { padding: '8px 0', borderBottom: '1px solid var(--border, #ddd)' } }, [
-      create('div', { textContent: formatLogDateTime(item.timestamp), style: { fontSize: 'var(--font-sm)', opacity: '0.7' } }),
-      create('div', { textContent: item.message }),
-      create('div', { textContent: failed ? 'No se completó' : 'Realizada', style: { fontSize: 'var(--font-sm)', color: failed ? 'var(--danger, #c0392b)' : 'inherit', opacity: failed ? '1' : '0.7' } })
-    ]);
-  },
-
-  // Collapsible day panel (collapsed by default); its entries are only rendered once it is expanded.
-  renderLogDay({ day, entries }) {
-    const panel = create('details', { className: 'activity-log-day card', dataset: { day }, style: { padding: '8px 12px' } });
-    const count = `${entries.length} ${entries.length === 1 ? 'acción' : 'acciones'}`;
-    panel.appendChild(create('summary', { className: 'activity-log-day-summary', style: { cursor: 'pointer', fontWeight: '600' } }, [
-      create('span', { textContent: this.formatDayLabel(day) }),
-      create('span', { className: 'text-muted', textContent: ` · ${count}`, style: { fontWeight: '400' } })
-    ]));
-    const body = create('div', { className: 'activity-log-day-entries' });
-    panel.appendChild(body);
-    on(panel, 'toggle', () => {
-      if (panel.open && !body.childElementCount) entries.forEach(item => body.appendChild(this.renderLogItem(item)));
-    });
-    return panel;
-  },
-
-  // LOGS section: date filter on top and the entries grouped by day below.
-  renderLogsSection() {
-    const section = create('div', { className: 'profile-section', id: 'activity-log-section' });
-    section.appendChild(create('h3', { textContent: 'LOGS', style: { marginBottom: '16px' } }));
-
-    const today = getToday();
-    const fromInput = create('input', { className: 'form-control', type: 'date', id: 'activity-log-from', value: this.shiftDay(today, -(this.LOGS_DEFAULT_DAYS - 1)) });
-    const toInput = create('input', { className: 'form-control', type: 'date', id: 'activity-log-to', value: today });
-    const filterRow = create('div', { style: { display: 'flex', gap: '8px', alignItems: 'flex-end', flexWrap: 'wrap' } });
-    [['Desde', fromInput], ['Hasta', toInput]].forEach(([label, input]) => {
-      const group = create('div', { className: 'form-group', style: { flex: '1 1 140px', marginBottom: '0' } });
-      group.appendChild(create('label', { textContent: label, for: input.id }));
-      group.appendChild(input);
-      filterRow.appendChild(group);
-    });
-    const applyBtn = create('button', { className: 'btn btn-primary btn-sm', type: 'button', textContent: 'Filtrar', id: 'activity-log-apply' });
-    filterRow.appendChild(applyBtn);
-    section.appendChild(filterRow);
-
-    const list = create('div', { id: 'activity-log-list', style: { display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '12px' } });
-    section.appendChild(list);
-
-    let requestId = 0;
-    const load = async () => {
-      const from = fromInput.value;
-      const to = toInput.value;
-      if (from && to && from > to) return showToast('La fecha "Desde" no puede ser posterior a "Hasta"', 'error');
-      const current = ++requestId;
-      applyBtn.disabled = true;
-      list.replaceChildren(create('div', { className: 'loading', textContent: 'Cargando acciones...' }));
-      try {
-        // Loads the whole range so every day panel shows its full count.
-        const items = [];
-        let before = null;
-        for (let page = 0; page < this.LOGS_MAX_PAGES; page += 1) {
-          const result = await API.activityLogs.list({ limit: this.LOGS_PAGE_SIZE, before, from, to, timezone: localStorage.getItem('pate_timezone') || undefined });
-          items.push(...result.items);
-          before = result.nextBefore;
-          if (!before) break;
-        }
-        if (current !== requestId) return;
-        const days = this.groupLogsByDay(items);
-        list.replaceChildren(...days.map(group => this.renderLogDay(group)));
-        if (!days.length) {
-          list.appendChild(create('p', { className: 'empty-state', textContent: from || to ? 'No hay acciones registradas en esas fechas' : 'Todavía no hay acciones registradas' }));
-        }
-      } catch (err) {
-        if (current !== requestId) return;
-        list.replaceChildren();
-        showToast(err.message, 'error');
-      } finally {
-        if (current === requestId) applyBtn.disabled = false;
-      }
-    };
-    on(applyBtn, 'click', load);
-    load();
-    return section;
   },
 
   showChangeEmailModal() {

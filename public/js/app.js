@@ -96,6 +96,10 @@ const App = {
       if (!this.user) return Router.navigate('/login');
       ProfilePage.render();
     });
+    Router.register('/logs', () => {
+      if (!this.user) return Router.navigate('/login');
+      return LogsPage.render();
+    });
     Router.register('/settings', (params) => {
       if (!this.user) return Router.navigate('/login');
       SettingsPage.render(params);

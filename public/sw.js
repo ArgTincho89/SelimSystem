@@ -28,6 +28,7 @@ const STATIC_ASSETS = [
   '/js/pages/obligations.js',
   '/js/pages/alerts.js',
   '/js/pages/profile.js',
+  '/js/pages/logs.js',
   '/js/pages/settings.js',
   '/manifest.json',
   '/icons/icon-192.png',
