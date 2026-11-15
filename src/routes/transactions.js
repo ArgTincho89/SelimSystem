@@ -40,7 +40,7 @@ router.get('/', (req, res) => {
       const to = db.findById('accounts', item.toAccountId, userId);
       return {
         id: item.id, tipo: 'transfer', isTransfer: true, transferId: item.id,
-        titulo: item.reference || (item.fromCurrency === item.toCurrency ? 'Transferencia' : 'Conversión'),
+        titulo: item.reference || (item.fromCurrency === item.toCurrency ? 'Transferencia' : 'Conversión'), notes: item.notes || '',
         fecha: item.fecha, status: item.status, postedAt: item.postedAt,
         accountId: item.fromAccountId, accountName: `${from?.nombre || 'Cuenta archivada'} → ${to?.nombre || 'Cuenta archivada'}`,
         accountIds: [item.fromAccountId, item.toAccountId], fromAccountName: from?.nombre || 'Cuenta archivada', toAccountName: to?.nombre || 'Cuenta archivada',

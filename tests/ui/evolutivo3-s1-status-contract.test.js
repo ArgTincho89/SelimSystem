@@ -19,7 +19,7 @@ describe('Evolutivo 3 S1 status label contract', () => {
       expect(assets).toContain(call);
     });
     expect(assets).toContain('return statusLabel(status);');
-    expect(home).toContain('statusLabel(item.status)');
+    // The Home "Movimientos entre cuentas" block (and its statusLabel use) was removed in evolutivo-4.
     expect(home).not.toMatch(/\$\{item\.status\}/);
   });
 

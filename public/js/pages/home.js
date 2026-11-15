@@ -91,7 +91,6 @@ const HomePage = {
     }
 
     if (!options.desktop) transactionPane.appendChild(statsRow);
-    if (!options.desktop) transactionPane.appendChild(this.renderEconomicContext(overview));
     if (!options.desktop) transactionPane.appendChild(this.renderAccountCards(options.accounts || []));
     if (!options.desktop) {
       const analytics = create('section', { className: 'home-analytics', 'aria-label': 'Analítica' });
@@ -265,7 +264,6 @@ const HomePage = {
 
     this.renderDesktopStats(statsRow, descriptors, values, hidden, overview);
     content.appendChild(statsRow);
-    content.appendChild(this.renderEconomicContext(overview));
     content.appendChild(this.renderAccountCards(options.accounts || []));
 
     const controls = create('div', { className: 'desktop-home-controls', 'aria-label': 'Controles de inicio' });
@@ -743,31 +741,6 @@ const HomePage = {
     Modal.show('Detalle del resumen económico', body, { footer: create('div', {}, [create('button', { className: 'btn btn-primary', type: 'button', textContent: 'Cerrar', onClick: () => Modal.hide() })]) });
   },
 
-  renderEconomicContext(overview) {
-    const section = create('section', { className: 'card', style: { margin: '0 0 14px' } });
-    section.appendChild(create('h3', { textContent: `Movimientos entre cuentas · ${overview?.month || ''}` }));
-    section.appendChild(create('p', { className: 'text-muted', textContent: 'Las transferencias no se consideran ingresos ni gastos; cada importe conserva su moneda y no se convierten entre sí.' }));
-    const transfers = overview?.transfers || [];
-    if (!transfers.length) section.appendChild(create('small', { textContent: 'No hay transferencias contabilizadas en este mes.' }));
-    else {
-      (overview.currencies || []).filter(total => total.transferIn || total.transferOut).forEach(total => {
-        section.appendChild(create('p', { textContent: `${total.currency} · Entradas: ${formatearMonedaConCodigo(total.transferIn, total.currency)} · Salidas: ${formatearMonedaConCodigo(total.transferOut, total.currency)}` }));
-      });
-      section.appendChild(create('button', { className: 'btn btn-ghost btn-sm', type: 'button', textContent: 'Ver transferencias', onClick: () => this.showEconomicMovements(overview, 'transfer') }));
-    }
-    const pending = overview?.pending || { obligations: [], rents: [] };
-    section.appendChild(create('h4', { textContent: 'Pendiente, fuera de los importes reales', style: { marginTop: '12px' } }));
-    const showPending = (label, items) => {
-      section.appendChild(create('strong', { textContent: `${label} (${items.length})` }));
-      if (!items.length) section.appendChild(create('small', { style: { display: 'block' }, textContent: 'Sin importes pendientes en este mes.' }));
-      items.slice(0, 5).forEach(item => section.appendChild(create('p', { style: { margin: '4px 0' }, textContent: `${item.date} · ${item.concept} · ${formatearMonedaConCodigo(item.amount, item.currency)} · ${statusLabel(item.status)}` })));
-      if (items.length > 5) section.appendChild(create('small', { textContent: `Y ${items.length - 5} elementos más.` }));
-    };
-    showPending('Obligaciones', pending.obligations || []);
-    showPending('Alquileres esperados', pending.rents || []);
-    return section;
-  },
-
   // Builds the per-currency rows shown inside a metric card. Currencies with a
   // zero value are omitted, so a card only lists the currencies that actually
   // contribute to that metric. The active currency always comes first.
@@ -1012,6 +985,7 @@ const HomePage = {
 
   async showTransferDetails(tx) {
     const details = create('div');
+    details.appendChild(create('strong', { textContent: tx.titulo }));
     details.appendChild(create('p', { textContent: tx.accountName }));
     details.appendChild(create('p', { textContent: `${tx.fecha} · ${tx.status === 'posted' ? 'Contabilizada' : 'Programada'}` }));
     const value = create('p', { className: 'sensitive-value' });
@@ -1025,6 +999,7 @@ const HomePage = {
       this.markSensitive(fee, `Comisión: ${formatearMoneda(tx.feeAmount, tx.fromCurrency)}`);
       details.appendChild(fee);
     }
+    if (tx.notes) details.appendChild(create('p', { className: 'text-muted', textContent: `Nota: ${tx.notes}` }));
     const footer = create('div', { style: { display: 'flex', gap: '8px' } });
     footer.appendChild(create('button', { className: 'btn btn-ghost', type: 'button', textContent: 'Cerrar', onClick: () => Modal.hide() }));
     const settingsButton = create('button', { className: 'btn btn-primary', type: 'button', textContent: 'Administrar transferencias' });

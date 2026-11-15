@@ -279,6 +279,7 @@ function createTransferRecord(db, userId, input, accounts) {
   if (!isValidDate(input.fecha)) return { error: 'La fecha debe tener formato YYYY-MM-DD' };
   const status = input.status || 'posted';
   if (!['posted', 'scheduled'].includes(status)) return { error: 'Estado de transferencia inválido' };
+  if (input.notes !== undefined && input.notes !== null && (typeof input.notes !== 'string' || input.notes.length > 1000)) return { error: 'La nota no es válida' };
   if (status === 'posted' && input.fecha > localDateForUser(db, userId)) return { error: 'Una transferencia futura debe quedar programada hasta su contabilización' };
   const sentMinor = moneyInput(input.sentAmount, source.currency);
   const receivedAmount = input.receivedAmount === undefined && source.currency === destination.currency ? input.sentAmount : input.receivedAmount;
@@ -293,7 +294,7 @@ function createTransferRecord(db, userId, input, accounts) {
     fromCurrency: source.currency, toCurrency: destination.currency,
     sentMinor, receivedMinor, feeMinor, feeCategoryId: input.feeCategoryId || null,
     fecha: input.fecha, status, postedAt: status === 'posted' ? (input.postedAt || input.fecha) : null,
-    reference: input.reference || '', normalizationAllocations: [],
+    reference: input.reference || '', notes: typeof input.notes === 'string' ? input.notes.trim() : '', normalizationAllocations: [],
     pendingAllocations: status === 'scheduled' ? (input.allocations || []) : [],
     rateNumerator: receivedMinor, rateDenominator: sentMinor,
     rateDirection: `${source.currency}->${destination.currency}`

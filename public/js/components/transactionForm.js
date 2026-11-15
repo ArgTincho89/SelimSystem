@@ -1,4 +1,20 @@
 const TransactionForm = {
+  // True when the two chosen accounts exist and use different currencies (the received amount is then asked).
+  transferNeedsReceived(accounts, fromId, toId) {
+    const from = (accounts || []).find(account => account.id === fromId);
+    const to = (accounts || []).find(account => account.id === toId);
+    return Boolean(from && to && from.currency !== to.currency);
+  },
+
+  // Payload of POST /transfers: posted, no fee and no allocations. Title goes to `reference`, the note to `notes`.
+  buildTransferPayload({ fromAccountId, toAccountId, sentAmount, receivedAmount, fecha, title, notes, needsReceived }) {
+    return {
+      fromAccountId, toAccountId, sentAmount, fecha, status: 'posted',
+      ...(needsReceived ? { receivedAmount } : {}),
+      reference: String(title || '').trim(), notes: String(notes || '').trim()
+    };
+  },
+
   async show(onSave, transaction = null, options = {}) {
     const [categories, accounts, transactions, assets, obligations, rentals, paymentMethods, associationData] = await Promise.all([
       API.categories.list(), API.accounts.list(), API.transactions.list(), API.assets.list(),
@@ -8,12 +24,15 @@ const TransactionForm = {
     const isEdit = !!transaction;
     let selectedType = transaction?.tipo || 'expense';
     let selectedCategoryId = transaction?.categoryId || (categories.length > 0 ? categories[0].id : null);
+    // Wrapper of the regular fields; the transfer sub-form replaces it when "Transferencia" is selected.
+    let regularBody = null;
+    let transferBody = null;
 
     const form = create('div');
 
     const typeSelector = create('div', { className: 'type-selector' });
-    ['expense', 'income', 'refund'].forEach(type => {
-      const labels = { expense: 'Gasto', income: 'Ingreso', refund: 'Reembolso' };
+    ['expense', 'income', 'refund', ...(isEdit ? [] : ['transfer'])].forEach(type => {
+      const labels = { expense: 'Gasto', income: 'Ingreso', refund: 'Reembolso', transfer: 'Transferencia' };
       const btn = create('button', {
         className: `type-btn ${type === selectedType ? 'active' : ''}`,
         type: 'button',
@@ -32,6 +51,7 @@ const TransactionForm = {
         updateClasifVisibility();
         updateRecurringVisibility();
         updateInstallmentVisibility();
+        updateTransferMode();
       });
       typeSelector.appendChild(btn);
     });
@@ -256,7 +276,7 @@ const TransactionForm = {
       const account = activeAccounts.find(item => item.id === accountSelect.value);
       amountLabel.textContent = `Monto (${account?.currency || 'EUR'})`;
       MoneyInput.setCurrency(amountInput, account?.currency || 'EUR');
-      form.querySelectorAll('[data-money-input]').forEach(input => MoneyInput.setCurrency(input, account?.currency || 'EUR'));
+      (regularBody || form).querySelectorAll('[data-money-input]').forEach(input => MoneyInput.setCurrency(input, account?.currency || 'EUR'));
     };
     on(accountSelect, 'change', updateAmountCurrency);
     updateAmountCurrency();
@@ -459,6 +479,7 @@ const TransactionForm = {
       textContent: 'Guardar'
     });
     on(saveBtn, 'click', async () => {
+      if (selectedType === 'transfer') return saveTransfer();
       let titulo = titleInput.value.trim();
       if (!titulo && selectedType !== 'income') {
         const catOption = categorySelect.options[categorySelect.selectedIndex];
@@ -585,10 +606,103 @@ const TransactionForm = {
       }
     });
 
+    // Wraps the regular fields and adds the transfer sub-form next to them (new transactions only).
+    regularBody = create('div');
+    [...form.children].filter(child => child !== typeSelector).forEach(child => regularBody.appendChild(child));
+    form.appendChild(regularBody);
+    const transfer = isEdit ? null : TransactionForm.renderTransferFields(activeAccounts, { defaultAccountId: defaultAccount, dateValue: dateInput.value });
+    transferBody = transfer?.element || null;
+    if (transferBody) {
+      transferBody.style.display = 'none';
+      form.appendChild(transferBody);
+    }
+    function updateTransferMode() {
+      if (!transferBody) return;
+      const isTransfer = selectedType === 'transfer';
+      regularBody.style.display = isTransfer ? 'none' : '';
+      transferBody.style.display = isTransfer ? '' : 'none';
+    }
+    async function saveTransfer() {
+      const result = transfer.collect();
+      if (result.error) return showToast(result.error, 'error');
+      try {
+        await API.transfers.create(result.payload);
+        if (onSave) await onSave();
+        Modal.hide();
+        showToast('Transferencia guardada');
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
+    }
+
     footer.appendChild(cancelBtn);
     footer.appendChild(saveBtn);
 
     Modal.show(isEdit ? 'Editar transacción' : 'Nueva transacción', form, { footer });
     titleInput.focus();
+  },
+
+  // Transfer sub-form: source and destination accounts, amount, received amount (only when the currencies
+  // differ), date, title and note. Returns { element, collect() } where collect() -> { payload } | { error }.
+  renderTransferFields(accounts, { defaultAccountId, dateValue } = {}) {
+    const root = create('div', { className: 'transfer-fields' });
+    const group = (label, control, id) => {
+      if (id) control.id = id;
+      root.appendChild(create('div', { className: 'form-group' }, [create('label', { textContent: label, for: control.id }), control]));
+    };
+    const accountSelect = id => {
+      const select = create('select', { className: 'form-control' });
+      accountTreeOptions(accounts).forEach(({ account, label }) => select.appendChild(create('option', { value: account.id, textContent: label })));
+      select.id = id;
+      return select;
+    };
+    const from = accountSelect('transfer-from');
+    const to = accountSelect('transfer-to');
+    if (defaultAccountId) from.value = defaultAccountId;
+    to.value = (accounts.find(account => account.id !== from.value) || {}).id || '';
+    group('Cuenta de salida', from);
+    group('Cuenta de ingreso', to);
+    const currencyOf = select => accounts.find(account => account.id === select.value)?.currency || 'ARS';
+    const amount = MoneyInput.create({ currency: currencyOf(from), id: 'transfer-amount', ariaLabel: 'Monto a transferir' });
+    const amountLabel = create('label', { textContent: 'Monto', for: 'transfer-amount' });
+    root.appendChild(create('div', { className: 'form-group' }, [amountLabel, amount]));
+    const received = MoneyInput.create({ currency: currencyOf(to), id: 'transfer-received', ariaLabel: 'Monto recibido' });
+    const receivedLabel = create('label', { textContent: 'Monto recibido', for: 'transfer-received' });
+    const receivedGroup = create('div', { className: 'form-group', style: { display: 'none' } }, [receivedLabel, received]);
+    root.appendChild(receivedGroup);
+    const date = create('input', { className: 'form-control', type: 'date', value: dateValue || getToday(), max: getToday() });
+    group('Fecha', date, 'transfer-date');
+    const title = create('input', { className: 'form-control', type: 'text', maxlength: '120', placeholder: 'Título del movimiento (opcional)' });
+    group('Título (opcional)', title, 'transfer-title');
+    const notes = create('textarea', { className: 'form-control', rows: '3', maxlength: '1000' });
+    group('Nota (opcional)', notes, 'transfer-notes');
+    const sync = () => {
+      const needsReceived = TransactionForm.transferNeedsReceived(accounts, from.value, to.value);
+      receivedGroup.style.display = needsReceived ? '' : 'none';
+      amountLabel.textContent = `Monto (${currencyOf(from)})`;
+      receivedLabel.textContent = `Monto recibido (${currencyOf(to)})`;
+      MoneyInput.setCurrency(amount, currencyOf(from));
+      MoneyInput.setCurrency(received, currencyOf(to));
+    };
+    on(from, 'change', sync);
+    on(to, 'change', sync);
+    sync();
+    const collect = () => {
+      if (!from.value || !to.value || from.value === to.value) return { error: 'Seleccioná dos cuentas distintas' };
+      const needsReceived = TransactionForm.transferNeedsReceived(accounts, from.value, to.value);
+      if (!MoneyInput.validateAll(needsReceived ? [amount, received] : [amount])) return { error: 'Importe inválido' };
+      const sentAmount = MoneyInput.value(amount);
+      const receivedAmount = MoneyInput.value(received);
+      if (!sentAmount || sentAmount <= 0) return { error: 'El monto debe ser positivo' };
+      if (needsReceived && (!receivedAmount || receivedAmount <= 0)) return { error: 'Indicá el monto recibido' };
+      if (!date.value || date.value > getToday()) return { error: 'La fecha no puede ser futura' };
+      return {
+        payload: TransactionForm.buildTransferPayload({
+          fromAccountId: from.value, toAccountId: to.value, sentAmount, receivedAmount, fecha: date.value,
+          title: title.value, notes: notes.value, needsReceived
+        })
+      };
+    };
+    return { element: root, collect };
   }
 };
