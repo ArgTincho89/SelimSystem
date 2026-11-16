@@ -74,6 +74,34 @@ router.put('/:id', (req, res) => {
   respond(res, db, userId, result.value);
 });
 
+// Read-only previews: the periods that ending the rental (or one modality) would cancel. Never logged.
+router.get('/:id/end-preview', (req, res) => {
+  const declaration = findDeclaration(req, res);
+  if (!declaration) return;
+  const result = declarations.endPreview(req.app.locals.db, req.session.userId, declaration, { endDate: req.query.endDate });
+  if (result.error) return failed(res, result);
+  res.json(result.value);
+});
+
+router.get('/:id/modalities/:contractId/end-preview', (req, res) => {
+  const declaration = findDeclaration(req, res);
+  if (!declaration) return;
+  const result = declarations.endPreview(req.app.locals.db, req.session.userId, declaration, { contractId: req.params.contractId, endDate: req.query.endDate });
+  if (result.error) return failed(res, result);
+  res.json(result.value);
+});
+
+// "Finalizar contrato": ends one modality of the rental.
+router.post('/:id/modalities/:contractId/end', (req, res) => {
+  const db = req.app.locals.db;
+  const userId = req.session.userId;
+  const declaration = findDeclaration(req, res);
+  if (!declaration) return;
+  const result = declarations.endModality(db, userId, declaration, req.params.contractId, req.body || {});
+  if (result.error) return failed(res, result);
+  respond(res, db, userId, result.value);
+});
+
 router.post('/:id/end', (req, res) => {
   const db = req.app.locals.db;
   const userId = req.session.userId;

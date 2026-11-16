@@ -41,8 +41,18 @@ When('registro el cobro del primer aviso de alquiler en la cuenta {string}', asy
   await new AlertsPage(this.page!).collectFirstRentAlert(account);
 });
 
-When('deshago el cobro del mes cobrado desde el historial del inmueble {string}', async function (this: SelimSystemWorld, asset: string) {
+When('deshago el cobro del mes cobrado desde la pestaña Períodos del alquiler del inmueble {string}', async function (this: SelimSystemWorld, asset: string) {
   const assets = new AssetsPage(this.page!);
   await assets.navigate();
   await assets.undoCollectedMonth(asset);
+});
+
+When('finalizo el contrato de {string} del alquiler del inmueble {string}', async function (this: SelimSystemWorld, modality: string, asset: string) {
+  const assets = new AssetsPage(this.page!);
+  await assets.navigate();
+  await assets.endModality(asset, modality);
+});
+
+Then('la modalidad {string} termina hoy en el alquiler del inmueble {string}', async function (this: SelimSystemWorld, modality: string, asset: string) {
+  await new AssetsPage(this.page!).expectModalityEndsToday(asset, modality);
 });

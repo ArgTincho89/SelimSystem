@@ -1,6 +1,7 @@
 const ledger = require('./account-ledger');
 const rentals = require('./rentals');
 const obligations = require('./obligations');
+const alerts = require('./alerts');
 
 const CONTRACT_TYPE_BY_KIND = { galpon: 'industrial', lote: 'other' };
 const TOUCHED = ['rentalDeclarations', 'rentalContracts', 'rentOccurrences', 'assets', 'obligations', 'obligationOccurrences', 'documents'];
@@ -315,4 +316,78 @@ function end(db, userId, declaration, body = {}) {
   return written.error ? written : { value: written.value };
 }
 
-module.exports = { view, contractsOf, activeDeclarationFor, backfillDeclarations, create, update, end, findOverlap };
+const ALREADY_ENDED = 'No se puede finalizar este contrato porque ya está finalizado.';
+
+/** Validated early-termination date (default today) of one or more active contracts, or a failure. */
+function endDateFor(db, userId, contracts, body) {
+  const requested = body && body.endDate !== undefined && body.endDate !== null && body.endDate !== '' ? body.endDate : null;
+  if (requested === null) return { value: null };
+  if (!rentals.validDate(requested)) return fail('La fecha de finalización no es válida');
+  if (requested < contracts.map(item => item.startDate).sort()[0]) return fail('La fecha de finalización no puede ser anterior al inicio del contrato');
+  const agreed = contracts.every(item => item.endDate) ? contracts.map(item => item.endDate).sort().pop() : null;
+  if (agreed && requested > agreed) return fail('La fecha de finalización no puede ser posterior a la pactada; editá el alquiler para extenderlo');
+  const today = ledger.localDateForUser(db, userId);
+  const collectedAfter = db.findAll('rentOccurrences', userId).some(item => contracts.some(contract => contract.id === item.contractId) && item.date > requested && !item.cancelled && rentals.occurrenceView(db, userId, item, today).paidMinor > 0);
+  if (collectedAfter) return fail('Hay períodos cobrados posteriores a esa fecha; deshacé esos cobros primero', 409);
+  return { value: requested };
+}
+
+/** Same cutoff as `endContract`: unpaid periods after it are cancelled (null = every unpaid period). */
+function cancellationCutoff(contract, endOn, today) {
+  if (endOn && contract.startDate <= endOn && endOn >= today) return endOn;
+  const notStarted = endOn ? contract.startDate > endOn : contract.startDate > today;
+  if (notStarted) return null;
+  return endOn || (contract.endDate && contract.endDate < today ? contract.endDate : today);
+}
+
+/** Uncollected periods that ending these contracts on `endOn` would cancel (read-only, nothing is persisted). */
+function cancelledPeriods(db, userId, contracts, endOn) {
+  const today = ledger.localDateForUser(db, userId);
+  const view = alerts.readOnlyView(db);
+  const through = plusMonths12(db, userId);
+  return contracts.flatMap(contract => {
+    const cutoff = cancellationCutoff(contract, endOn, today);
+    return rentals.generateOccurrences(view, userId, contract, through)
+      .filter(item => !item.cancelled && item.status !== 'cancelled' && item.paidMinor === 0 && (cutoff === null || item.date > cutoff))
+      .map(item => ({
+        contractId: contract.id, modality: rentals.modalityOf(contract), occurrenceId: item.id, date: item.date, period: item.period,
+        amount: item.rentAmount, currencyCode: item.currencyCode
+      }));
+  }).sort((a, b) => a.date.localeCompare(b.date) || a.modality.localeCompare(b.modality));
+}
+
+/** "Finalizar contrato": ends one modality (same settlement as ending the rental). */
+function endModality(db, userId, declaration, contractId, body = {}) {
+  const contract = contractsOf(db, userId, declaration.id).find(item => item.id === contractId);
+  if (!contract) return fail('Contrato no encontrado', 404);
+  if (!isActive(contract)) return fail(ALREADY_ENDED, 409);
+  const endOn = endDateFor(db, userId, [contract], body);
+  if (endOn.error) return endOn;
+  const written = withRollback(db, userId, () => {
+    endContract(db, userId, contract, endOn.value);
+    settle(db, userId, declaration.assetId, declaration.id);
+    return db.findById('rentalDeclarations', declaration.id, userId);
+  });
+  return written.error ? written : { value: written.value };
+}
+
+/** Read-only preview of ending the whole rental or one modality: the periods that get cancelled (and tenant obligations). */
+function endPreview(db, userId, declaration, { contractId = null, endDate } = {}) {
+  const active = contractsOf(db, userId, declaration.id).filter(isActive);
+  const contracts = contractId ? active.filter(item => item.id === contractId) : active;
+  if (contractId && !contracts.length) {
+    return contractsOf(db, userId, declaration.id).some(item => item.id === contractId) ? fail(ALREADY_ENDED, 409) : fail('Contrato no encontrado', 404);
+  }
+  if (!contracts.length) return fail('El alquiler ya está finalizado', 409);
+  const endOn = endDateFor(db, userId, contracts, { endDate });
+  if (endOn.error) return endOn;
+  const value = { cancelledPeriods: cancelledPeriods(db, userId, contracts, endOn.value) };
+  if (!contractId) {
+    value.tenantObligations = db.findAll('obligations', userId)
+      .filter(item => item.assetId === declaration.assetId && item.status !== 'cancelled' && item.responsibilityType === 'tenant')
+      .map(item => ({ obligationId: item.id, title: item.title }));
+  }
+  return { value };
+}
+
+module.exports = { view, contractsOf, activeDeclarationFor, backfillDeclarations, create, update, end, endModality, endPreview, findOverlap, ALREADY_ENDED };

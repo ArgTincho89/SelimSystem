@@ -955,38 +955,4 @@ const AssetsPage = {
     catch (error) { showToast(error.message, 'error'); }
   },
 
-  showRentalConditionModal(asset, contract, options = {}) {
-    const body = create('div');
-    const method = this.select([['manual', 'Importe manual'], ['percentage', 'Porcentaje ingresado'], ['index', 'Índice ingresado']]);
-    body.append(create('label', { className: 'form-group' }, [create('span', { textContent: 'Tipo de actualización' }), method]));
-    const effectiveDate = this.rentalField(body, 'Fecha efectiva (debe coincidir con un vencimiento)', { type: 'date' });
-    const amountLabel = `Nuevo alquiler (${contract.currencyCode})`;
-    const amount = MoneyInput.create({ currency: contract.currencyCode, ariaLabel: amountLabel });
-    body.append(create('label', { className: 'form-group', style: { display: 'grid', gap: '4px' } }, [create('span', { textContent: amountLabel }), amount]));
-    const percentage = this.rentalField(body, 'Porcentaje de ajuste', { type: 'number', step: '0.01' });
-    const indexValue = this.rentalField(body, 'Valor de índice ingresado', { type: 'number', min: '0.000001', step: '0.000001' });
-    const baseIndexValue = this.rentalField(body, 'Valor de índice base ingresado', { type: 'number', min: '0.000001', step: '0.000001' });
-    const periodicity = this.select([['', 'Mantener periodicidad'], ['monthly', 'Mensual'], ['bimonthly', 'Cada dos meses'], ['quarterly', 'Trimestral'], ['semiannual', 'Semestral'], ['annual', 'Anual']]);
-    body.append(create('label', { className: 'form-group' }, [create('span', { textContent: 'Periodicidad aplicable' }), periodicity]));
-    method.addEventListener('change', () => {
-      amount.parentElement.style.display = method.value === 'manual' ? '' : 'none';
-      percentage.parentElement.style.display = method.value === 'percentage' ? '' : 'none';
-      indexValue.parentElement.style.display = method.value === 'index' ? '' : 'none';
-      baseIndexValue.parentElement.style.display = method.value === 'index' ? '' : 'none';
-    });
-    method.dispatchEvent(new Event('change'));
-    const footer = create('div', {}, [create('button', { className: 'btn btn-primary', type: 'button', textContent: 'Guardar condición', onClick: async () => {
-      const data = { method: method.value, effectiveDate: effectiveDate.value, periodicity: periodicity.value || undefined };
-      if (method.value === 'manual') {
-        if (!MoneyInput.validate(amount)) return;
-        data.rentAmount = MoneyInput.value(amount) ?? NaN;
-      }
-      if (method.value === 'percentage') data.percentage = Number(percentage.value);
-      if (method.value === 'index') { data.indexValue = Number(indexValue.value); data.baseIndexValue = Number(baseIndexValue.value); }
-      try { await API.rentals.addCondition(contract.id, data); showToast('Condición guardada'); await (options.onDone ? options.onDone() : this.showDetails(asset.id)); }
-      catch (error) { showToast(error.message, 'error'); }
-    } })]);
-    Modal.show('Actualizar condición de alquiler', body, { footer });
-  },
-
 };

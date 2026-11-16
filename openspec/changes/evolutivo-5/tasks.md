@@ -67,11 +67,11 @@ Budget is 800 lines (review_budget_lines); `size:exception` is recorded. Mitigat
 
 ## W5: contracts-and-lifecycle (commit: `feat(rentals): adjustment preview and modality end`)
 
-- [ ] 5.1 RED `tests/routes/rental-condition-preview.test.js`: preview shape, collected dates skipped, only uncollected superseded, GET unlogged. Update `rentals-adjustment` tests for skip-collected.
-- [ ] 5.2 RED `tests/routes/rental-modality-end.test.js`: `settle` runs, 409 "No se puede finalizar este contrato porque ya está finalizado", end-previews, rollback, log `rental.contract-end`.
-- [ ] 5.3 `rentals.js` split `planCondition` + write; `GET /rentals/:id/conditions/preview`; `rental-declarations.js` `endModality` + end-previews; routes + `ROUTES`.
-- [ ] 5.4 `rentalModal.js` Contratos tab (update flow with preview, end flow); UI stops using `PUT /rentals/:id {status:'ended'}`. Add `tests/ui/evolutivo5-contracts-contract.test.js`.
-- [ ] 5.5 e2e: end-modality scenario in `e2e/features` + page object.
+- [x] 5.1 RED `tests/routes/rental-condition-preview.test.js`: preview shape, collected dates skipped, only uncollected superseded, GET unlogged. Update `rentals-adjustment` tests for skip-collected.
+- [x] 5.2 RED `tests/routes/rental-modality-end.test.js`: `settle` runs, 409 "No se puede finalizar este contrato porque ya está finalizado", end-previews, rollback, log `rental.contract-end`.
+- [x] 5.3 `rentals.js` split `planCondition` + write; `GET /rentals/:id/conditions/preview`; `rental-declarations.js` `endModality` + end-previews; routes + `ROUTES`.
+- [x] 5.4 `rentalModal.js` Contratos tab (update flow with preview, end flow); UI stops using `PUT /rentals/:id {status:'ended'}`. Add `tests/ui/evolutivo5-contracts-contract.test.js`.
+- [x] 5.5 e2e: end-modality scenario in `e2e/features` + page object.
 
 ## W6: rental-deletion-history (commit: `feat(rentals): delete rental and rental history list`)
 

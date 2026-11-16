@@ -41,6 +41,11 @@ class FakeElement {
 
   set textContent(value) { this._text = String(value); this.children = []; }
 
+  // Like a real control: `value` defaults to the value attribute until it is assigned.
+  get value() { return this._value !== undefined ? this._value : (this.attributes.value || ''); }
+
+  set value(next) { this._value = String(next); }
+
   get id() { return this.attributes.id || ''; }
 
   set id(value) { this.attributes.id = String(value); }

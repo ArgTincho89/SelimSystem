@@ -152,6 +152,22 @@ router.put('/:id', (req, res) => {
   res.json(contractResponse(db, userId, updated, upperDate(db, userId)));
 });
 
+// Read-only dry run of "Actualizar alquiler": the new amount, the periods it updates and the collected ones it skips.
+router.get('/:id/conditions/preview', (req, res) => {
+  const db = req.app.locals.db;
+  const userId = req.session.userId;
+  const contract = db.findById('rentalContracts', req.params.id, userId);
+  if (!contract) return res.status(404).json({ error: 'Contrato no encontrado' });
+  const number = value => (value === undefined || value === '' ? undefined : Number(value));
+  const input = {
+    method: req.query.method, effectiveDate: req.query.effectiveDate, rentAmount: number(req.query.rentAmount), percentage: number(req.query.percentage),
+    indexValue: number(req.query.indexValue), baseIndexValue: number(req.query.baseIndexValue), ...(req.query.periodicity ? { periodicity: req.query.periodicity } : {})
+  };
+  const result = rentals.previewCondition(db, userId, contract, input);
+  if (result.error) return res.status(result.status || 400).json({ error: result.error });
+  res.json(result.preview);
+});
+
 router.post('/:id/conditions', (req, res) => {
   const db = req.app.locals.db;
   const userId = req.session.userId;
@@ -159,7 +175,7 @@ router.post('/:id/conditions', (req, res) => {
   if (!contract) return res.status(404).json({ error: 'Contrato no encontrado' });
   const result = rentals.applyCondition(db, userId, contract, req.body || {});
   if (result.error) return res.status(result.status || 400).json({ error: result.error });
-  res.status(201).json(result.condition);
+  res.status(201).json({ ...result.condition, skippedCollectedDates: result.skippedCollectedDates, updatedDates: result.updatedDates });
 });
 
 router.post('/:id/occurrences/:occurrenceId/cancel', (req, res) => {

@@ -93,15 +93,146 @@ const RentalModal = {
     return null;
   },
 
-  async openCondition(ctx, contractId) {
-    try {
-      const contract = await API.rentals.get(contractId);
-      AssetsPage.showRentalConditionModal(ctx.asset, contract, { onDone: () => ctx.reopen() });
-    } catch (error) { showToast(error.message, 'error'); }
+  // "Actualizar alquiler": shows the current value, lets the user pick a manual amount, a percentage or an index
+  // and a future due date, and previews the effect (read-only endpoint) before confirming. No retroactive dates.
+  openCondition(ctx, contractId) {
+    const card = ctx.overview.modalities.find(item => item.contractId === contractId);
+    if (!card) return null;
+    const body = create('div', { className: 'rental-condition', style: { display: 'grid', gap: '10px' } });
+    body.appendChild(create('p', { style: { margin: '0' }, textContent: `${card.modalityLabel}. Valor actual: ${formatearMonedaConCodigo(card.currentAmount, card.currencyCode)}` }));
+    const method = create('select', { className: 'form-control', 'aria-label': 'Tipo de actualización' });
+    [['manual', 'Nuevo importe'], ['percentage', 'Porcentaje de aumento'], ['index', 'Índice o criterio']].forEach(([value, label]) => method.appendChild(create('option', { value, textContent: label })));
+    const date = create('select', { className: 'form-control', 'aria-label': 'Fecha efectiva' });
+    card.futureDueDates.forEach(value => date.appendChild(create('option', { value, textContent: value.split('-').reverse().join('/') })));
+    const amount = MoneyInput.create({ currency: card.currencyCode, ariaLabel: `Nuevo alquiler (${card.currencyCode})` });
+    const percentage = create('input', { className: 'form-control', type: 'number', step: '0.01', 'aria-label': 'Porcentaje de aumento' });
+    const indexValue = create('input', { className: 'form-control', type: 'number', min: '0.000001', step: '0.000001', 'aria-label': 'Valor de índice actual' });
+    const baseIndex = create('input', { className: 'form-control', type: 'number', min: '0.000001', step: '0.000001', 'aria-label': 'Valor de índice base' });
+    const field = (label, control) => create('label', { className: 'form-group', style: { display: 'grid', gap: '4px', margin: '0' } }, [create('span', { textContent: label }), control]);
+    const rows = { manual: field(`Nuevo importe (${card.currencyCode})`, amount), percentage: field('Porcentaje de aumento', percentage), index: create('div', { style: { display: 'grid', gap: '10px' } }, [field('Índice actual', indexValue), field('Índice base', baseIndex)]) };
+    body.append(field('Tipo de actualización', method), field('Fecha efectiva (próximo vencimiento)', date), rows.manual, rows.percentage, rows.index);
+    const note = create('p', { className: 'text-muted', role: 'status', style: { margin: '0' }, textContent: card.futureDueDates.length ? 'Completá los datos para ver la previsualización.' : 'Este contrato no tiene vencimientos futuros para ajustar.' });
+    body.appendChild(note);
+    const save = create('button', { className: 'btn btn-primary', type: 'button', textContent: 'Guardar ajuste', disabled: true });
+    let valid = false;
+    const input = () => {
+      const data = { method: method.value, effectiveDate: date.value };
+      if (method.value === 'manual') data.rentAmount = MoneyInput.value(amount);
+      if (method.value === 'percentage') data.percentage = percentage.value === '' ? undefined : Number(percentage.value);
+      if (method.value === 'index') { data.indexValue = indexValue.value === '' ? undefined : Number(indexValue.value); data.baseIndexValue = baseIndex.value === '' ? undefined : Number(baseIndex.value); }
+      return data;
+    };
+    let token = 0;
+    const refresh = async () => {
+      Object.entries(rows).forEach(([key, row]) => { row.style.display = key === method.value ? '' : 'none'; });
+      valid = false;
+      save.disabled = true;
+      const current = input();
+      const ready = current.effectiveDate && ((method.value === 'manual' && current.rentAmount > 0) || (method.value === 'percentage' && Number.isFinite(current.percentage)) || (method.value === 'index' && current.indexValue > 0 && current.baseIndexValue > 0));
+      if (!ready) return;
+      const mine = (token += 1);
+      try {
+        const result = await API.rentals.previewCondition(contractId, current);
+        if (mine !== token) return;
+        note.textContent = this.previewText(result, card);
+        valid = true;
+        save.disabled = false;
+      } catch (error) {
+        if (mine !== token) return;
+        note.textContent = error.message;
+      }
+    };
+    [method, date, percentage, indexValue, baseIndex].forEach(control => { on(control, 'change', refresh); on(control, 'input', refresh); });
+    ['input', 'change', 'blur'].forEach(name => on(amount, name, refresh));
+    on(save, 'click', async () => {
+      if (!valid) return;
+      save.disabled = true;
+      try {
+        await API.rentals.addCondition(contractId, input());
+        showToast('Ajuste de alquiler guardado');
+        Modal.hide();
+        await ctx.reload();
+      } catch (error) { save.disabled = false; note.textContent = error.message; }
+    });
+    refresh();
+    Modal.push('Actualizar alquiler', body, { width: '520px', footer: create('div', { style: { display: 'flex', gap: '8px' } }, [create('button', { className: 'btn btn-ghost', type: 'button', textContent: 'Cancelar', onClick: () => Modal.hide() }), save]) });
+    return body;
+  },
+
+  // "Desde diciembre 2026, el alquiler pasa de ARS 11.797.500 a ARS 15.336.750. Se actualizarán 5 períodos futuros no cobrados."
+  previewText(preview, card) {
+    const month = formatMonthLabel(preview.effectiveDate.slice(0, 7));
+    const count = preview.affectedDates.length;
+    const skipped = preview.skippedCollectedDates.length;
+    const periods = `${count} período${count === 1 ? '' : 's'} futuro${count === 1 ? '' : 's'} no cobrado${count === 1 ? '' : 's'}`;
+    const text = `Desde ${month.charAt(0).toLowerCase()}${month.slice(1)}, el alquiler pasa de ${formatearMonedaConCodigo(preview.previousAmount, card.currencyCode)} a ${formatearMonedaConCodigo(preview.newAmount, card.currencyCode)}. Se actualizarán ${periods}.`;
+    return skipped ? `${text} ${skipped === 1 ? 'Un período ya cobrado se mantiene' : `${skipped} períodos ya cobrados se mantienen`} sin cambios.` : text;
   },
 
   finishRental(ctx) {
-    AssetsPage.endDeclaration(ctx.asset, { declarationId: ctx.declarationId, stacked: true, onDone: () => ctx.reload() });
+    return this.endDialog(ctx, {
+      title: 'Finalizar alquiler', confirmLabel: 'Confirmar y finalizar alquiler',
+      intro: ['Estás por finalizar este alquiler.', 'Se cancelarán los períodos futuros sin cobrar.', 'Las obligaciones a cargo del inquilino volverán al titular.', 'Esta acción no se puede deshacer.', '¿Querés continuar?'],
+      preview: endDate => API.rentals.declarations.endPreview(ctx.declarationId, { endDate }),
+      end: endDate => API.rentals.declarations.end(ctx.declarationId, { endDate: endDate || null }),
+      done: 'Alquiler finalizado'
+    });
+  },
+
+  // "Finalizar contrato": only inside a concrete modality; asks for the end date, lists the periods that get
+  // cancelled and requires an explicit confirmation. It is not "Finalizar alquiler" (that ends every modality).
+  finishContract(ctx, card) {
+    return this.endDialog(ctx, {
+      title: `Finalizar contrato · ${card.modalityLabel}`, confirmLabel: 'Confirmar y finalizar contrato',
+      intro: [`Estás por finalizar el contrato de ${card.modalityLabel.toLowerCase()}.`, 'Se cancelarán los períodos futuros sin cobrar de esta modalidad. Los cobros registrados se conservan.', 'Esta acción no se puede deshacer.', '¿Querés continuar?'],
+      preview: endDate => API.rentals.declarations.endModalityPreview(ctx.declarationId, card.contractId, { endDate }),
+      end: endDate => API.rentals.declarations.endModality(ctx.declarationId, card.contractId, { endDate: endDate || null }),
+      done: 'Contrato finalizado'
+    });
+  },
+
+  // Shared end dialog: date, live preview of what gets cancelled, explicit confirmation.
+  endDialog(ctx, { title, confirmLabel, intro, preview, end, done }) {
+    const body = create('div', { className: 'rental-end', style: { display: 'grid', gap: '8px' } });
+    intro.forEach(line => body.appendChild(create('p', { style: { margin: '0' }, textContent: line })));
+    const endDate = create('input', { className: 'form-control', type: 'date', value: getToday(), 'aria-label': 'Fecha de finalización' });
+    body.appendChild(create('label', { className: 'form-group', style: { display: 'grid', gap: '4px', margin: '0' } }, [create('span', { textContent: 'Fecha de finalización' }), endDate]));
+    const result = create('div', { className: 'rental-end-preview', role: 'status', dataset: { endPreview: 'true' } });
+    body.appendChild(result);
+    const confirm = create('button', { className: 'btn btn-danger', type: 'button', textContent: confirmLabel, dataset: { confirmEnd: 'true' } });
+    let token = 0;
+    const refresh = async () => {
+      const mine = (token += 1);
+      result.replaceChildren(create('small', { className: 'text-muted', textContent: 'Calculando qué se cancelará...' }));
+      try {
+        const data = await preview(endDate.value);
+        if (mine !== token) return;
+        const items = data.cancelledPeriods.map(item => `${modalityLabel(item.modality)} · ${formatMonthLabel(item.period)} · ${formatearMonedaConCodigo(item.amount, item.currencyCode)}`);
+        result.replaceChildren(
+          create('strong', { textContent: items.length ? `Se cancelarán ${items.length} período${items.length === 1 ? '' : 's'} sin cobrar` : 'No hay períodos futuros sin cobrar para cancelar' }),
+          ...(items.length ? [create('ul', { style: { margin: '4px 0', paddingLeft: '18px', maxHeight: '160px', overflowY: 'auto' } }, items.map(text => create('li', { textContent: text })))] : []),
+          ...(data.tenantObligations && data.tenantObligations.length ? [create('strong', { textContent: 'Estas obligaciones del inquilino vuelven al titular:' }), create('ul', { style: { margin: '4px 0', paddingLeft: '18px' } }, data.tenantObligations.map(item => create('li', { textContent: item.title })))] : [])
+        );
+        confirm.disabled = false;
+      } catch (error) {
+        if (mine !== token) return;
+        result.replaceChildren(create('p', { className: 'text-danger', role: 'alert', textContent: error.message }));
+        confirm.disabled = true;
+      }
+    };
+    on(endDate, 'change', refresh);
+    on(confirm, 'click', async () => {
+      confirm.disabled = true;
+      try {
+        await end(endDate.value);
+        showToast(done);
+        Modal.hide();
+        await ctx.reload();
+      } catch (error) { result.replaceChildren(create('p', { className: 'text-danger', role: 'alert', textContent: error.message })); confirm.disabled = false; }
+    });
+    refresh();
+    Modal.push(title, body, { width: '520px', footer: create('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap', justifyContent: 'flex-end' } }, [create('button', { className: 'btn btn-ghost', type: 'button', textContent: 'Cancelar', onClick: () => Modal.hide() }), confirm]) });
+    return body;
   },
 
   async collect(ctx, monthKey) {
@@ -173,6 +304,7 @@ const RentalModal = {
       button('Registrar cobro', () => this.collectContract(ctx, card.contractId));
     }
     button('Ver períodos', () => { ctx.periodFilter = { modality: card.modality }; ctx.tabs.select('periodos'); ctx.tabs.refresh('periodos'); });
+    if (card.status === 'active') button('Finalizar contrato', () => this.finishContract(ctx, card));
     return actions;
   },
 

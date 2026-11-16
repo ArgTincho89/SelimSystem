@@ -200,7 +200,7 @@ describe('Rental contracts, expected rent periods, and collections', () => {
     expect(db.findAll('rentOccurrences', userId).filter(item => item.contractId === created.body.id)).toHaveLength(occurrenceCount);
   });
 
-  it('rejects a rent condition update when an affected period has a collection allocation', async () => {
+  it('skips a collected period on a rent condition update, keeping its amount, collection and allocation untouched', async () => {
     const today = ledger.localDateForUser(db, userId);
     const startDate = firstOfMonth(today, 1);
     const effectiveDate = firstOfMonth(startDate, 2);
@@ -217,10 +217,13 @@ describe('Rental contracts, expected rent periods, and collections', () => {
     const allocationBefore = db.findAll('rentCollectionAllocations', userId).find(item => item.occurrenceId === occurrence.id);
     const transactionBefore = db.findById('transactions', collectionBefore.transactionId, userId);
 
-    const rejected = await agent.post(`/api/rentals/${created.body.id}/conditions`).send({
+    const applied = await agent.post(`/api/rentals/${created.body.id}/conditions`).send({
       method: 'manual', rentAmount: 125, effectiveDate
     });
-    expect(rejected.status).toBe(409);
+    expect(applied.status).toBe(201);
+    expect(applied.body.skippedCollectedDates).toEqual([effectiveDate]);
+    expect(applied.body.updatedDates).not.toContain(effectiveDate);
+    expect(applied.body.updatedDates).toContain(firstOfMonth(effectiveDate, 1));
     expect(db.findById('rentOccurrences', occurrence.id, userId)).toEqual(occurrenceBefore);
     expect(db.findById('rentCollections', collection.body.id, userId)).toEqual(collectionBefore);
     expect(db.findAll('rentCollectionAllocations', userId).find(item => item.occurrenceId === occurrence.id)).toEqual(allocationBefore);

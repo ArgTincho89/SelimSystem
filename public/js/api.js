@@ -280,6 +280,10 @@ const API = {
     create(data) { return API.post('/rentals', data); },
     update(id, data) { return API.put(`/rentals/${encodeURIComponent(id)}`, data); },
     addCondition(id, data) { return API.post(`/rentals/${encodeURIComponent(id)}/conditions`, data); },
+    previewCondition(id, filters = {}) {
+      const query = new URLSearchParams(Object.entries(filters).filter(([, value]) => value !== '' && value != null));
+      return API.get(`/rentals/${encodeURIComponent(id)}/conditions/preview?${query}`);
+    },
     cancelOccurrence(id, occurrenceId) { return API.post(`/rentals/${encodeURIComponent(id)}/occurrences/${encodeURIComponent(occurrenceId)}/cancel`, {}); },
     alerts() { return API.get('/rentals/alerts'); },
     collections(contractId) { return API.get(`/rentals/collections/list${contractId ? `?contractId=${encodeURIComponent(contractId)}` : ''}`); },
@@ -303,7 +307,16 @@ const API = {
       },
       create(data) { return API.post('/rentals/declarations', data); },
       update(id, data) { return API.put(`/rentals/declarations/${encodeURIComponent(id)}`, data); },
-      end(id, data = {}) { return API.post(`/rentals/declarations/${encodeURIComponent(id)}/end`, data); }
+      end(id, data = {}) { return API.post(`/rentals/declarations/${encodeURIComponent(id)}/end`, data); },
+      endPreview(id, filters = {}) {
+        const query = new URLSearchParams(Object.entries(filters).filter(([, value]) => value !== '' && value != null));
+        return API.get(`/rentals/declarations/${encodeURIComponent(id)}/end-preview${query.toString() ? `?${query}` : ''}`);
+      },
+      endModality(id, contractId, data = {}) { return API.post(`/rentals/declarations/${encodeURIComponent(id)}/modalities/${encodeURIComponent(contractId)}/end`, data); },
+      endModalityPreview(id, contractId, filters = {}) {
+        const query = new URLSearchParams(Object.entries(filters).filter(([, value]) => value !== '' && value != null));
+        return API.get(`/rentals/declarations/${encodeURIComponent(id)}/modalities/${encodeURIComponent(contractId)}/end-preview${query.toString() ? `?${query}` : ''}`);
+      }
     }
   }
 };

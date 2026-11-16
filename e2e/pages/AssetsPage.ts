@@ -87,6 +87,23 @@ export class AssetsPage extends BasePage {
     await this.modal.getByLabel('Cerrar').click();
   }
 
+  /** Opens "Ver alquiler" > "Contratos" and ends one modality with its date dialog and explicit confirmation. */
+  async endModality(assetName: string, modality: string): Promise<void> {
+    await this.page.locator('article.card', { hasText: assetName }).getByRole('button', { name: 'Ver alquiler', exact: true }).click();
+    await this.modal.getByRole('tab', { name: 'Contratos' }).click();
+    const card = this.modal.locator('[data-contract-card]', { hasText: modality }).first();
+    await card.getByRole('button', { name: new RegExp('Finalizar contrato') }).click();
+    await this.modal.getByRole('button', { name: 'Confirmar y finalizar contrato' }).click();
+    await expect(this.modal.getByRole('button', { name: 'Confirmar y finalizar contrato' })).toHaveCount(0);
+  }
+
+  /** A finish date of today keeps the contract in force until then: its validity now ends today. */
+  async expectModalityEndsToday(assetName: string, modality: string): Promise<void> {
+    await this.modal.getByRole('tab', { name: 'Contratos' }).click();
+    const today = await this.page.evaluate(() => (window as unknown as { getToday: () => string }).getToday());
+    await expect(this.modal.locator('[data-contract-card]', { hasText: modality }).first()).toContainText(`— ${today}`);
+  }
+
   /** Not exported as a step: kept for symmetry with the other page objects. */
   async expectModalityHidden(modality: RentalModality): Promise<void> {
     await expect(this.fieldset(modality)).toBeHidden();

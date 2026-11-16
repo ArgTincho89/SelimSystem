@@ -15,6 +15,6 @@ Característica: Cobro mensual de un alquiler con varias modalidades
     Y el primer aviso de alquiler detalla las modalidades "Locación", "Comodato" y "Mutuo"
     Cuando registro el cobro del primer aviso de alquiler en la cuenta "Cuenta alquileres"
     Entonces hay 1 avisos de alquiler pendientes
-    Cuando deshago el cobro del mes cobrado desde el historial del inmueble "Casa Mensual"
+    Cuando deshago el cobro del mes cobrado desde la pestaña Períodos del alquiler del inmueble "Casa Mensual"
     Y abro la página de avisos
     Entonces hay 2 avisos de alquiler pendientes

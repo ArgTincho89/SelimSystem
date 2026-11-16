@@ -198,7 +198,12 @@ function conditionsFor(db, userId, contractId) {
   return db.findAll('rentalConditions', userId).filter(item => item.contractId === contractId).sort((a, b) => a.effectiveDate.localeCompare(b.effectiveDate));
 }
 
-function applyCondition(db, userId, contract, input) {
+/**
+ * Pure plan of a rent adjustment ("Actualizar alquiler"): validates the input and computes the new amount, the
+ * uncollected occurrences it supersedes and the collected ones it skips. Writes nothing, so it also backs the
+ * read-only preview. Collected periods are never rewritten: they keep their amount and collections.
+ */
+function planCondition(db, userId, contract, input) {
   const method = input.method;
   if (!CONDITION_METHODS.has(method) || !validDate(input.effectiveDate)) return { error: 'El tipo de ajuste o la fecha efectiva no es válido' };
   if (input.periodicity !== undefined && !PERIODICITIES.has(input.periodicity)) return { error: 'La periodicidad del ajuste no es válida' };
@@ -208,7 +213,6 @@ function applyCondition(db, userId, contract, input) {
   const old = conditionsFor(db, userId, contract.id);
   if (old.some(item => item.effectiveDate === input.effectiveDate)) return { error: 'Ya existe una condición para esa fecha efectiva' };
   const occurrences = db.findAll('rentOccurrences', userId).filter(item => item.contractId === contract.id && item.date >= input.effectiveDate);
-  if (occurrences.some(item => allocatedForOccurrence(db, userId, item.id).length > 0)) return { error: 'Un período de alquiler con cobros no se puede reescribir', status: 409 };
   const previous = [...old].filter(item => item.effectiveDate < input.effectiveDate).pop();
   const previousMinor = previous?.rentMinor || contract.initialRentMinor;
   let rentMinor;
@@ -232,16 +236,56 @@ function applyCondition(db, userId, contract, input) {
     adjustmentValue = input.indexValue;
   }
   if (!Number.isSafeInteger(rentMinor) || rentMinor < 1) return { error: 'El alquiler resultante no es válido' };
+  const live = occurrences.filter(item => !item.cancelled);
+  const skipped = live.filter(item => allocatedForOccurrence(db, userId, item.id).length > 0);
+  const skippedIds = new Set(skipped.map(item => item.id));
+  const supersede = live.filter(item => !skippedIds.has(item.id));
+  return { plan: {
+    method, effectiveDate: input.effectiveDate, rentMinor, adjustmentValue, indexValue, baseIndexValue,
+    periodicity: input.periodicity || previous?.periodicity || contract.periodicity, previousConditionId: previous?.id || null, previousMinor,
+    supersede, skipped
+  } };
+}
+
+/** Dates of the periods an adjustment would touch, for the preview: every future due date minus the collected ones. */
+function conditionImpact(db, userId, contract, plan) {
+  const horizon = new Date(`${plan.effectiveDate}T00:00:00.000Z`);
+  horizon.setUTCMonth(horizon.getUTCMonth() + 12);
+  const through = contract.endDate || horizon.toISOString().slice(0, 10);
+  const conditions = [...conditionsFor(db, userId, contract.id), { effectiveDate: plan.effectiveDate, periodicity: plan.periodicity }];
+  const skippedDates = new Set(plan.skipped.map(item => item.date));
+  const dates = occurrenceDates(contract, through, conditions).filter(date => date >= plan.effectiveDate);
+  return { affectedDates: dates.filter(date => !skippedDates.has(date)), skippedCollectedDates: [...skippedDates].sort() };
+}
+
+/** Read-only dry run of "Actualizar alquiler" (the same rule as `applyCondition`). Amounts include IVA. */
+function previewCondition(db, userId, contract, input) {
+  const planned = planCondition(db, userId, contract, input);
+  if (planned.error) return planned;
+  const { plan } = planned;
+  const impact = conditionImpact(db, userId, contract, plan);
+  return { preview: {
+    currencyCode: contract.currencyCode, ivaPercent: contract.ivaPercent ?? null,
+    previousAmount: ledger.fromMinorUnits(grossMinor(plan.previousMinor, contract.ivaPercent), contract.currencyCode),
+    newAmount: ledger.fromMinorUnits(grossMinor(plan.rentMinor, contract.ivaPercent), contract.currencyCode),
+    effectiveDate: plan.effectiveDate, ...impact
+  } };
+}
+
+function applyCondition(db, userId, contract, input) {
+  const planned = planCondition(db, userId, contract, input);
+  if (planned.error) return planned;
+  const { plan } = planned;
   const condition = db.create('rentalConditions', {
-    contractId: contract.id, effectiveDate: input.effectiveDate, method,
-    rentMinor, rentAmount: ledger.fromMinorUnits(rentMinor, contract.currencyCode),
-    adjustmentValue, indexValue, baseIndexValue, periodicity: input.periodicity || previous?.periodicity || contract.periodicity,
-    previousConditionId: previous?.id || null
+    contractId: contract.id, effectiveDate: plan.effectiveDate, method: plan.method,
+    rentMinor: plan.rentMinor, rentAmount: ledger.fromMinorUnits(plan.rentMinor, contract.currencyCode),
+    adjustmentValue: plan.adjustmentValue, indexValue: plan.indexValue, baseIndexValue: plan.baseIndexValue, periodicity: plan.periodicity,
+    previousConditionId: plan.previousConditionId
   }, userId);
-  occurrences.filter(item => !item.cancelled).forEach(item => db.update('rentOccurrences', item.id, {
+  plan.supersede.forEach(item => db.update('rentOccurrences', item.id, {
     cancelled: true, cancelledAt: new Date().toISOString(), supersededByConditionId: condition.id
   }, userId));
-  return { condition };
+  return { condition, skippedCollectedDates: plan.skipped.map(item => item.date).sort(), updatedDates: plan.supersede.map(item => item.date).sort() };
 }
 
 function allocatedForOccurrence(db, userId, occurrenceId) {
@@ -516,7 +560,7 @@ function rentAlerts(db, userId, { today, leadDays = 5, expiryDays = 30, adjustme
 module.exports = {
   rentAlerts,
   CONTRACT_TYPES, CONTRACT_STATES, PERIODICITIES, CONDITION_METHODS, validDate, hash,
-  validateContract, conditionsFor, applyCondition, generateOccurrences, occurrenceView,
+  validateContract, conditionsFor, applyCondition, planCondition, previewCondition, generateOccurrences, occurrenceView,
   validateAllocations, collectionView, reverseCollection, intervalMonths, classifyCollection, monthViews,
   CONTRACT_KINDS, MODALITIES, KIND_BY_MODALITY, modalityOf, grossMinor, decimalScaled, activeContractsFor, activeContractFor, hasOccurrences, afterContractWrite, cancelUnpaidOccurrences
 };

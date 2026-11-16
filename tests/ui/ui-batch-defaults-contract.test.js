@@ -63,7 +63,7 @@ describe('UI batch: defaults, money inputs, obligation form and nav highlight', 
       const assets = read('js/pages/assets.js');
       expect(assets).toContain("MoneyInput.create({ currency: claim.currencyCode, value: claim.outstandingAmount, required: true, ariaLabel: 'Importe recibido' })");
       expect(assets).toContain("MoneyInput.create({ currency: 'ARS', required: true, ariaLabel: 'Importe recuperable' })");
-      expect(assets).toContain('MoneyInput.create({ currency: contract.currencyCode, ariaLabel: amountLabel })');
+      expect(read('js/pages/rentalModal.js')).toContain('MoneyInput.create({ currency: card.currencyCode, ariaLabel: `Nuevo alquiler (${card.currencyCode})` })');
       expect(assets).not.toMatch(/Number\(amount\.value\)/);
       expect(assets).not.toMatch(/placeholder: 'Importe recuperable'/);
     });
