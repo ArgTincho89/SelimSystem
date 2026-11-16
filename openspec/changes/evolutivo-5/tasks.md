@@ -52,10 +52,10 @@ Budget is 800 lines (review_budget_lines); `size:exception` is recorded. Mitigat
 
 ## W3: rental-modal-shell (commit: `feat(rentals): tabbed rental modal with overview`)
 
-- [ ] 3.1 RED `tests/services/rental-periods.test.js` + `tests/routes/rental-overview.test.js`: header status (`active|ending-soon|upcoming|ended`), modality cards, progress counts, alerts, no writes, 404.
-- [ ] 3.2 Create `src/services/rental-periods.js` (`overview`); `GET /rentals/declarations/:id/overview` in `routes/rental-declarations.js`.
-- [ ] 3.3 `public/js/components/modal.js` panel layout (`layout:'panel'`, `header`, `fullscreenOnMobile`); create `components/tabs.js`; create `pages/rentalModal.js` (Resumen tab); `AssetsPage.showRentMonthModal` becomes a thin delegate; CSS; register scripts.
-- [ ] 3.4 Re-point `evolutivo3-s4`, `evolutivo3-s4c`; add `tests/ui/evolutivo5-modal-tabs-contract.test.js` (Modal default unchanged, Tabs `select`/`refresh`).
+- [x] 3.1 RED `tests/services/rental-periods.test.js` + `tests/routes/rental-overview.test.js`: header status (`active|ending-soon|upcoming|ended`), modality cards, progress counts, alerts, no writes, 404.
+- [x] 3.2 Create `src/services/rental-periods.js` (`overview`); `GET /rentals/declarations/:id/overview` in `routes/rental-declarations.js`.
+- [x] 3.3 `public/js/components/modal.js` panel layout (`layout:'panel'`, `header`, `fullscreenOnMobile`); create `components/tabs.js`; create `pages/rentalModal.js` (Resumen tab); `AssetsPage.showRentMonthModal` becomes a thin delegate; CSS; register scripts.
+- [x] 3.4 Re-point `evolutivo3-s4`, `evolutivo3-s4c`; add `tests/ui/evolutivo5-modal-tabs-contract.test.js` (Modal default unchanged, Tabs `select`/`refresh`).
 
 ## W4: periods-tab (commit: `feat(rentals): periods tab and collection flows`)
 

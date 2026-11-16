@@ -1,6 +1,7 @@
 const express = require('express');
 const ledger = require('../services/account-ledger');
 const declarations = require('../services/rental-declarations');
+const rentalPeriods = require('../services/rental-periods');
 
 const router = express.Router();
 
@@ -18,6 +19,28 @@ router.get('/', (req, res) => {
     .filter(item => !req.query.assetId || item.assetId === req.query.assetId)
     .map(item => declarations.view(db, userId, item));
   res.json(rows);
+});
+
+function findDeclaration(req, res) {
+  const declaration = req.app.locals.db.findById('rentalDeclarations', req.params.id, req.session.userId);
+  if (!declaration) res.status(404).json({ error: 'Declaración de alquiler no encontrada' });
+  return declaration;
+}
+
+// The rental with its modalities (and the next 12 months of periods, as the list does).
+router.get('/:id', (req, res) => {
+  const declaration = findDeclaration(req, res);
+  if (!declaration) return;
+  respond(res, req.app.locals.db, req.session.userId, declaration);
+});
+
+// Header, modality cards, collection progress and alerts. Read-only: generated periods stay in memory.
+router.get('/:id/overview', (req, res) => {
+  const declaration = findDeclaration(req, res);
+  if (!declaration) return;
+  const result = rentalPeriods.overview(req.app.locals.db, req.session.userId, declaration, { year: req.query.year });
+  if (result.error) return res.status(result.status || 400).json({ error: result.error });
+  res.json(result.value);
 });
 
 function failed(res, result) {

@@ -292,6 +292,11 @@ const API = {
     allocate(collectionId, data) { return API.post(`/rentals/collections/${encodeURIComponent(collectionId)}/allocations`, data); },
     declarations: {
       list(assetId) { return API.get(`/rentals/declarations${assetId ? `?assetId=${encodeURIComponent(assetId)}` : ''}`); },
+      get(id) { return API.get(`/rentals/declarations/${encodeURIComponent(id)}`); },
+      overview(id, filters = {}) {
+        const query = new URLSearchParams(Object.entries(filters).filter(([, value]) => value !== '' && value != null));
+        return API.get(`/rentals/declarations/${encodeURIComponent(id)}/overview${query.toString() ? `?${query}` : ''}`);
+      },
       create(data) { return API.post('/rentals/declarations', data); },
       update(id, data) { return API.put(`/rentals/declarations/${encodeURIComponent(id)}`, data); },
       end(id, data = {}) { return API.post(`/rentals/declarations/${encodeURIComponent(id)}/end`, data); }

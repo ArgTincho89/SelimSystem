@@ -1207,7 +1207,7 @@ const AssetsPage = {
     catch (error) { showToast(error.message, 'error'); }
   },
 
-  showRentalConditionModal(asset, contract) {
+  showRentalConditionModal(asset, contract, options = {}) {
     const body = create('div');
     const method = this.select([['manual', 'Importe manual'], ['percentage', 'Porcentaje ingresado'], ['index', 'Índice ingresado']]);
     body.append(create('label', { className: 'form-group' }, [create('span', { textContent: 'Tipo de actualización' }), method]));
@@ -1235,7 +1235,7 @@ const AssetsPage = {
       }
       if (method.value === 'percentage') data.percentage = Number(percentage.value);
       if (method.value === 'index') { data.indexValue = Number(indexValue.value); data.baseIndexValue = Number(baseIndexValue.value); }
-      try { await API.rentals.addCondition(contract.id, data); showToast('Condición guardada'); await this.showDetails(asset.id); }
+      try { await API.rentals.addCondition(contract.id, data); showToast('Condición guardada'); await (options.onDone ? options.onDone() : this.showDetails(asset.id)); }
       catch (error) { showToast(error.message, 'error'); }
     } })]);
     Modal.show('Actualizar condición de alquiler', body, { footer });
