@@ -87,9 +87,9 @@ Review budget is 800 lines (`review_budget_lines`); `size:exception` is recorded
 
 ## W7: categories-in-settings (commit: `feat(settings): move categories into Configuración`)
 
-- [ ] 7.1 RED `tests/ui/evolutivo6-categories-contract.test.js`: section `categories` in Settings, navbar item gone, `/categories` redirects to `/settings?section=categories`.
-- [ ] 7.2 `categories.js` `renderPanel(panel)`; `settings.js` whitelist (`:9`) and nav (`:48`); `app.js` remove navbar item (`:141`), redirect route (`:74`).
-- [ ] 7.3 Update `evolutivo2-s2`/`s8`; e2e navigation to Categorías via Configuración.
+- [x] 7.1 RED `tests/ui/evolutivo6-categories-contract.test.js`: section `categories` in Settings, navbar item gone, `/categories` redirects to `/settings?section=categories`.
+- [x] 7.2 `categories.js` `renderPanel(panel)`; `settings.js` whitelist (`:9`) and nav (`:48`); `app.js` remove navbar item (`:141`), redirect route (`:74`).
+- [x] 7.3 Update `evolutivo2-s2`/`s8`; e2e navigation to Categorías via Configuración.
 
 ## W8: iva-by-owner (commit: `feat(home): IVA by owner for the selected month`)
 

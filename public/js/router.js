@@ -3,7 +3,7 @@ const Router = {
   currentRoute: null,
   navigationId: 0,
   // Routes that render another section's screen are highlighted as that section.
-  navAliases: { '/entities': '/settings', '/logs': '/profile' },
+  navAliases: { '/entities': '/settings', '/categories': '/settings', '/logs': '/profile' },
 
   register(path, handler) {
     this.routes[path] = handler;

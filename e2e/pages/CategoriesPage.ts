@@ -14,8 +14,10 @@ export class CategoriesPage extends BasePage {
   }
 
   async navigate(): Promise<void> {
-    await this.goto('/categories');
+    // Categories live in Configuración (the legacy /categories route redirects there).
+    await this.goto('/settings?section=categories');
     await this.page.waitForSelector(this.selectors.navbar, { state: 'visible' });
+    await this.page.waitForSelector(this.selectors.newCategoryButton, { state: 'visible' });
     await this.page.waitForLoadState('networkidle');
   }
 

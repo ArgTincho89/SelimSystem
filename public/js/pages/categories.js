@@ -1,18 +1,26 @@
 const CategoriesPage = {
+  // Standalone entry point (kept for direct calls): the same panel, mounted in the page content.
   async render() {
     const content = $('#page-content');
     const navbar = $('#navbar');
     navbar.style.display = '';
     content.style.paddingBottom = '';
+    await this.renderPanel(content);
+  },
 
-    content.innerHTML = '<div class="loading">Cargando...</div>';
-
+  // Mounted by Configuración (section "categories"): loads the categories and paints them inside `panel`.
+  async renderPanel(panel) {
+    panel.innerHTML = '<div class="loading">Cargando...</div>';
     try {
       const categories = await API.categories.list();
-      this.renderContent(content, categories);
+      this.renderContent(panel, categories);
     } catch (err) {
-      content.innerHTML = `<div class="empty-state"><p>Error: ${err.message}</p></div>`;
+      panel.innerHTML = `<div class="empty-state"><p>Error: ${err.message}</p></div>`;
     }
+  },
+
+  reload(panel) {
+    return this.renderPanel(panel);
   },
 
   renderContent(content, categories) {
@@ -172,7 +180,7 @@ const CategoriesPage = {
         await API.categories.create(data);
         Modal.hide();
         showToast('Categoría creada');
-        this.render();
+        this.reload(content);
       } catch (err) {
         showToast(err.message, 'error');
       }
@@ -232,7 +240,7 @@ const CategoriesPage = {
         await API.categories.update(cat.id, data);
         Modal.hide();
         showToast('Categoría actualizada');
-        this.render();
+        this.reload(content);
       } catch (err) {
         showToast(err.message, 'error');
       }
@@ -259,7 +267,7 @@ const CategoriesPage = {
         await API.categories.delete(cat.id);
         Modal.hide();
         showToast('Categoría eliminada');
-        this.render();
+        this.reload(content);
       } catch (err) {
         showToast(err.message, 'error');
       }
