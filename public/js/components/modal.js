@@ -44,10 +44,21 @@ const Modal = {
         : { width: '100%', maxWidth: options.width || '440px', maxHeight: '90vh', overflowY: 'auto' }
     });
 
+    // A dialog opened on top of another one gets a top-left "Atrás" button that returns to the dialog below.
+    const titleGroup = create('div', { className: 'modal-title-group' }, [
+      ...(depth ? [create('button', {
+        type: 'button',
+        className: 'btn btn-ghost btn-sm modal-back',
+        'aria-label': 'Volver a la ventana anterior',
+        textContent: '← Atrás',
+        onClick: () => this.hide()
+      })] : []),
+      create('h3', { id: titleId, textContent: title, style: { fontSize: 'var(--font-lg)', fontWeight: '700' } })
+    ]);
     const header = create('div', {
       style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }
     }, [
-      create('h3', { id: titleId, textContent: title, style: { fontSize: 'var(--font-lg)', fontWeight: '700' } }),
+      titleGroup,
       create('button', {
         type: 'button',
         'aria-label': 'Cerrar',

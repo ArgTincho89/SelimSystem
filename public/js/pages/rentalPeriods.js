@@ -63,7 +63,7 @@ const RentalPeriods = {
     const last = Math.max(Number((ctx.overview.header.to || `${current}`).slice(0, 4)), current + 1);
     const filters = ctx.periodFilter = { ...this.EMPTY_FILTERS, year: ctx.year || String(current), ...ctx.periodFilter };
     const root = create('div', { className: 'rental-periods', style: { display: 'grid', gap: '10px' } });
-    const control = (label, element) => create('label', { className: 'form-group', style: { margin: '0', display: 'grid', gap: '2px' } }, [create('span', { textContent: label }), element]);
+    const control = (label, element) => create('label', { className: 'periods-filter' }, [create('span', { textContent: label }), element]);
     const year = this.select(Array.from({ length: last - Math.min(first, Number(filters.year)) + 1 }, (_, index) => { const value = String(Math.min(first, Number(filters.year)) + index); return [value, value]; }), filters.year);
     year.setAttribute('aria-label', 'Año');
     const month = this.select([['', 'Todos los meses'], ...this.MONTH_NAMES.map((name, index) => [String(index + 1).padStart(2, '0'), name])], filters.month);
@@ -79,12 +79,14 @@ const RentalPeriods = {
     const provider = this.select([['', 'Todos los proveedores']], '');
     provider.setAttribute('aria-label', 'Proveedor');
     const text = create('input', { className: 'form-control', type: 'search', placeholder: 'Buscar', 'aria-label': 'Buscar texto', value: filters.text });
-    const toolbar = create('div', { className: 'periods-filters', style: { display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'end' } }, [
+    const filterGrid = create('div', { className: 'periods-filters-grid' }, [
       control('Año', year), control('Mes', month), control('Estado', status), control('Tipo', type), control('Responsable', responsibility), control('Modalidad', modality), control('Proveedor', provider), control('Buscar', text)
     ]);
     const clear = create('button', { className: 'btn btn-ghost btn-sm', type: 'button', textContent: 'Limpiar filtros' });
-    toolbar.appendChild(clear);
-    if (!ctx.readOnly && ctx.overview.header.status !== 'ended') toolbar.appendChild(create('button', { className: 'btn btn-secondary btn-sm', type: 'button', textContent: 'Actualizar alquiler', onClick: () => RentalModal.updateRent(ctx) }));
+    const actions = create('div', { className: 'periods-filters-actions' }, [clear]);
+    // Filters sit in their own compact section, separated from the results table.
+    const toolbar = create('section', { className: 'periods-filters', 'aria-label': 'Filtros de períodos' }, [filterGrid, actions]);
+    if (!ctx.readOnly && ctx.overview.header.status !== 'ended') actions.appendChild(create('button', { className: 'btn btn-secondary btn-sm', type: 'button', textContent: 'Actualizar alquiler', onClick: () => RentalModal.updateRent(ctx) }));
     const table = DataTable.create({
       caption: 'Períodos del alquiler', rowId: row => row.period, rowDataset: row => ({ rentMonth: row.monthKey || row.period, collected: String(row.state === 'collected') }), emptyMessage: 'No hay períodos que coincidan con los filtros.',
       expand: row => this.detail(row, ctx),

@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.13.2] - 2026-11-16
+
+### Changed
+- La tabla de Períodos (y la ficha mensual) muestra líneas grises finas entre celdas.
+- Los filtros de Períodos se ordenan en una grilla más compacta, con controles más chicos y separados de los resultados.
+- Las ventanas abiertas sobre otra muestran un botón "← Atrás" arriba a la izquierda para volver a la anterior.
+
 ## [1.13.1] - 2026-11-16
 
 ### Changed
