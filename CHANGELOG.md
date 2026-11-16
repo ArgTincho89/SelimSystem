@@ -1,5 +1,27 @@
 # Changelog
 
+## [1.15.0] - 2026-11-16
+
+### Added
+- Deshacer con motivo: un único diálogo "Deshacer" (motivo obligatorio de 1 a 500 caracteres) para revertir pagos, anular resoluciones y deshacer cobros de alquiler, desde el historial del bien, Obligaciones, Períodos y Logs. El motivo se guarda y se muestra en el detalle.
+- Logs: mensajes descriptivos (bien, importe, vencimiento, cuota y motivo), filtros por Bien, Titular, Inquilino y Categoría con "Limpiar filtros", y botón "Deshacer" en pagos, resoluciones y cobros.
+- Cuentas: marcar una cuenta como principal al crearla, y elegir la "Nueva cuenta principal" al desmarcar la principal; siempre queda exactamente una.
+- Bienes: tipos de inmueble propios con "Agregar tipo…" en el formulario.
+- Bienes: "Eliminar" en la ficha y en la edición, con confirmación; solo si el bien no tiene movimientos, obligaciones, alquileres, documentos, notas, gastos a recuperar ni planes de cuotas.
+- Contratos del alquiler: "Ver documento" y "Descargar documento" cuando el contrato tiene un documento adjunto.
+- Protección contra doble clic: los botones y formularios se bloquean mientras la acción está en curso y no se envían escrituras idénticas duplicadas.
+
+### Changed
+- Las notas son obligatorias al registrar un pago (hasta 1000 caracteres) y al resolver una obligación del inquilino (hasta 2000 caracteres).
+- Categorías pasó a Configuración > Categorías; el botón de la barra de navegación ya no existe y /categories redirige a la nueva sección.
+- Inicio: el IVA mensual se muestra por titular para el mes elegido (con 0 para los titulares sin IVA).
+- Al resolver una obligación, el inquilino sale del contrato de la obligación o del alquiler vigente del bien, con el primero preseleccionado.
+- En Contratos del alquiler ya no aparece "Registrar cobro" (queda en Resumen y Períodos) y las alertas de alquiler vencido se muestran en rojo y negrita.
+
+### Fixed
+- El formulario de proveedor siempre carga las categorías de gasto y avisa cuando no hay ninguna.
+- La cuenta que ya es principal ya no ofrece "Hacer principal".
+
 ## [1.14.0] - 2026-11-16
 
 ### Added

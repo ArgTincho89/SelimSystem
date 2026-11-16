@@ -98,27 +98,27 @@ Review budget is 800 lines (`review_budget_lines`); `size:exception` is recorded
 
 ## W9: asset-kinds (commit: `feat(assets): user-defined asset kinds`)
 
-- [ ] 9.1 RED `tests/services/asset-kinds.test.js` + `tests/routes/evolutivo6-asset-kinds.test.js`: create/list, 400 blank/>50, 409 "Ese tipo ya existe" (case/accent-insensitive vs built-ins), user isolation, log `asset-kind.create`, asset accepts custom key, 400 "El tipo de inmueble no es válido".
-- [ ] 9.2 Create `src/services/asset-kinds.js`, `src/routes/asset-kinds.js`; mount `/api/asset-kinds` in `src/app.js`; `ROUTES` entry; validation in `src/routes/assets.js:76`.
-- [ ] 9.3 `api.js` `assetKinds.{list,create}`; `asset-form.js`/`assets.js` `propertyKindOptions()` merges kinds plus "Agregar tipo…".
+- [x] 9.1 RED `tests/services/asset-kinds.test.js` + `tests/routes/evolutivo6-asset-kinds.test.js`: create/list, 400 blank/>50, 409 "Ese tipo ya existe" (case/accent-insensitive vs built-ins), user isolation, log `asset-kind.create`, asset accepts custom key, 400 "El tipo de inmueble no es válido".
+- [x] 9.2 Create `src/services/asset-kinds.js`, `src/routes/asset-kinds.js`; mount `/api/asset-kinds` in `src/app.js`; `ROUTES` entry; validation in `src/routes/assets.js:76`.
+- [x] 9.3 `api.js` `assetKinds.{list,create}`; `asset-form.js`/`assets.js` `propertyKindOptions()` merges kinds plus "Agregar tipo…".
 
 ## W10: asset-delete (commit: `feat(assets): delete unreferenced assets`)
 
-- [ ] 10.1 RED `tests/routes/evolutivo6-asset-delete.test.js`: 200, one 409 per referencing collection (10 in design) with `references`, 404, cascade of `assetOwnerships`/`assetStatusHistory`, atomic rollback, log `asset.delete`.
-- [ ] 10.2 `src/routes/assets.js` `DELETE /:id`; `ROUTES` `asset.delete`; `api.js` `assets.delete`.
-- [ ] 10.3 "Eliminar" (danger `ConfirmDialog`) in `assets.js` ficha and `asset-form.js`; 409 reason shown in the dialog; UI test.
+- [x] 10.1 RED `tests/routes/evolutivo6-asset-delete.test.js`: 200, one 409 per referencing collection (10 in design) with `references`, 404, cascade of `assetOwnerships`/`assetStatusHistory`, atomic rollback, log `asset.delete`.
+- [x] 10.2 `src/routes/assets.js` `DELETE /:id`; `ROUTES` `asset.delete`; `api.js` `assets.delete`.
+- [x] 10.3 "Eliminar" (danger `ConfirmDialog`) in `assets.js` ficha and `asset-form.js`; 409 reason shown in the dialog; UI test.
 
 ## W11: contract-documents (commit: `feat(rentals): view and download contract documents`)
 
-- [ ] 11.1 RED `tests/ui/evolutivo6-contract-docs.test.js`: with a document -> "Ver documento"/"Descargar documento"; without -> none.
-- [ ] 11.2 `rentalModal.js`: `API.documents.list('contract', id)`; viewer reuses `AssetHistory.showReceipt`; download `contentUrl(id,true)`.
+- [x] 11.1 RED `tests/ui/evolutivo6-contract-docs.test.js`: with a document -> "Ver documento"/"Descargar documento"; without -> none.
+- [x] 11.2 `rentalModal.js`: `API.documents.list('contract', id)`; viewer reuses `AssetHistory.showReceipt`; download `contentUrl(id,true)`.
 
 ## W12: release (commit: `chore(release): evolutivo-6 version 1.15.0, changelog and cache bump`)
 
-- [ ] 12.1 `public/sw.js` `CACHE_NAME` -> `selimsystem-v47`; verify `undoDialog.js` in `index.html` and `STATIC_ASSETS`.
-- [ ] 12.2 Relax `tests/ui/evolutivo5-release-contract.test.js`; add `tests/ui/evolutivo6-release-contract.test.js` (v47, 1.15.0).
-- [ ] 12.3 `package.json`/`package-lock.json` -> `1.15.0`; `CHANGELOG.md` `## [1.15.0]` (Spanish).
-- [ ] 12.4 Update `Documento funcional.md` (Spanish): notes, undo, logs, accounts, categories, IVA, kinds, delete.
-- [ ] 12.5 e2e: pay/resolve fill notes; history "Deshacer" with reason (`e2e/pages/AssetsPage.ts`); Categorías via Configuración; check `HomePage.ts`/`SummaryPage.ts`.
-- [ ] 12.6 Full suite: `npx jest --forceExit --runTestsByPath $(git ls-files 'tests/*.test.js' 'tests/**/*.test.js')` plus untracked new tests; `npx tsc --noEmit -p e2e`.
+- [x] 12.1 `public/sw.js` `CACHE_NAME` -> `selimsystem-v47`; verify `undoDialog.js` in `index.html` and `STATIC_ASSETS`.
+- [x] 12.2 Relax `tests/ui/evolutivo5-release-contract.test.js`; add `tests/ui/evolutivo6-release-contract.test.js` (v47, 1.15.0).
+- [x] 12.3 `package.json`/`package-lock.json` -> `1.15.0`; `CHANGELOG.md` `## [1.15.0]` (Spanish).
+- [x] 12.4 Update `Documento funcional.md` (Spanish): notes, undo, logs, accounts, categories, IVA, kinds, delete.
+- [x] 12.5 e2e: pay/resolve fill notes; history "Deshacer" with reason (`e2e/pages/AssetsPage.ts`); Categorías via Configuración; check `HomePage.ts`/`SummaryPage.ts`.
+- [x] 12.6 Full suite: `npx jest --forceExit --runTestsByPath $(git ls-files 'tests/*.test.js' 'tests/**/*.test.js')` plus untracked new tests; `npx tsc --noEmit -p e2e`.
 - [ ] 12.7 Orchestrator: push `evolutivo-6`, open PR to `master` with the `size:exception` note. No deploy.

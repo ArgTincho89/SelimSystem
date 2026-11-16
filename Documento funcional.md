@@ -1,12 +1,12 @@
 # SelimSystem — Documento funcional
 
-**Versión del producto:** 1.14.0
+**Versión del producto:** 1.15.0
 **Entorno productivo:** https://selimsystem.fly.dev
 **Fecha del documento:** 16/11/2026
 
 Este documento describe qué hace SelimSystem, cómo se usa cada pantalla y qué reglas de negocio aplica la aplicación. Está pensado para personas usuarias y responsables del negocio que necesitan entender el producto sin leer el código. Los detalles técnicos se limitan a la sección 16.
 
-Todo lo descrito se verificó contra el código actual de la aplicación (versión 1.13.0). Cuando una capacidad existe solo en el servidor y no tiene pantalla, se indica de forma explícita.
+Todo lo descrito se verificó contra el código actual de la aplicación (versión 1.15.0). Cuando una capacidad existe solo en el servidor y no tiene pantalla, se indica de forma explícita.
 
 ---
 
@@ -75,11 +75,10 @@ Visible en todas las pantallas una vez iniciada la sesión:
 |---|---|---|
 | **Inicio** | Inicio | Resumen del mes, cuentas, transacciones y analítica. |
 | **Avisos** | Centro de avisos | Todo lo que requiere atención. Muestra un contador con la cantidad de avisos (hasta "99+"). |
-| **Categorías** | Categorías | Alta, edición y baja de categorías y subcategorías. |
 | **Bienes** | Bienes | Muebles e inmuebles, historial, ficha y alquileres. |
 | **Obligaciones** | Obligaciones | Impuestos, servicios y otros compromisos con sus vencimientos y pagos. |
 | **Perfil** | Perfil | Foto, datos de la cuenta, Logs, acciones de cuenta y cierre de sesión. |
-| **Configuración** | Configuración | Cuentas, Avisos de saldo, Titular, Inquilino y Proveedor. Muestra un indicador cuando hay avisos de saldo o de alquiler. |
+| **Configuración** | Configuración | Cuentas, Avisos de saldo, Titular, Inquilino, Proveedor y Categorías. Muestra un indicador cuando hay avisos de saldo o de alquiler. |
 
 ### 3.2 Árbol de pantallas y ventanas
 
@@ -98,19 +97,17 @@ Inicio
 Avisos
  ├─ A cargo de titulares / A cargo de inquilinos (dos grupos, con filtro "Responsable")
  └─ Acciones por aviso: Registrar pago, Resolver, Adjuntar comprobante, Registrar cobro,
-    Contabilizar cuota, Revertir pago (documentos pendientes), Ver obligación, Ver bien, Ver cuentas
-
-Categorías → Nueva / Editar / Agregar subcategoría / Eliminar
+    Contabilizar cuota, Revertir pago con motivo (documentos pendientes), Ver obligación, Ver bien, Ver cuentas
 
 Bienes
  ├─ + Nuevo bien
  ├─ Ver (solo lectura) → Ver declaración de alquiler
- ├─ Ver historial → año y mes → detalle del registro → visor de comprobante (con zoom) | Revertir pago
+ ├─ Ver historial → año y mes → detalle del registro → visor de comprobante (con zoom) | Deshacer (con motivo)
  ├─ Ficha → ficha rediseñada (datos, obligaciones, tarjeta de alquiler, documentos y notas, economía)
  │   ├─ Ver alquiler → ventana del alquiler con pestañas: Resumen, Períodos, Contratos, Documentos, Notas
  │   ├─ Ver historial de alquileres → Ver (solo lectura) | Editar | Eliminar
  │   └─ Ver ficha mensual → ventana secundaria con tabla y filtros
- ├─ Editar
+ ├─ Editar → Eliminar (si no tiene movimientos asociados)
  └─ Declarar alquiler / Editar alquiler → Declaración de alquiler (→ Nueva obligación apilada)
 
 Obligaciones
@@ -119,7 +116,7 @@ Obligaciones
     Por vencimiento: Editar, Registrar pago, Revertir pago, Cancelar, Resolver, Adjuntar comprobante, Anular resolución
 
 Perfil
- ├─ Logs (pantalla propia)
+ ├─ Logs (pantalla propia, con filtros y Deshacer)
  ├─ Acciones de cuenta → Cambiar email / Cambiar contraseña / Eliminar mi cuenta
  └─ Cerrar sesión
 
@@ -128,7 +125,8 @@ Configuración
  ├─ Avisos (preferencias de avisos de saldo y pronóstico)
  ├─ Titular
  ├─ Inquilino
- └─ Proveedor
+ ├─ Proveedor
+ └─ Categorías → Nueva / Editar / Agregar subcategoría / Eliminar
 ```
 
 ---
@@ -214,7 +212,7 @@ Permite ir a meses anteriores y **futuros** (para ver lo programado). Al tocar e
 | **Editar** | Siempre | Abre el formulario precargado. |
 | **Eliminar** | Transacciones comunes | Borra la transacción, salvo las excepciones de 14.6. |
 | **Omitir ocurrencia** | Ocurrencias recurrentes no contabilizadas | Salta esa ocurrencia sin borrar la serie. |
-| **Deshacer cobro** | Cobros de alquiler | Requiere un segundo toque ("Confirmar y deshacer"). El mes vuelve a quedar pendiente de cobro. |
+| **Deshacer cobro** | Cobros de alquiler | Pide un **Motivo** obligatorio (hasta 500 caracteres). El mes vuelve a quedar pendiente de cobro. |
 
 Las transferencias abren un detalle propio (importe enviado → recibido, débito total, tasa efectiva, comisión y nota) con el botón **Administrar transferencias** (lleva a Configuración > Cuentas).
 
@@ -228,7 +226,7 @@ Se calcula en la **moneda principal de la aplicación** (ARS por defecto) para e
 | **Gastos por categoría** | Desplegable con barras por categoría y subcategoría y su porcentaje sobre el gasto neto. |
 | **Fijo vs Variable** | Dona con el reparto de gastos fijos y variables y sus porcentajes. |
 | **Ingresos A vs B** | Una dona por titular y moneda con el reparto A/B. |
-| **IVA mensual por titular** | IVA de los últimos 6 meses (hasta el mes elegido), por titular y moneda. |
+| **IVA mensual por titular** | IVA del **mes elegido**, una fila por titular y moneda (0 si el titular no tuvo IVA ese mes). Sigue al selector de mes. |
 
 En la experiencia **Escritorio**, cada gráfico tiene una estrella (☆/★) para marcarlo como **favorito**; el favorito se muestra junto a las tarjetas de métricas. Solo puede haber un favorito, recordado en el dispositivo.
 
@@ -325,7 +323,7 @@ Reglas generales: se consideran avisos hasta 90 días hacia adelante y se muestr
 
 ## 8. Categorías
 
-**Propósito:** administrar la clasificación propia de gastos y reembolsos.
+**Propósito:** administrar la clasificación propia de gastos y reembolsos. Se gestiona desde **Configuración > Categorías** (ya no hay un botón propio en la barra de navegación; la dirección anterior `/categories` redirige a esa sección).
 
 - Lista jerárquica: categorías principales con sus subcategorías debajo y el contador de subcategorías.
 - **+ Nueva:** nombre (obligatorio), **Categoría padre** opcional y **Color** (paleta de 12 colores).
@@ -368,7 +366,7 @@ Reglas generales: se consideran avisos hasta 90 días hacia adelante y se muestr
 
 | Mueble | Inmueble |
 |---|---|
-| Tipo (Automóvil) | Tipo: Departamento, Casa, Galpón o Lote (obligatorio) |
+| Tipo (Automóvil) | Tipo: Departamento, Casa, Galpón, Lote o un **tipo propio** (obligatorio). Con **Agregar tipo…** se crea uno nuevo (hasta 50 caracteres, sin repetir ninguno existente aunque cambien mayúsculas o acentos) y queda seleccionado. Los tipos propios no se renombran ni se eliminan, y los contratos de esos bienes usan el tipo "residencial". |
 | Marca | Características |
 | Dominio | Ubicación |
 | KMs | Superficie cubierta (m²) y Superficie libre (m²), enteros ≥ 0 |
@@ -377,7 +375,7 @@ Reglas generales: se consideran avisos hasta 90 días hacia adelante y se muestr
 | | **Obligaciones del bien**: lista de obligaciones asignadas, con su proveedor y número de cuenta/contrato, y un selector "A cargo de" (Titular / Inquilino; Inquilino solo si hay alquiler vigente). Botón **Nueva obligación**. |
 
 6. Escribir **Notas** si se desea.
-7. Pulsar **Crear bien**. Al editar, **Guardar cambios** muestra primero un aviso de confirmación ("Estás por modificar datos del bien...") con **Confirmar y guardar** o **Volver**.
+7. Pulsar **Crear bien**. Al editar, **Guardar cambios** muestra primero un aviso de confirmación ("Estás por modificar datos del bien...") con **Confirmar y guardar** o **Volver**. Al editar también aparece **Eliminar** (ver 9.5).
 
 La condición de alquilado **no** se pide al crear el bien: se declara después (ver 10).
 
@@ -386,7 +384,7 @@ La condición de alquilado **no** se pide al crear el bien: se declara después 
 1. Pulsar **Ver historial** en un bien.
 2. Elegir el **Año** y, aparte, el **Mes** (o **Todo el año**). **Hoy** vuelve al mes actual. El listado se actualiza sin cerrar la ventana.
 3. Cada fila de la tabla muestra fecha, concepto, tipo (obligación, alquiler, ajuste, evento o reversión), responsable (titular o inquilino), proveedor o inquilino, importe esperado, ejecutado, saldo, estado y acción. Cuando se ve un año, los registros se agrupan por mes. El estado se informa con texto e ícono, no solo con color (Pendiente, Vencido, Parcial, Pagado, Cobrado, Resuelto, Revertido, Cancelado).
-4. **Ver detalle** abre el registro: tipo, fecha, concepto, bien, responsable, importes, estado, **pagos o cobros** (fecha, importe, cuenta, medio, título y notas), pagos revertidos, **comprobantes** y **notas**. Desde el detalle se puede **Registrar pago**, **Resolver**, **Registrar cobro**, **Deshacer cobro**, **Adjuntar comprobante**, **Agregar nota** y **Revertir pago**, según el estado del registro.
+4. **Ver detalle** abre el registro: tipo, fecha, concepto, bien, responsable, importes, estado, **pagos o cobros** (fecha, importe, cuenta, medio, título y notas), pagos revertidos, **comprobantes** y **notas**. Desde el detalle se puede **Registrar pago**, **Resolver**, **Registrar cobro**, **Adjuntar comprobante** y **Agregar nota**, según el estado del registro. Un único botón **Deshacer** sirve para revertir un pago, anular una resolución o deshacer un cobro: pide un **Motivo** obligatorio, que luego se ve en el detalle.
 5. Al pulsar un comprobante se abre el **visor**: imágenes con **Alejar**, **Acercar** y **100%**; PDF y texto en un marco integrado; botones **Abrir** y **Descargar**. Los formatos no admitidos solo se pueden descargar.
 6. Si no hay registros, aparece "No hay movimientos en este período.".
 
@@ -394,7 +392,7 @@ La condición de alquilado **no** se pide al crear el bien: se declara después 
 
 Ventana rediseñada con estos bloques:
 
-- **Encabezado** con el nombre y los datos principales del bien, y accesos a **Ver historial** y **Ver ficha mensual**.
+- **Encabezado** con el nombre y los datos principales del bien, y accesos a **Editar**, **Ver historial**, **Ver ficha mensual** y **Eliminar** (ver 9.5).
 - **Datos del bien** y notas.
 - **Obligaciones del bien** con su responsable, próximo vencimiento y acciones (**Registrar pago**, **Resolver**).
 - **Tarjeta de alquiler** (inmuebles): resumen del alquiler vigente con **Ver alquiler** (abre la ventana del alquiler, ver 10.5), **Ver historial de alquileres** y la declaración o edición del alquiler. Sin alquiler vigente muestra "Este inmueble no tiene un alquiler activo." con la acción para declararlo.
@@ -407,7 +405,7 @@ Ventana rediseñada con estos bloques:
 
 - Un bien debe tener al menos un titular; con varios titulares, cada porcentaje debe ser mayor que 0 y el total debe ser 100%.
 - La titularidad se registra con fechas. Un mismo titular no puede tener dos períodos de titularidad que se solapen, y la suma de porcentajes de titulares simultáneos no puede superar el 100%.
-- No hay una opción para eliminar bienes desde la pantalla.
+- **Eliminar un bien** (desde la ficha o desde la edición) abre una confirmación de peligro y no envía nada hasta confirmar. Solo se puede eliminar un bien sin referencias: si tiene movimientos, obligaciones, alquileres, documentos, notas, gastos a recuperar o planes de cuotas, la aplicación lo rechaza y muestra el motivo ("No se puede eliminar el bien porque tiene ... asociados"). Al eliminarlo se borran también sus titularidades y su historial de estados. La eliminación queda registrada en Logs y no se puede deshacer.
 
 ---
 
@@ -462,9 +460,9 @@ Desde la tarjeta de un contrato también existe **Registrar cobro** multi-perío
 Se abre desde la tarjeta de alquiler de la ficha (y desde los avisos de alquiler). Es una ventana ancha con un **encabezado fijo** y cinco pestañas (en el celular ocupa toda la pantalla y las pestañas se desplazan horizontalmente).
 
 - **Encabezado:** estado del alquiler (Activo, Por vencer, Por comenzar o Finalizado, con texto e ícono), inquilinos, vigencia, monto mensual vigente por moneda, próximo cobro, próximo vencimiento y las acciones **Editar alquiler**, **Actualizar alquiler** y **Finalizar alquiler**.
-- **Resumen:** una tarjeta por modalidad (estado, vigencia, monto original y vigente, clasificación, IVA, ajuste y próximo ajuste), el progreso de cobros (esperados, cobrados, parciales, vencidos, pendientes y cancelados) y las alertas del alquiler con su acción.
+- **Resumen:** una tarjeta por modalidad (estado, vigencia, monto original y vigente, clasificación, IVA, ajuste y próximo ajuste), el progreso de cobros (esperados, cobrados, parciales, vencidos, pendientes y cancelados) y las alertas del alquiler con su acción; las alertas de alquiler vencido se muestran en rojo y negrita.
 - **Períodos:** una fila por mes con el vencimiento, una columna por modalidad, las obligaciones del titular y del inquilino de ese mes, el total por moneda, el estado consolidado y las acciones **Registrar cobro**, **Deshacer cobro** (con confirmación), **Cancelar período** (con confirmación; solo sin cobros) y **Ver detalle**. Filtros por año, mes, estado, tipo, responsable, modalidad, proveedor y texto. Las obligaciones del mes ofrecen **Registrar pago**, **Resolver**, **Anular resolución** y **Revertir pago**. Sin períodos que coincidan: "No hay períodos pendientes de cobro." u otro mensaje con **Limpiar filtros**.
-- **Contratos:** una tarjeta por modalidad con su vigencia, importes, clasificación y ajuste. **Actualizar alquiler** registra un ajuste (importe manual, porcentaje o índice) eligiendo entre los próximos vencimientos y muestra antes una vista previa ("Desde <mes>, el alquiler pasa de X a Y. Se actualizarán N períodos futuros no cobrados."); los períodos ya cobrados no se modifican. **Finalizar contrato** termina solo esa modalidad (pide la fecha y una confirmación que lista los períodos que se cancelan); si el contrato ya estaba finalizado, el servidor responde "No se puede finalizar este contrato porque ya está finalizado.".
+- **Contratos:** una tarjeta por modalidad con su vigencia, importes, clasificación y ajuste; si el contrato tiene un documento adjunto, la tarjeta ofrece **Ver documento** (abre el visor) y **Descargar documento**. **Registrar cobro** no aparece aquí (queda en Resumen y Períodos). **Actualizar alquiler** registra un ajuste (importe manual, porcentaje o índice) eligiendo entre los próximos vencimientos y muestra antes una vista previa ("Desde <mes>, el alquiler pasa de X a Y. Se actualizarán N períodos futuros no cobrados."); los períodos ya cobrados no se modifican. **Finalizar contrato** termina solo esa modalidad (pide la fecha y una confirmación que lista los períodos que se cancelan); si el contrato ya estaba finalizado, el servidor responde "No se puede finalizar este contrato porque ya está finalizado.".
 - **Documentos:** ver 10.8.
 - **Notas:** ver 10.8.
 
@@ -477,11 +475,12 @@ Reglas:
 Para corregir un cobro mal registrado (cuenta, clasificación o importe equivocados):
 
 1. Pulsar **Deshacer cobro** (en el mes de alquiler o en la transacción de Inicio).
-2. Confirmar con **Confirmar y deshacer**.
+2. Completar el **Motivo** (obligatorio, hasta 500 caracteres) y confirmar.
 3. Se eliminan juntos todos los ingresos del mes cobrado (todas las modalidades), sus asignaciones y comprobantes. El mes vuelve a figurar como **pendiente de cobro** en Avisos y se puede volver a cobrar correctamente.
 
 **Reglas**
 - Un cobro de alquiler **no se edita**: se deshace y se registra de nuevo.
+- El motivo queda guardado en el historial del bien y en Logs. Sin motivo, el servidor rechaza el pedido ("Indicá el motivo (hasta 500 caracteres)").
 - Si la cuenta estaba conciliada, la conciliación se reinicia y se avisa ("La conciliación de la cuenta quedó pendiente de revisar").
 - Solo bloquea el deshacer un movimiento dependiente (por ejemplo, un reembolso o una conversión vinculados).
 
@@ -578,12 +577,13 @@ Cada fila indica también "Pagado X/Y moneda" y, si la obligación es compartida
 2. El formulario aparece precargado:
    - **Importe pagado**: por defecto, el saldo pendiente del vencimiento.
    - **Cuenta**: agrupada en "Cuentas de los titulares" y "Otras cuentas", solo de la moneda de la obligación. Se sugiere, en este orden: la cuenta definida en el vencimiento o la obligación; si no, la cuenta del titular con mayor porcentaje del bien; si no, la primera cuenta de esa moneda (con una advertencia).
-   - **Fecha de pago** (hoy; no puede ser futura), **Categoría**, **Medio de pago** (opcional), **Título** (opcional, precargado con el nombre), **Notas** (opcional) y **Comprobante** (opcional).
+   - **Fecha de pago** (hoy; no puede ser futura), **Categoría**, **Medio de pago** (opcional), **Título** (opcional, precargado con el nombre), **Notas** (obligatorias, hasta 1000 caracteres) y **Comprobante** (opcional).
 3. Pulsar **Registrar pago**.
 4. Se crea un **gasto real** (clasificación Variable) en la cuenta elegida: descuenta el saldo y afecta los gastos y el ahorro del mes. El comprobante queda vinculado y se ve en el **historial del bien**.
 
 **Reglas**
 - Se permiten pagos parciales; el importe no puede superar lo pendiente.
+- Sin notas, el servidor responde "Las notas son obligatorias".
 - No se puede pagar un vencimiento cancelado, ya saldado o a cargo del inquilino ("Este pago está a cargo del inquilino. Usá Resolver").
 - Se necesita al menos una cuenta activa en la moneda de la obligación.
 - Si el pago se registra pero el comprobante falla, se avisa y se puede adjuntar después con **Adjuntar comprobante**.
@@ -593,7 +593,7 @@ Cada fila indica también "Pagado X/Y moneda" y, si la obligación es compartida
 Cuando una obligación está a cargo del inquilino, el propietario no paga: el inquilino debe presentar el comprobante.
 
 1. Mientras no se registre, aparece el aviso **Comprobantes pendientes de inquilinos**.
-2. Pulsar **Resolver** e indicar: inquilino, importe pagado por el inquilino, período (AAAA-MM), fecha de resolución, comprobantes existentes o nuevos y notas.
+2. Pulsar **Resolver** e indicar: inquilino (se ofrecen los del contrato de la obligación o, si no tiene, los del alquiler vigente del bien, con el primero preseleccionado), importe pagado por el inquilino, período (AAAA-MM), fecha de resolución, comprobantes existentes o nuevos y **notas obligatorias** (hasta 2000 caracteres).
 3. Pulsar **Registrar resolución**.
 
 La resolución **no crea ningún movimiento**: no cambia saldos, ingresos, gastos ni ahorro. Queda constancia en el historial del bien. En obligaciones compartidas, la parte del propietario se paga con **Registrar pago** y la del inquilino se resuelve; el aviso del inquilino aparece cuando la parte del propietario ya está saldada.
@@ -603,11 +603,11 @@ La resolución **no crea ningún movimiento**: no cambia saldos, ingresos, gasto
 Para corregir un pago registrado por error sin perder la trazabilidad.
 
 1. Pulsar **Revertir pago** en el vencimiento (Obligaciones), en el detalle del registro del historial del bien, en las obligaciones de la pestaña Períodos del alquiler, en un aviso de **Documentos pendientes** o en el detalle de la transacción de Inicio.
-2. Se abre una confirmación con la fecha, el importe, la cuenta, el medio de pago, la obligación, el vencimiento y el comprobante, un **Motivo** opcional (hasta 500 caracteres) y el texto: "Estás por revertir un pago registrado. Se anulará el gasto asociado y el vencimiento volverá a pendiente. Esta acción no se puede deshacer. ¿Querés continuar?". No se envía nada hasta confirmar.
+2. Se abre una confirmación con la fecha, el importe, la cuenta, el medio de pago, la obligación, el vencimiento y el comprobante, un **Motivo** obligatorio (hasta 500 caracteres) y el texto: "Estás por revertir un pago registrado. Se anulará el gasto asociado y el vencimiento volverá a pendiente. Esta acción no se puede deshacer. ¿Querés continuar?". No se envía nada hasta confirmar.
 3. Al confirmar, el gasto se elimina: el importe vuelve al saldo de la cuenta, bajan los gastos del mes, se recalcula el ahorro y el vencimiento vuelve a Pendiente, Vencido o Parcial (si quedan otros pagos).
 
 **Reglas**
-- Se revierte un pago por vez, solo de obligaciones a cargo del titular (las del inquilino se corrigen con **Anular resolución**).
+- Se revierte un pago por vez, solo de obligaciones a cargo del titular (las del inquilino se corrigen con **Anular resolución**, que también pide un motivo obligatorio).
 - Un pago con movimientos dependientes (reembolso, normalización de transferencia, atribución de movimiento, gasto recuperable o recupero) no se puede revertir: "No se puede revertir este pago porque tiene movimientos dependientes.".
 - Un pago ya revertido se rechaza ("Ese pago ya fue revertido") y repetir la solicitud original de pago no lo vuelve a crear ("Ese pago fue revertido; registrá uno nuevo").
 - Si la cuenta estaba conciliada, la conciliación se reinicia y se avisa.
@@ -617,7 +617,7 @@ Para corregir un pago registrado por error sin perder la trazabilidad.
 
 ## 12. Configuración
 
-**Propósito:** preparar los datos base: cuentas, preferencias de avisos y las personas u organizaciones (titulares, inquilinos y proveedores). Tiene su propio botón **Ocultar importes / Mostrar importes** y cinco secciones.
+**Propósito:** preparar los datos base: cuentas, preferencias de avisos y las personas u organizaciones (titulares, inquilinos y proveedores). Tiene su propio botón **Ocultar importes / Mostrar importes** y seis secciones (Cuentas, Avisos, Titular, Inquilino, Proveedor y Categorías).
 
 ### 12.1 Cuentas
 
@@ -625,16 +625,16 @@ Para corregir un pago registrado por error sin perder la trazabilidad.
 
 | Acción | Detalle |
 |---|---|
-| **Agregar cuenta** | Nombre (hasta 80 caracteres), Moneda (ARS, EUR o USD), **Titular de la cuenta** y casilla **Cuenta principal**. |
+| **Agregar cuenta** | Nombre (hasta 80 caracteres), Moneda (ARS, EUR o USD), **Titular de la cuenta** y casilla **Cuenta principal**: si se marca, esa cuenta pasa a ser la principal y la anterior deja de serlo. |
 | **Agregar sub-cuenta** | Igual, con moneda propia obligatoria. No puede ser principal. Solo se ofrece en cuentas de primer nivel activas. |
 | **Ver movimientos** | Saldo, lista de movimientos de la cuenta y mínimo proyectado. Botón **Nuevo movimiento en esta cuenta**. |
 | **Conciliar saldo / Editar conciliación** | Saldo al inicio de una **fecha de referencia** y selección de los movimientos históricos ya incluidos en ese saldo. Desde entonces el saldo se calcula solo. |
 | **Editar** | Nombre, titular y moneda (la moneda solo si la cuenta no tiene movimientos ni conciliación). |
-| **Hacer principal** | Pasa a ser la cuenta principal (solo cuentas de primer nivel). |
+| **Hacer principal** | Pasa a ser la cuenta principal (solo cuentas de primer nivel). No se ofrece en la cuenta que ya es principal. |
 | **Archivar** | No aplica a la principal; requiere archivar antes las sub-cuentas y no tener recurrencias ni movimientos programados. |
 | **Eliminar** | Solo cuentas no principales, sin movimientos y sin sub-cuentas. |
 
-**Reglas:** siempre debe existir exactamente una cuenta principal activa. Al primer uso, el historial anterior quedó asociado a la cuenta principal en EUR.
+**Reglas:** siempre debe existir exactamente una cuenta principal activa. Para desmarcar "Cuenta principal" al editar la principal hay que elegir en **Nueva cuenta principal** otra cuenta activa de primer nivel; si no hay ninguna elegible, la casilla queda marcada y deshabilitada con una ayuda. Al primer uso, el historial anterior quedó asociado a la cuenta principal en EUR.
 
 **Transferencias y conversiones** (misma sección):
 - **Nuevo movimiento entre cuentas:** cuenta de origen, cuenta de destino, importe enviado, importe realmente recibido (obligatorio si cambia la moneda), fecha, estado (**Contabilizada ahora** o **Programada (solo pronóstico)**), descripción, **comisión explícita** opcional con su categoría, e **ingresos a normalizar** (vincular un ingreso de otra moneda que se convierte).
@@ -665,6 +665,12 @@ Acciones: **Agregar**, **Ver ficha** (datos, documentos y notas), **Editar** y *
 
 **Dónde se usan:** los titulares en cuentas y bienes; los inquilinos en declaraciones de alquiler; los proveedores en obligaciones.
 
+Al crear un proveedor, el selector de categoría de gasto siempre se carga desde el servidor; si no hay categorías de gasto, se indica "Primero creá una categoría de gastos en Configuración → Categorías.".
+
+### 12.4 Categorías
+
+Sección con el contenido descrito en el capítulo 8 (alta, edición, subcategorías y baja).
+
 ---
 
 ## 13. Perfil y Logs
@@ -686,9 +692,11 @@ Acciones: **Agregar**, **Ver ficha** (datos, documentos y notas), **Editar** y *
 **Propósito:** consultar en lenguaje claro todo lo que hizo la persona usuaria.
 
 - Por defecto se muestra **todo**, de lo más nuevo a lo más antiguo.
-- Cada renglón tiene a la **izquierda la fecha y hora** y a la derecha la **descripción** de la acción (por ejemplo, "Creaste la subcuenta X de Y"). Si una acción falló, se agrega "· No se completó".
+- Cada renglón tiene a la **izquierda la fecha y hora** y a la derecha la **descripción** de la acción (por ejemplo, "Creaste la subcuenta X de Y"; las acciones sobre obligaciones y cobros incluyen el bien, el importe, el vencimiento y, cuando existe, la cuota y el motivo). Si una acción falló, se agrega "· No se completó".
 - **Buscar:** filtra por palabras, sin distinguir mayúsculas ni acentos.
 - **Desde / Hasta:** rango de días opcional ("Desde" no puede ser posterior a "Hasta").
+- **Filtros:** un panel permite filtrar por **Bien**, **Titular**, **Inquilino** y **Categoría** (se combinan, y el filtro se aplica en el servidor antes de paginar); **Limpiar filtros** los quita junto con la búsqueda y las fechas. Sin resultados se muestra un mensaje de lista vacía. Las entradas anteriores a 1.15.0 no tienen estos datos y no aparecen al filtrar.
+- **Deshacer desde Logs:** los pagos, resoluciones y cobros de alquiler registrados ofrecen **Deshacer**, que pide el mismo **Motivo** obligatorio.
 - Botón **← Perfil** para volver.
 - Se registran todas las acciones de escritura (altas, ediciones, bajas, cobros, pagos, deshacer...). Se guardan solo el tipo de acción, la referencia y el mensaje, nunca contraseñas ni contenidos. Las entradas se conservan **12 meses**.
 
@@ -746,7 +754,11 @@ Un reembolso reduce el gasto de su categoría y el gasto total; nunca suma a ing
 
 Todas las pantallas y datos (excepto el acceso) exigen sesión iniciada. Cada usuario solo ve y modifica sus propios datos, guardados en una carpeta propia en el servidor. Al eliminar la cuenta se borra esa carpeta completa.
 
-### 14.8 Formato de importes
+### 14.8 Protección contra doble clic
+
+Los botones y formularios que guardan datos se bloquean mientras la acción está en curso (se marcan como ocupados) y una escritura idéntica repetida en simultáneo se envía una sola vez; así un doble clic no duplica pagos, cobros ni altas. Las flechas de cambio de mes no se bloquean.
+
+### 14.9 Formato de importes
 
 Los campos de dinero muestran formato monetario local (por ejemplo, "211.392,00") y respetan los decimales de cada moneda.
 
@@ -778,21 +790,20 @@ Los campos de dinero muestran formato monetario local (por ejemplo, "211.392,00"
 
 ## 17. Limitaciones conocidas
 
-Todas verificadas en el código de la versión 1.13.0:
+Todas verificadas en el código de la versión 1.15.0:
 
 1. **Metas sin pantalla:** el servidor permite crear, listar y borrar metas (ahorro, límite por categoría y límite general), pero no existe ninguna pantalla para gestionarlas y su progreso no se muestra en Inicio.
-2. **Sin pantallas de Resumen ni Estadísticas propias:** la analítica está integrada en Inicio. El ritmo de gasto (burn rate) y las tendencias multi-mes existen en el servidor, pero en pantalla solo se usa la serie de IVA de los últimos 6 meses.
+2. **Sin pantallas de Resumen ni Estadísticas propias:** la analítica está integrada en Inicio. El ritmo de gasto (burn rate) y las tendencias multi-mes existen en el servidor, pero no tienen pantalla propia (el IVA mensual de Inicio sale del resumen del mes elegido).
 3. **Compras en cuotas difíciles de iniciar:** solo aparecen con un medio de pago de tipo tarjeta de crédito, pero la pantalla crea los medios de pago reutilizables siempre con tipo "otro".
 4. **Moneda principal fija desde la interfaz:** la analítica de Inicio usa la moneda principal (ARS por defecto) y no hay una opción en pantalla para cambiarla.
 5. **Pagos de obligaciones inmutables:** no se pueden editar ni eliminar (Inicio muestra el botón "Eliminar", pero el servidor rechaza la acción y el mensaje remite a **Revertir pago**).
-6. **Bienes sin baja:** no existe una opción para eliminar un bien.
-7. **Sin copia de seguridad automática:** existe una tarea semanal de respaldo en el código, pero no se activa al iniciar el servidor.
-8. **Sin notificaciones externas:** los avisos son solo internos; el recordatorio diario por correo está implementado pero no se usa.
-9. **Usuarios nuevos sin categorías:** existe una lista de categorías sugeridas, pero no se carga al registrarse.
-10. **Datos solo con conexión:** sin red no se pueden ver ni registrar datos.
-11. **Novedades del acceso desactualizadas:** el desplegable de versión muestra el número 1.13.0, pero su lista de novedades termina en 1.11.17.
-12. **Texto heredado:** la declaración de alquiler sin inquilinos sugiere cargarlos "en Personas"; hoy se cargan en Configuración > Inquilino.
-13. **Edición de vencimiento por texto:** al editar el importe de un vencimiento, el alcance se elige escribiendo "this" o "future" en un cuadro de texto.
+6. **Sin copia de seguridad automática:** existe una tarea semanal de respaldo en el código, pero no se activa al iniciar el servidor.
+7. **Sin notificaciones externas:** los avisos son solo internos; el recordatorio diario por correo está implementado pero no se usa.
+8. **Usuarios nuevos sin categorías:** existe una lista de categorías sugeridas, pero no se carga al registrarse.
+9. **Datos solo con conexión:** sin red no se pueden ver ni registrar datos.
+10. **Novedades del acceso desactualizadas:** el desplegable de versión muestra el número 1.15.0, pero su lista de novedades termina en 1.11.17.
+11. **Texto heredado:** la declaración de alquiler sin inquilinos sugiere cargarlos "en Personas"; hoy se cargan en Configuración > Inquilino.
+12. **Edición de vencimiento por texto:** al editar el importe de un vencimiento, el alcance se elige escribiendo "this" o "future" en un cuadro de texto.
 
 ---
 

@@ -69,3 +69,23 @@ Tasks 4.1-8.2 are `[x]` in `tasks.md`.
 - Collection create/undo log messages changed (amount appended); any external consumer parsing them would need updating.
 - e2e still not run locally (type-checked only); `CategoriesPage.navigate` now waits for the "Nueva" button inside Configuración.
 - The `tenantIds` of a resolution entry is the chosen tenant, while other obligation entries use the contract tenants.
+
+# Apply progress: batch 3 (W9, W10, W11, W12)
+
+| Unit | Status | Commit | Tests |
+|------|--------|--------|-------|
+| W9 asset-kinds | done | 22db4e4 | `tests/services/asset-kinds.test.js` 4, `tests/routes/evolutivo6-asset-kinds.test.js` 5; `evolutivo2-s5` source assertion updated |
+| W10 asset-delete | done | fb5601e | `tests/routes/evolutivo6-asset-delete.test.js` 15, `tests/ui/evolutivo6-asset-delete-ui.test.js` 5; `assets.test.js` last assertion updated (delete now 200) |
+| W11 contract-documents | done | 464298d | `tests/ui/evolutivo6-contract-docs.test.js` 3 |
+| W12 release 1.15.0 | done (12.7 left to the orchestrator) | see git log | `tests/ui/evolutivo6-release-contract.test.js` 5; full suite and e2e `tsc --noEmit` clean |
+
+## Deviations and decisions (batch 3)
+
+- **Asset form file**: the design names `asset-form.js`, but the asset modal lives in `public/js/pages/assets.js` (`showAssetModal`); kinds and delete buttons were added there. Kinds are cached in `AssetsPage.kinds` (loaded in `render()`, tolerant of failures) so `propertyKindOptions()` stays synchronous. "Agregar tipo…" uses `prompt()` (same precedent as the payment-method form).
+- **Kind keys**: `custom-<slug>`; duplicate check compares the normalized name (accents/case/spaces) against built-in labels and the user's kinds, and also the generated key. A name that slugifies to empty is a 400.
+- **ROUTES**: both `asset-kind.create` and `asset.delete` entries were added in the W9 commit (single edit of `activity-log.js`).
+- **Delete**: 409 body is `{ error, references: [{ collection, label, count }] }`; labels are deduplicated in the message in the order of the check list. Atomic via snapshots of `assets`, `assetOwnerships` and `assetStatusHistory` with restore on failure (500 "No se pudo eliminar el bien"). UI: `AssetsPage.confirmDelete` (danger `ConfirmDialog`; 409 reason shown in a second dialog).
+- **Contract docs**: `renderContracts` stays synchronous; each card gets a slot filled asynchronously by `loadContractDocuments` (one view/download pair per document; failures leave the slot empty).
+- **Login changelog dropdown**: still lists only up to 1.11.17 (it is a hand-maintained array in `login.js`); not touched (not trivial to keep consistent), so Documento funcional section 17 keeps that limitation (renumbered).
+- **Documento funcional**: added 12.4 Categorías and 14.8 "Protección contra doble clic" (old 14.8 became 14.9); removed "Bienes sin baja" from section 17.
+- Not done: 12.7 (push and PR) is the orchestrator's job; e2e scenarios not added (page objects already adapted in W3/W7).
