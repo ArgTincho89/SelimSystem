@@ -98,11 +98,11 @@ Budget is 800 lines (review_budget_lines); `size:exception` is recorded. Mitigat
 
 ## W10: payment-reversal (commit: `feat(obligations): revert registered payments`)
 
-- [ ] 10.1 RED `tests/services/movement-dependents.test.js`: `claims:false` equals current rent undo behavior; `claims:true` detects refund, normalization, allocations, claims, recoveries.
-- [ ] 10.2 RED `tests/routes/obligation-payment-revert.test.js`: balance, month expense, savings and alerts recompute; dependents 409; reconciliation reset (`reconciliationReset`); revert replay 409 "Ese pago ya fue revertido"; POST replay with tombstoned key 409; receipts kept with `revertedPaymentId`; reason >500 -> 400; rollback on failure; GET payment detail; log `obligation.payment-revert`.
-- [ ] 10.3 Create `services/movement-dependents.js`; make `rentals.js:380` delegate; create `services/obligation-payment-reversal.js`; routes in `routes/obligations.js`; `ROUTES`.
-- [ ] 10.4 `ConfirmDialog.open` (details, reasonField) and `ObligationsPage.revertPayment`; wire entry points in `obligations.js`, `home.js`, `alerts.js`, `assetHistory.js`, `rentalPeriods.js`. Add `tests/ui/evolutivo5-revert-contract.test.js`.
-- [ ] 10.5 e2e: revert-payment scenario + history year/month scenario.
+- [x] 10.1 RED `tests/services/movement-dependents.test.js`: `claims:false` equals current rent undo behavior; `claims:true` detects refund, normalization, allocations, claims, recoveries.
+- [x] 10.2 RED `tests/routes/obligation-payment-revert.test.js`: balance, month expense, savings and alerts recompute; dependents 409; reconciliation reset (`reconciliationReset`); revert replay 409 "Ese pago ya fue revertido"; POST replay with tombstoned key 409; receipts kept with `revertedPaymentId`; reason >500 -> 400; rollback on failure; GET payment detail; log `obligation.payment-revert`.
+- [x] 10.3 Create `services/movement-dependents.js`; make `rentals.js:380` delegate; create `services/obligation-payment-reversal.js`; routes in `routes/obligations.js`; `ROUTES`.
+- [x] 10.4 `ConfirmDialog.open` (details, reasonField) and `ObligationsPage.revertPayment`; wire entry points in `obligations.js`, `home.js`, `alerts.js`, `assetHistory.js`, `rentalPeriods.js`. Add `tests/ui/evolutivo5-revert-contract.test.js`.
+- [x] 10.5 e2e: revert-payment scenario + history year/month scenario.
 
 ## W11: feedback-and-a11y (commit: `feat(ui): feedback component and responsive pass`)
 

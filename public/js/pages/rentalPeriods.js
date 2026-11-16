@@ -185,6 +185,7 @@ const RentalPeriods = {
     if (item.actions.includes('pay')) add('Registrar pago', () => AssetHistory.payObligation(row, () => ctx.reopen()));
     if (item.actions.includes('resolve')) add('Resolver', () => AssetHistory.resolveObligation(row, () => ctx.reopen()));
     if (item.actions.includes('unresolve')) add('Anular resolución', () => this.unresolve(item, ctx), 'btn btn-ghost btn-sm');
+    AssetHistory.revertButtons({ ...item, kind: 'obligation' }, () => ctx.reload({ tab: 'periodos' })).forEach(button => buttons.push(button));
     return buttons;
   },
 

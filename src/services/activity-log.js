@@ -63,6 +63,7 @@ const ROUTES = [
   r('PUT', '/obligations/:id/occurrences/:occurrenceId', 'obligation.occurrence-update', 'Modificaste un vencimiento de la obligación', 'modificar un vencimiento de una obligación', 'obligation', { id: 'id', join: '' }),
   r('POST', '/obligations/:id/occurrences/:occurrenceId/resolution', 'obligation.resolve', 'Resolviste un vencimiento de la obligación', 'resolver un vencimiento de una obligación', 'obligation', { id: 'id', join: '' }),
   r('DELETE', '/obligations/:id/occurrences/:occurrenceId/resolution', 'obligation.unresolve', 'Deshiciste la resolución de un vencimiento de la obligación', 'deshacer la resolución de un vencimiento de una obligación', 'obligation', { id: 'id', join: '' }),
+  r('POST', '/obligations/:id/occurrences/:occurrenceId/payments/:paymentId/revert', 'obligation.payment-revert', 'Revertiste un pago de la obligación', 'revertir un pago de una obligación', 'obligation', { id: 'id', join: '' }),
   r('POST', '/obligations/:id/occurrences/:occurrenceId/payments', 'obligation.payment', 'Registraste un pago de la obligación', 'registrar un pago de una obligación', 'obligation', { id: 'id', join: '' }),
   r('POST', '/rentals/declarations/:id/end', 'rental.declaration-end', 'Finalizaste el alquiler de', 'finalizar un alquiler', 'declaration', { id: 'id', join: '' }),
   r('POST', '/rentals/declarations/:id/modalities/:contractId/end', 'rental.contract-end', 'Finalizaste un contrato del alquiler de', 'finalizar un contrato de un alquiler', 'declaration', { id: 'id', join: '' }),

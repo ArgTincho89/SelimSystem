@@ -3,6 +3,7 @@ const obligations = require('./obligations');
 const rentals = require('./rentals');
 const alerts = require('./alerts');
 const economicOverview = require('./economic-overview');
+const movementDependents = require('./movement-dependents');
 
 /**
  * Read-only typed timeline of an asset. Every generated record (obligation and rent occurrences) stays
@@ -94,6 +95,13 @@ function obligationState(item, responsibilityType, hasResolution) {
   return item.status === 'overdue' ? 'overdue' : 'pending';
 }
 
+// A payment can be reverted when its obligation is on the owner side and nothing depends on its movement.
+function paymentRevertState(ctx, transaction, tenantSide) {
+  if (!transaction || tenantSide) return { revertible: false, revertBlockedReason: tenantSide ? 'Es un pago a cargo del inquilino.' : null };
+  const dependent = ctx.dependents.find(transaction);
+  return { revertible: !dependent, revertBlockedReason: dependent ? `Tiene ${dependent}.` : null };
+}
+
 function buildObligationRows(ctx, obligation, range) {
   const { db, userId, view, today, documents, providers, notes, reversals } = ctx;
   let occurrences;
@@ -121,7 +129,8 @@ function buildObligationRows(ctx, obligation, range) {
       const tx = db.findById('transactions', payment.transactionId, userId);
       return {
         transactionId: payment.transactionId, date: payment.date, amount: majorOf(payment.amountMinor, currency), amountMinor: payment.amountMinor,
-        accountName: payment.accountName, paymentMethod: payment.paymentMethod, title: tx?.titulo || '', notes: tx?.comments || ''
+        accountName: payment.accountName, paymentMethod: payment.paymentMethod, title: tx?.titulo || '', notes: tx?.comments || '',
+        ...paymentRevertState(ctx, tx, tenantSide)
       };
     });
     const itemReversals = reversals.filter(entry => entry.occurrenceId === item.id).map(entry => ({
@@ -132,6 +141,7 @@ function buildObligationRows(ctx, obligation, range) {
       if (!tenantSide && responsibilityType !== 'none' && balance > 0) actions.push('pay');
       if (tenantSide && !resolution) actions.push('resolve');
       if (tenantSide && resolution) actions.push('unresolve');
+      if (!tenantSide && payments.some(payment => payment.revertible)) actions.push('revert');
     }
     return {
       id: `obligation:${item.id}`, kind: 'obligation', date: item.date, concept: item.title || obligation.title,
@@ -157,7 +167,7 @@ function reversalRows(ctx, assetObligationIds) {
       typeLabel: 'Evento', responsibility: 'owner', counterpart: null, currencyCode: snapshot.currencyCode || null,
       expected: Number(snapshot.amount || 0), executed: 0, balance: 0, state: 'reverted', overdue: false,
       payments: [], reversals: [{ id: entry.id, reversedAt: entry.reversedAt || null, reason: entry.reason || '', ...snapshot }],
-      documents: [], notes: [], refs: { obligationId: entry.obligationId, occurrenceId: entry.occurrenceId, reversalId: entry.id },
+      documents: ctx.documents.filter(doc => doc.revertedPaymentId === entry.id).map(documentView), notes: [], refs: { obligationId: entry.obligationId, occurrenceId: entry.occurrenceId, reversalId: entry.id },
       actions: [], actionable: false
     };
   });
@@ -320,7 +330,8 @@ function build(db, userId, asset, query = {}) {
     documents: db.findAll('documents', userId),
     providers: new Map(db.findAll('legalOwners', userId).map(owner => [owner.id, owner.name])),
     notes: allNotes,
-    reversals: db.findAll('obligationPaymentReversals', userId)
+    reversals: db.findAll('obligationPaymentReversals', userId),
+    dependents: movementDependents.buildIndex(db, userId, { claims: true })
   };
   const rows = [];
   assetObligations.forEach(obligation => rows.push(...buildObligationRows(ctx, obligation, range)));
@@ -352,7 +363,8 @@ function makeContext(db, userId) {
     documents: db.findAll('documents', userId),
     providers: new Map(db.findAll('legalOwners', userId).map(owner => [owner.id, owner.name])),
     notes: db.findAll('wealthNotes', userId),
-    reversals: db.findAll('obligationPaymentReversals', userId)
+    reversals: db.findAll('obligationPaymentReversals', userId),
+    dependents: movementDependents.buildIndex(db, userId, { claims: true })
   };
 }
 

@@ -229,7 +229,7 @@ router.put('/:id', (req, res) => {
   if (!transaction) {
     return res.status(404).json({ error: 'Transacción no encontrada' });
   }
-  if (transaction.obligationOccurrenceId) return res.status(409).json({ error: 'Los pagos vinculados a obligaciones son inmutables; registra un movimiento compensatorio si hace falta' });
+  if (transaction.obligationOccurrenceId) return res.status(409).json({ error: 'Los pagos vinculados a obligaciones son inmutables; usá "Revertir pago" para anularlos y registrá uno nuevo si hace falta' });
   if (transaction.rentCollectionId) return res.status(409).json({ error: 'Para corregir un cobro de alquiler, eliminá la transacción: el período vuelve a quedar pendiente de cobro' });
 
   const updates = {};
@@ -415,7 +415,7 @@ router.delete('/:id', (req, res) => {
     return res.status(404).json({ error: 'Transacción no encontrada' });
   }
 
-  if (transaction.obligationOccurrenceId) return res.status(409).json({ error: 'Los pagos vinculados a obligaciones no se pueden eliminar' });
+  if (transaction.obligationOccurrenceId) return res.status(409).json({ error: 'Los pagos vinculados a obligaciones no se pueden eliminar; usá "Revertir pago" en la obligación' });
   if (transaction.rentCollectionId) {
     const result = rentals.reverseCollection(db, userId, transaction.rentCollectionId, req.app.locals.documentStorage);
     if (result.error) return res.status(result.status || 409).json({ error: result.error });

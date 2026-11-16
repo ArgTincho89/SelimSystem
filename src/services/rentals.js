@@ -1,5 +1,6 @@
 const crypto = require('crypto');
 const ledger = require('./account-ledger');
+const movementDependents = require('./movement-dependents');
 
 const CONTRACT_TYPES = new Set(['residential', 'commercial', 'industrial', 'temporary', 'other']);
 const CONTRACT_STATES = new Set(['draft', 'active', 'ended', 'cancelled']);
@@ -422,15 +423,6 @@ function monthViews(occurrenceViews, today) {
   }).sort((a, b) => a.date.localeCompare(b.date) || a.key.localeCompare(b.key));
 }
 
-function dependentMovement(db, userId, transaction) {
-  const refund = db.findAll('transactions', userId).find(item => item.tipo === 'refund' && item.refundSourceId === transaction.id);
-  if (refund) return `un reembolso (${refund.titulo || 'sin título'}, ${refund.fecha})`;
-  const transfer = db.findAll('transfers', userId).find(item => [...(item.normalizationAllocations || []), ...(item.pendingAllocations || [])].some(entry => entry.sourceType === 'income' && entry.sourceId === transaction.id));
-  if (transfer) return `una normalización de transferencia (${transfer.fecha || transfer.date || 'sin fecha'})`;
-  if (db.findAll('movementAllocations', userId).some(item => item.transactionId === transaction.id)) return 'una atribución de movimiento';
-  return null;
-}
-
 const NON_TRANSACTION_TARGETS = ['assetId', 'entityId', 'obligationId', 'contractId', 'occurrenceId', 'rentOccurrenceId', 'tenantEntityId'];
 
 /**
@@ -454,7 +446,7 @@ function reverseCollection(db, userId, collectionId, storage = null) {
   }
   const transaction = db.findById('transactions', collection.transactionId, userId);
   if (transaction) {
-    const dependent = dependentMovement(db, userId, transaction);
+    const dependent = movementDependents.dependentMovement(db, userId, transaction, { claims: false });
     if (dependent) return { status: 409, error: `Este cobro tiene ${dependent}; deshacé primero ese movimiento` };
   }
   const account = transaction && db.findById('accounts', transaction.accountId || collection.accountId, userId);

@@ -123,7 +123,7 @@ const AlertsPage = {
       case 'tenant_obligation_pending':
         return [['Resolver', () => this.resolveObligation(alert), true], ['Adjuntar comprobante', () => this.attachReceipt(alert)], viewObligation, ...(alert.assetId ? [viewAsset] : [])];
       case 'document_pending':
-        return [['Adjuntar comprobante', () => this.attachReceipt(alert), true], viewObligation, ...(alert.assetId ? [viewAsset] : [])];
+        return [['Adjuntar comprobante', () => this.attachReceipt(alert), true], ['Revertir pago', () => this.revertPayment(alert)], viewObligation, ...(alert.assetId ? [viewAsset] : [])];
       case 'rent_due':
         return [['Registrar cobro', () => this.collectRent(alert), true], ...(alert.assetId ? [viewAsset] : [])];
       case 'card_installment_due':
@@ -160,6 +160,12 @@ const AlertsPage = {
     await ObligationsPage.loadLookups();
     ObligationsPage.onChange = () => this.reload();
     await ObligationsPage.showResolveModal(obligation, occurrence);
+  },
+
+  // Only document_pending alerts reach a payment (Avisos does not list payments otherwise).
+  async revertPayment(alert) {
+    const { obligation, occurrence } = await this.occurrenceOf(alert);
+    await ObligationsPage.revertFromOccurrence(obligation, occurrence, () => this.reload());
   },
 
   async attachReceipt(alert) {

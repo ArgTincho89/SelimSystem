@@ -3,6 +3,7 @@ const { v4: uuidv4 } = require('uuid');
 const { requireAuth } = require('../middleware/auth');
 const ledger = require('../services/account-ledger');
 const obligations = require('../services/obligations');
+const paymentReversal = require('../services/obligation-payment-reversal');
 
 const router = express.Router();
 router.use(requireAuth);
@@ -257,6 +258,7 @@ router.post('/:id/occurrences/:occurrenceId/payments', (req, res) => {
   const paymentNotes = typeof notes === 'string' ? notes.trim() : '';
   const keyHash = obligations.idempotencyDigest(idempotencyKey);
   const fingerprint = obligations.idempotencyDigest(JSON.stringify({ amount, accountId: accountId || null, categoryId: categoryId || null, date: req.body.date || null, paymentMethodId: paymentMethodId || null, paymentMethod: paymentMethod || null, title: paymentTitle || null, notes: paymentNotes || null }));
+  if (paymentReversal.reversalOf(db, userId, { keyHash })) return res.status(409).json({ error: paymentReversal.REPLAY_REVERTED });
   const existing = db.findAll('transactions', userId).find(tx => tx.obligationIdempotencyKey === keyHash);
   if (existing) {
     if (existing.obligationOccurrenceId !== occurrence.id || existing.obligationPaymentFingerprint !== fingerprint) return res.status(409).json({ error: 'La clave de idempotencia ya fue utilizada para otro pago' });
@@ -295,6 +297,41 @@ router.post('/:id/occurrences/:occurrenceId/payments', (req, res) => {
     return res.status(500).json({ error: 'No se pudo registrar el pago' });
   }
   res.status(201).json({ transaction, occurrence: obligations.occurrenceView(db, userId, occurrence, ledger.localDateForUser(db, userId)) });
+});
+
+// One payment of an occurrence: what the confirmation dialog of "Revertir pago" shows, plus whether it can be reverted.
+function paymentOf(req) {
+  const db = req.app.locals.db;
+  const userId = req.session.userId;
+  const obligation = db.findById('obligations', req.params.id, userId);
+  const occurrence = db.findById('obligationOccurrences', req.params.occurrenceId, userId);
+  if (!obligation || !occurrence || occurrence.obligationId !== obligation.id) return { status: 404, error: 'Ocurrencia no encontrada' };
+  const transaction = db.findById('transactions', req.params.paymentId, userId);
+  if (!transaction || transaction.obligationOccurrenceId !== occurrence.id) {
+    const reverted = paymentReversal.reversalOf(db, userId, { transactionId: req.params.paymentId });
+    if (reverted && reverted.occurrenceId === occurrence.id) return { status: 409, error: paymentReversal.ALREADY_REVERTED };
+    return { status: 404, error: 'Pago no encontrado' };
+  }
+  return { db, userId, obligation, occurrence, transaction };
+}
+
+router.get('/:id/occurrences/:occurrenceId/payments/:paymentId', (req, res) => {
+  const found = paymentOf(req);
+  if (found.error) return res.status(found.status).json({ error: found.error });
+  res.json(paymentReversal.paymentDetail(found.db, found.userId, found.obligation, found.occurrence, found.transaction));
+});
+
+router.post('/:id/occurrences/:occurrenceId/payments/:paymentId/revert', (req, res) => {
+  const found = paymentOf(req);
+  if (found.error) return res.status(found.status).json({ error: found.error });
+  const { db, userId, obligation, occurrence, transaction } = found;
+  const result = paymentReversal.revert(db, userId, { obligation, occurrence, transaction, reason: (req.body || {}).reason });
+  if (result.error) return res.status(result.status || 400).json({ error: result.error });
+  if (result.reversal.reason) res.locals.activityNote = result.reversal.reason;
+  res.json({
+    reversal: result.reversal, reconciliationReset: result.reconciliationReset,
+    occurrence: obligations.occurrenceView(db, userId, db.findById('obligationOccurrences', occurrence.id, userId), ledger.localDateForUser(db, userId))
+  });
 });
 
 module.exports = router;

@@ -204,6 +204,10 @@ const ObligationsPage = {
         if (hasTenantPortion && !occurrence.resolution && occurrence.status !== 'cancelled') {
           actions.append(create('button', { className: 'btn btn-secondary btn-sm', textContent: tenantOnly ? 'Resolver' : 'Resolver (pagó el inquilino)', onClick: () => this.showResolveModal(item, occurrence) }));
         }
+        if (!tenantOnly && !occurrence.resolution) (occurrence.paymentIds || []).forEach((paymentId, index, all) => actions.append(create('button', {
+          className: 'btn btn-ghost btn-sm', textContent: all.length > 1 ? `Revertir pago ${index + 1}` : 'Revertir pago', 'aria-label': `Revertir pago de ${occurrence.date}`, dataset: { revertPayment: paymentId },
+          onClick: () => this.revertPayment({ obligationId: item.id, occurrenceId: occurrence.id, transactionId: paymentId }, () => this.refresh())
+        })));
         if (occurrence.resolution || Number(occurrence.totalPaid) > 0) actions.append(create('button', { className: 'btn btn-ghost btn-sm', textContent: 'Adjuntar comprobante', onClick: () => this.attachReceiptTo(occurrence) }));
         if (occurrence.resolution) {
           actions.append(create('button', { className: 'btn btn-ghost btn-sm', textContent: 'Anular resolución', onClick: () => this.voidResolution(item, occurrence) }));
@@ -473,6 +477,49 @@ const ObligationsPage = {
       catch (error) { showToast(error.message, 'error'); }
     });
     input.click();
+  },
+
+  REVERT_COPY: 'Estás por revertir un pago registrado. Se anulará el gasto asociado y el vencimiento volverá a pendiente. Esta acción no se puede deshacer. ¿Querés continuar?',
+
+  // "Revertir pago": shared by every entry point (obligations, asset history, periods, alerts, transaction detail).
+  // Shows the payment, asks for an optional reason and sends nothing until the user confirms.
+  async revertPayment({ obligationId, occurrenceId, transactionId }, onDone = null) {
+    let detail;
+    try { detail = await API.obligations.payment(obligationId, occurrenceId, transactionId); } catch (error) { showToast(error.message, 'error'); return false; }
+    if (!detail.revertible) {
+      await ConfirmDialog.open({ title: 'Revertir pago', message: detail.dependent ? `No se puede revertir este pago porque tiene movimientos dependientes. ${detail.dependent}` : 'Este pago no se puede revertir.', confirmLabel: 'Entendido', cancelLabel: 'Cerrar' });
+      return false;
+    }
+    const receipts = detail.documents.length ? detail.documents.map(item => item.title || item.fileName).join(', ') : 'Sin comprobante';
+    const { confirmed, reason } = await ConfirmDialog.open({
+      title: 'Revertir pago', danger: true, confirmLabel: 'Revertir pago', message: this.REVERT_COPY, reasonField: true, reasonLabel: 'Motivo (opcional)',
+      details: [
+        ['Fecha', detail.payment.date], ['Importe', formatearMonedaConCodigo(detail.payment.amount, detail.payment.currencyCode)],
+        ['Cuenta', detail.account?.name || ''], ['Medio de pago', detail.paymentMethod], ['Obligación', detail.obligation.title],
+        ['Vencimiento', detail.occurrence.date], ['Comprobante', receipts],
+        ['Atención', detail.reconciliationWillReset ? 'La conciliación de la cuenta se va a reiniciar.' : '']
+      ]
+    });
+    if (!confirmed) return false;
+    try {
+      const result = await API.obligations.revertPayment(obligationId, occurrenceId, transactionId, reason ? { reason } : {});
+      showToast(result.reconciliationReset ? 'Pago revertido. La conciliación de la cuenta quedó pendiente de revisar' : 'Pago revertido');
+      if (onDone) await onDone(result);
+      return true;
+    } catch (error) { showToast(error.message, 'error'); return false; }
+  },
+
+  // For entry points that only know the occurrence: reverts its only payment, or asks which one when there are several.
+  async revertFromOccurrence(obligation, occurrence, onDone = null) {
+    const ids = occurrence.paymentIds || [];
+    if (!ids.length) { showToast('Este vencimiento no tiene pagos registrados', 'error'); return false; }
+    const run = transactionId => this.revertPayment({ obligationId: obligation.id, occurrenceId: occurrence.id, transactionId }, onDone);
+    if (ids.length === 1) return run(ids[0]);
+    const list = create('div', { style: { display: 'grid', gap: '8px' } }, ids.map((id, index) => create('button', {
+      className: 'btn btn-secondary', type: 'button', textContent: `Revertir el pago ${index + 1} de ${ids.length}`, onClick: () => { Modal.hide(); run(id); }
+    })));
+    Modal.push('¿Qué pago querés revertir?', list, { width: '420px' });
+    return null;
   },
 
   async pay(obligation, occurrence) {

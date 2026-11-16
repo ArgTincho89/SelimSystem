@@ -104,6 +104,40 @@ export class AssetsPage extends BasePage {
     await expect(this.modal.locator('[data-contract-card]', { hasText: modality }).first()).toContainText(`— ${today}`);
   }
 
+  private get topModal(): Locator {
+    return this.page.locator('.modal-overlay').last();
+  }
+
+  /** Opens the typed history timeline of an asset from its ficha card. */
+  async openHistory(assetName: string): Promise<void> {
+    await this.page.locator('article.card', { hasText: assetName }).getByRole('button', { name: 'Ver historial', exact: true }).first().click();
+    await this.page.locator('.asset-history').waitFor({ state: 'visible' });
+  }
+
+  /** History row > "Ver detalle" > "Revertir pago" > confirmation with an optional reason. */
+  async revertPaymentFromHistory(concept: string, reason: string): Promise<void> {
+    await this.page.locator('[data-history-row]', { hasText: concept }).first().getByRole('button', { name: 'Ver detalle' }).click();
+    await this.topModal.locator('[data-history-action="revert"]').first().click();
+    await this.topModal.getByLabel('Motivo (opcional)').fill(reason);
+    await this.topModal.locator('[data-confirm-action]').click();
+    await expect(this.page.locator('[data-history-row]', { hasText: 'Pago revertido' }).first()).toBeVisible();
+  }
+
+  async chooseHistoryPreviousYear(): Promise<void> {
+    const year = String(new Date().getFullYear() - 1);
+    const history = this.page.locator('.asset-history');
+    await history.getByLabel('Mes').selectOption('all');
+    await history.getByLabel('Año').selectOption(year);
+  }
+
+  async expectHistoryRowState(concept: string, state: string): Promise<void> {
+    await expect(this.page.locator('[data-history-row]', { hasText: concept }).filter({ hasText: state }).first()).toBeVisible();
+  }
+
+  async expectHistoryText(text: string): Promise<void> {
+    await expect(this.page.locator('.asset-history')).toContainText(text);
+  }
+
   /** Not exported as a step: kept for symmetry with the other page objects. */
   async expectModalityHidden(modality: RentalModality): Promise<void> {
     await expect(this.fieldset(modality)).toBeHidden();

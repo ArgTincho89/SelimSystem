@@ -921,6 +921,12 @@ const HomePage = {
         TransactionForm.show(() => this.render({ month: this.currentMonth }), tx);
       }
     }));
+    if (tx.obligationOccurrenceId && tx.obligationId) {
+      footer.appendChild(create('button', {
+        className: 'btn btn-secondary', type: 'button', textContent: 'Revertir pago', dataset: { revertPayment: tx.id },
+        onClick: () => ObligationsPage.revertPayment({ obligationId: tx.obligationId, occurrenceId: tx.obligationOccurrenceId, transactionId: tx.id }, async () => { Modal.hide(); await this.render({ month: this.currentMonth }); })
+      }));
+    }
     footer.appendChild(create('button', {
       className: 'btn btn-danger',
       textContent: tx.isRecurringInstance ? 'Omitir ocurrencia' : tx.rentCollectionId ? 'Deshacer cobro' : 'Eliminar',

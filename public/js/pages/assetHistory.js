@@ -215,6 +215,17 @@ const AssetHistory = {
     return buttons;
   },
 
+  // One "Revertir pago" button per revertible payment of an obligation row (the server marks `revertible`).
+  revertButtons(row, afterDone) {
+    if (row.kind !== 'obligation' || !(row.actions || []).includes('revert')) return [];
+    const revertible = row.payments.filter(payment => payment.revertible);
+    return revertible.map((payment, index) => create('button', {
+      className: 'btn btn-secondary btn-sm', type: 'button', textContent: revertible.length > 1 ? `Revertir pago ${index + 1}` : 'Revertir pago',
+      'aria-label': `Revertir pago de ${row.concept}`, dataset: { historyAction: 'revert', revertPayment: payment.transactionId },
+      onClick: () => ObligationsPage.revertPayment({ obligationId: row.refs.obligationId, occurrenceId: row.refs.occurrenceId, transactionId: payment.transactionId }, afterDone)
+    }));
+  },
+
   async occurrenceOf(row) {
     const obligation = await API.obligations.get(row.refs.obligationId);
     const occurrence = (obligation.occurrences || []).find(item => item.id === row.refs.occurrenceId) || (obligation.occurrences || []).find(item => item.date === row.date);
@@ -322,3 +333,6 @@ const AssetHistory = {
     }
   }
 };
+
+// Extension point use: the revert button of the payments of an obligation row (history detail and monthly sheet).
+AssetHistory.actionProviders.push((row, ctx) => AssetHistory.revertButtons(row, ctx.afterDone));
