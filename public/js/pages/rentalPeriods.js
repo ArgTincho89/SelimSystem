@@ -445,3 +445,191 @@ const RentalPeriods = {
     } catch (error) { showToast(`No se pudo abrir el cobro: ${error.message}`, 'error'); }
   }
 };
+
+// "Ficha mensual": a wide secondary modal over the asset history (`GET /assets/:id/history?from&to`). It shows the
+// same rows as the history, filtered by type, responsible, state, modality and free text, with the actions of the
+// periods tab (the server decides them in `row.actions`; extra ones come from `AssetHistory.actionProviders`).
+const MonthlySheet = {
+  MAX_MONTHS: 36,
+  RANGE_NOTE: 'El rango máximo es de 36 meses.',
+  EMPTY_FILTERS: { type: '', responsibility: '', state: '', modality: '', text: '' },
+  TYPES: [['', 'Alquiler y obligaciones'], ['rent', 'Alquiler'], ['obligation', 'Obligación']],
+  RESPONSIBLE: [['', 'Todos'], ['owner', 'Titular'], ['tenant', 'Inquilino']],
+  STATES: [['', 'Todos los estados'], ['pending', 'Pendiente'], ['overdue', 'Vencido'], ['partial', 'Parcial'], ['paid', 'Pagado'], ['collected', 'Cobrado'], ['resolved', 'Resuelto'], ['reverted', 'Revertido'], ['cancelled', 'Cancelado']],
+
+  // Month key YYYY-MM shifted by `delta` months.
+  shift(key, delta) {
+    const [year, month] = key.split('-').map(Number);
+    const index = year * 12 + (month - 1) + delta;
+    return `${Math.floor(index / 12)}-${String((index % 12) + 1).padStart(2, '0')}`;
+  },
+
+  monthCount(from, to) {
+    const [fromYear, fromMonth] = from.split('-').map(Number);
+    const [toYear, toMonth] = to.split('-').map(Number);
+    return (toYear - fromYear) * 12 + (toMonth - fromMonth) + 1;
+  },
+
+  periodLabel(date) {
+    const [year, month] = String(date).split('-');
+    return `${AssetHistory.MONTH_NAMES[Number(month) - 1] || ''} ${year}`.trim();
+  },
+
+  rowType(row) {
+    return row.kind === 'rent' || row.kind === 'adjustment' ? 'rent' : 'obligation';
+  },
+
+  // Pure: rows that match every active filter (events and adjustments only show under "all types" / rent).
+  filterRows(rows, filters = {}) {
+    const f = { ...this.EMPTY_FILTERS, ...filters };
+    const text = f.text.trim().toLowerCase();
+    return rows.filter(row => {
+      if (f.type && (this.rowType(row) !== f.type || row.kind === 'event')) return false;
+      if (f.responsibility && row.responsibility !== f.responsibility) return false;
+      if (f.state && row.state !== f.state) return false;
+      if (f.modality && !(row.parts || []).some(part => part.modality === f.modality)) return false;
+      if (text && ![row.concept, row.counterpart, row.typeLabel].some(value => String(value || '').toLowerCase().includes(text))) return false;
+      return true;
+    });
+  },
+
+  // Pure: expected and executed per currency, without conversion (cancelled rows and other event kinds are not counted).
+  totals(rows) {
+    const totals = new Map();
+    rows.filter(row => (row.kind === 'rent' || row.kind === 'obligation') && row.currencyCode && row.state !== 'cancelled').forEach(row => {
+      const entry = totals.get(row.currencyCode) || { currencyCode: row.currencyCode, expected: 0, executed: 0 };
+      entry.expected = Math.round((entry.expected + (row.expected || 0)) * 100) / 100;
+      entry.executed = Math.round((entry.executed + (row.executed || 0)) * 100) / 100;
+      totals.set(row.currencyCode, entry);
+    });
+    return [...totals.values()];
+  },
+
+  modalityOptions(rows) {
+    const kinds = new Set();
+    rows.forEach(row => (row.parts || []).forEach(part => kinds.add(part.modality)));
+    return [['', 'Todas las modalidades'], ...[...kinds].map(kind => [kind, modalityLabel(kind) || kind])];
+  },
+
+  async open(assetId, options = {}) {
+    let asset;
+    try { asset = await API.assets.get(assetId); } catch (error) { showToast(error.message, 'error'); return null; }
+    const today = getCurrentMonth();
+    const state = { from: options.from || this.shift(today, -11), to: options.to || today, filters: { ...this.EMPTY_FILTERS }, rows: [] };
+    const control = (label, element) => create('label', { className: 'form-group', style: { margin: '0', display: 'grid', gap: '2px' } }, [create('small', { textContent: label }), element]);
+    const labelled = (element, label) => { element.setAttribute('aria-label', label); return element; };
+    const fromInput = create('input', { className: 'form-control', type: 'month', value: state.from, 'aria-label': 'Desde el mes' });
+    const toInput = create('input', { className: 'form-control', type: 'month', value: state.to, 'aria-label': 'Hasta el mes' });
+    const years = Array.from({ length: 6 }, (_, index) => { const year = String(Number(today.slice(0, 4)) - index); return [year, year]; });
+    const yearSelect = labelled(RentalPeriods.select([['', 'Elegir año'], ...years], ''), 'Año');
+    const typeSelect = labelled(RentalPeriods.select(this.TYPES, ''), 'Tipo');
+    const responsibleSelect = labelled(RentalPeriods.select(this.RESPONSIBLE, ''), 'Responsable');
+    const stateSelect = labelled(RentalPeriods.select(this.STATES, ''), 'Estado');
+    const modalitySelect = labelled(RentalPeriods.select([['', 'Todas las modalidades']], ''), 'Modalidad');
+    const textInput = create('input', { className: 'form-control', type: 'search', placeholder: 'Proveedor o texto', 'aria-label': 'Buscar por proveedor o texto' });
+    const message = create('p', { className: 'text-muted', role: 'status', style: { margin: '0' }, textContent: this.RANGE_NOTE });
+    const totalsLine = create('p', { className: 'sheet-totals', style: { margin: '0', fontWeight: '600' } });
+    const ctx = { asset, reload: () => load(), afterDone: () => load() };
+    const table = DataTable.create({
+      caption: `Ficha mensual de ${asset.name}`, emptyMessage: 'No hay movimientos en este período.',
+      rowId: row => row.id, rowDataset: row => ({ sheetRow: row.id, kind: row.kind }),
+      columns: [
+        { key: 'period', label: 'Período', render: row => this.periodLabel(row.date) },
+        { key: 'concept', label: 'Concepto', render: row => row.concept },
+        { key: 'responsibility', label: 'Responsable', render: row => RentalPeriods.RESPONSIBILITY[row.responsibility] || '—' },
+        { key: 'expected', label: 'Esperado', render: row => AssetHistory.amountText(row.expected, row.currencyCode) },
+        { key: 'executed', label: 'Ejecutado', render: row => AssetHistory.amountText(row.executed, row.currencyCode) },
+        { key: 'state', label: 'Estado', render: row => AssetHistory.badge(row.state, row) || '—' },
+        { key: 'receipt', label: 'Comprobante', render: row => this.receiptCell(row) },
+        { key: 'actions', label: 'Acción', render: row => this.actionsCell(row, ctx) }
+      ],
+      expand: row => this.detail(row, ctx)
+    });
+
+    const renderRows = () => {
+      const visible = this.filterRows(state.rows, state.filters);
+      table.setRows(visible);
+      totalsLine.textContent = visible.length
+        ? this.totals(visible).map(item => `${item.currencyCode}: esperado ${AssetHistory.amountText(item.expected, item.currencyCode)} · ejecutado ${AssetHistory.amountText(item.executed, item.currencyCode)}`).join('  |  ')
+        : '';
+    };
+    const fail = text => { message.textContent = text; message.setAttribute('role', 'alert'); };
+    const load = async () => {
+      if (!state.from || !state.to || state.from > state.to) { fail('El rango de meses no es válido.'); return; }
+      if (this.monthCount(state.from, state.to) > this.MAX_MONTHS) { fail(`El rango elegido supera los ${this.MAX_MONTHS} meses. ${this.RANGE_NOTE}`); return; }
+      message.textContent = this.RANGE_NOTE;
+      message.setAttribute('role', 'status');
+      table.element.setAttribute('aria-busy', 'true');
+      try {
+        const history = await API.assets.history(assetId, { from: state.from, to: state.to });
+        state.rows = history.rows;
+        modalitySelect.replaceChildren(...this.modalityOptions(state.rows).map(([value, label]) => create('option', { value, textContent: label })));
+        modalitySelect.value = state.filters.modality;
+        renderRows();
+      } catch (error) {
+        fail(`No se pudo cargar la ficha mensual: ${error.message}`);
+      }
+      table.element.setAttribute('aria-busy', 'false');
+    };
+
+    on(fromInput, 'change', () => { state.from = fromInput.value; load(); });
+    on(toInput, 'change', () => { state.to = toInput.value; load(); });
+    on(yearSelect, 'change', () => {
+      if (!yearSelect.value) return;
+      state.from = `${yearSelect.value}-01`;
+      state.to = `${yearSelect.value}-12`;
+      fromInput.value = state.from;
+      toInput.value = state.to;
+      load();
+    });
+    [[typeSelect, 'type', 'change'], [responsibleSelect, 'responsibility', 'change'], [stateSelect, 'state', 'change'], [modalitySelect, 'modality', 'change'], [textInput, 'text', 'input']].forEach(([element, key, event]) => {
+      on(element, event, () => { state.filters[key] = element.value; renderRows(); });
+    });
+
+    const filters = create('div', { className: 'sheet-filters', style: { display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'end' } }, [
+      control('Año', yearSelect), control('Desde', fromInput), control('Hasta', toInput), control('Tipo', typeSelect), control('Responsable', responsibleSelect),
+      control('Estado', stateSelect), control('Modalidad', modalitySelect), control('Proveedor o texto', textInput)
+    ]);
+    const body = create('div', { className: 'monthly-sheet', style: { display: 'grid', gap: '10px' } }, [filters, message, totalsLine, table.element]);
+    Modal.push(`Ficha mensual · ${asset.name}`, body, { width: '1200px', fullscreenOnMobile: true, footer: create('div', {}, [create('button', { className: 'btn btn-ghost', type: 'button', textContent: 'Cerrar', onClick: () => Modal.hide() })]) });
+    await load();
+    return ctx;
+  },
+
+  receiptCell(row) {
+    const doc = (row.documents || [])[0];
+    if (!doc) return '—';
+    return create('button', { className: 'btn btn-ghost btn-sm', type: 'button', textContent: 'Ver', 'aria-label': `Ver comprobante de ${row.concept}`, onClick: () => AssetHistory.showReceipt(doc) });
+  },
+
+  // The same actions as the history detail; each button reloads the sheet when its flow ends.
+  actionButtons(row, ctx) {
+    const buttons = [];
+    const actions = row.actions || [];
+    const add = (label, handler, className = 'btn btn-primary btn-sm') => buttons.push(create('button', { className, type: 'button', textContent: label, 'aria-label': `${label}: ${row.concept}`, dataset: { sheetAction: label }, onClick: handler }));
+    if (actions.includes('pay')) add('Registrar pago', () => AssetHistory.payObligation(row, ctx.afterDone));
+    if (actions.includes('resolve')) add('Resolver', () => AssetHistory.resolveObligation(row, ctx.afterDone), 'btn btn-secondary btn-sm');
+    if (actions.includes('collect') && row.refs.monthKey) add('Registrar cobro', () => AssetsPage.showRentMonthModal(row.refs.assetId, row.refs.monthKey, ctx.afterDone));
+    if (actions.includes('undo-collect') && row.refs.collectionIds?.length) {
+      const undo = AssetsPage.undoCollections(row.refs.collectionIds, ctx.afterDone, 'Se deshacen los cobros de este mes y vuelve a quedar pendiente de cobro.');
+      if (undo) buttons.push(undo);
+    }
+    AssetHistory.actionProviders.forEach(provider => buttons.push(...(provider(row, ctx) || [])));
+    return buttons;
+  },
+
+  actionsCell(row, ctx) {
+    const buttons = this.actionButtons(row, ctx);
+    return buttons.length ? create('div', { style: { display: 'flex', gap: '6px', flexWrap: 'wrap' } }, buttons) : '—';
+  },
+
+  detail(row, ctx) {
+    const box = create('div', { className: 'sheet-detail', style: { display: 'grid', gap: '4px', padding: '6px 0' } });
+    if (row.counterpart) box.appendChild(create('div', { textContent: `${row.responsibility === 'tenant' ? 'Inquilino' : 'Proveedor'}: ${row.counterpart}` }));
+    (row.parts || []).forEach(part => box.appendChild(create('div', { className: 'text-muted', textContent: `${part.modalityLabel || modalityLabel(part.modality)}: ${AssetHistory.amountText(part.amount, part.currencyCode)} · ${statusLabel(part.state)}` })));
+    (row.payments || []).forEach(payment => box.appendChild(create('div', { className: 'text-muted', textContent: `${AssetHistory.formatDate(payment.date)} · ${AssetHistory.amountText(payment.amount, payment.currencyCode || row.currencyCode)}${payment.accountName ? ` · ${payment.accountName}` : ''}` })));
+    (row.reversals || []).forEach(reversal => box.appendChild(create('div', { className: 'text-muted', textContent: `Revertido${reversal.reason ? `: ${reversal.reason}` : ''}` })));
+    box.appendChild(create('button', { className: 'btn btn-ghost btn-sm', type: 'button', textContent: 'Ver detalle completo', 'aria-label': `Ver detalle completo de ${row.concept}`, onClick: () => AssetHistory.showDetail(row, ctx) }));
+    return box;
+  }
+};

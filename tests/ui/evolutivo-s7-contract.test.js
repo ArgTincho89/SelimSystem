@@ -12,8 +12,11 @@ describe('Evolutivo S7 UI contract', () => {
   it('renders the monthly table with the business columns', () => {
     const source = read('js/pages/assets.js');
     expect(source).toContain('renderMonthlyView(asset, economics)');
-    ['Concepto', 'Responsable', 'Esperado', 'Pagado o cobrado', 'Estado', 'Comprobante', 'Pagado por inquilino'].forEach(text => expect(source).toContain(text));
-    expect(source).toContain('API.assets.monthlyView(asset.id)');
+    expect(source).toContain('MonthlySheet.open(asset.id)');
+    // The table moved to the monthly sheet modal (rentalPeriods.js, evolutivo-5); the ficha only opens it.
+    const sheet = read('js/pages/rentalPeriods.js');
+    ['Concepto', 'Responsable', 'Esperado', 'Ejecutado', 'Estado', 'Comprobante'].forEach(text => expect(sheet).toContain(`label: '${text}'`));
+    expect(sheet).toContain('API.assets.history(assetId, { from: state.from, to: state.to })');
   });
 
   it('bumps the service worker cache name to v24 or later', () => {

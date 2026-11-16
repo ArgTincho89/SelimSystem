@@ -87,8 +87,8 @@ Budget is 800 lines (review_budget_lines); `size:exception` is recorded. Mitigat
 
 ## W8: monthly-sheet (commit: `feat(assets): monthly sheet modal`)
 
-- [ ] 8.1 RED `tests/ui/evolutivo5-monthly-sheet-contract.test.js` (vm): month rows by `from/to`, totals, empty state.
-- [ ] 8.2 `rentalPeriods.js` `MonthlySheet` over `/assets/:id/history`; wire "Ver ficha mensual" in ficha.
+- [x] 8.1 RED `tests/ui/evolutivo5-monthly-sheet-contract.test.js` (vm): month rows by `from/to`, totals, empty state.
+- [x] 8.2 `rentalPeriods.js` `MonthlySheet` over `/assets/:id/history`; wire "Ver ficha mensual" in ficha.
 
 ## W9: alerts-responsibility (commit: `feat(alerts): owner and tenant responsibility sections`)
 
