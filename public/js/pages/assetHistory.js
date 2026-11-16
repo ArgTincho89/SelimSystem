@@ -39,11 +39,11 @@ const AssetHistory = {
     };
     const ctx = { asset, reload: () => load() };
     const load = async () => {
-      list.replaceChildren(create('div', { className: 'loading', textContent: 'Cargando historial...' }));
+      list.replaceChildren(Feedback.loading('Cargando historial...'));
       try {
         history = await API.assets.history(assetId, { year: state.year, month: state.month });
       } catch (error) {
-        list.replaceChildren(create('p', { className: 'empty-state', role: 'alert', textContent: `No se pudo cargar el historial: ${error.message}` }));
+        list.replaceChildren(Feedback.error(`No se pudo cargar el historial: ${error.message}`, { onRetry: load }));
         return;
       }
       state.year = history.year;
@@ -83,10 +83,7 @@ const AssetHistory = {
   renderList(list, history, ctx) {
     list.replaceChildren();
     if (!history.rows.length) {
-      list.appendChild(create('div', { className: 'empty-state' }, [
-        create('p', { className: 'empty-state-text', textContent: 'No hay movimientos en este período.' }),
-        create('p', { className: 'text-muted', textContent: 'Probá con otro mes o volvé al mes actual con "Hoy".' })
-      ]));
+      list.appendChild(Feedback.empty({ message: Feedback.MESSAGES.noMovements, hint: 'Probá con otro mes o volvé al mes actual con "Hoy".' }));
       return;
     }
     const groups = history.month === 'all' || !history.month ? this.groupByMonth(history.rows) : [{ month: null, rows: history.rows }];

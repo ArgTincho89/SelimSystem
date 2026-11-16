@@ -87,7 +87,7 @@ const WealthRecords = {
     const renderList = () => {
       const visible = this.filterDocuments(documents, filters);
       if (!visible.length) {
-        list.replaceChildren(create('p', { className: 'empty-state-text', textContent: documents.length ? 'Ningún documento coincide con los filtros.' : 'No hay documentos cargados.' }));
+        list.replaceChildren(Feedback.empty({ message: documents.length ? 'Ningún documento coincide con los filtros.' : Feedback.MESSAGES.noDocuments, ...(documents.length ? {} : { actionLabel: 'Cargar documento', onAction: () => fileInput.focus() }) }));
         return;
       }
       list.replaceChildren(...visible.map(item => this.documentRow(item, reload)));
@@ -97,7 +97,7 @@ const WealthRecords = {
         documents = await config.load();
         renderList();
       } catch (error) {
-        list.replaceChildren(create('p', { className: 'empty-state', role: 'alert', textContent: `No se pudieron cargar los documentos: ${error.message}` }));
+        list.replaceChildren(Feedback.error(`No se pudieron cargar los documentos: ${error.message}`, { onRetry: reload }));
       }
     };
     [[nameInput, 'name', 'input'], [typeSelect, 'type', 'change'], [fromInput, 'from', 'change'], [toInput, 'to', 'change']].forEach(([control, key, event]) => {
@@ -174,12 +174,14 @@ const WealthRecords = {
       try {
         const notes = this.sortNotes(await config.load({ from: state.from, to: state.to }), state.order);
         if (!notes.length) {
-          list.replaceChildren(create('p', { className: 'empty-state-text', textContent: state.from || state.to ? 'No hay notas en este rango de fechas.' : 'No hay notas cargadas.' }));
+          list.replaceChildren(state.from || state.to
+            ? Feedback.empty({ message: Feedback.MESSAGES.noNotesInRange, actionLabel: 'Quitar filtro', onAction: () => clearButton.click() })
+            : Feedback.empty({ message: 'No hay notas cargadas.', actionLabel: 'Añadir nota', onAction: () => contentInput.focus() }));
           return;
         }
         list.replaceChildren(...notes.map(note => this.noteRow(note, config, reload)));
       } catch (error) {
-        list.replaceChildren(create('p', { className: 'empty-state', role: 'alert', textContent: `No se pudieron cargar las notas: ${error.message}` }));
+        list.replaceChildren(Feedback.error(`No se pudieron cargar las notas: ${error.message}`, { onRetry: reload }));
       }
     };
     fromInput.addEventListener('change', () => { state.from = fromInput.value; reload(); });

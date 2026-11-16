@@ -32,7 +32,8 @@ describe('Evolutivo 5 asset history timeline contract', () => {
 
   it('renders the compact table columns and the empty state', () => {
     ['Fecha', 'Concepto', 'Tipo', 'Responsable', 'Proveedor / inquilino', 'Esperado', 'Ejecutado', 'Saldo', 'Estado', 'Acción'].forEach(column => expect(source).toContain(`'${column}'`));
-    expect(source).toContain('No hay movimientos en este período.');
+    expect(source).toContain('Feedback.MESSAGES.noMovements');
+    expect(fs.readFileSync(path.join(__dirname, '../../public/js/components/feedback.js'), 'utf8')).toContain('No hay movimientos en este período.');
     expect(source).toContain("'Ver detalle'");
   });
 

@@ -574,7 +574,7 @@ const AssetsPage = {
     const money = list => list.map(item => formatearMonedaConCodigo(item.amount, item.currencyCode)).join(' + ') || '—';
     if (!asset.activeDeclarationId && !asset.declaration) {
       section.append(
-        create('p', { className: 'text-muted', textContent: 'Este inmueble no tiene un alquiler activo.' }),
+        Feedback.empty({ message: Feedback.MESSAGES.noActiveRental }),
         this.rentalAccessButton(asset, { onDone: () => this.showDetails(asset.id) })
       );
     } else {

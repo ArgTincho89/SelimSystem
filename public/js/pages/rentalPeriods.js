@@ -114,7 +114,9 @@ const RentalPeriods = {
       empty.hidden = rows.length > 0;
       empty.replaceChildren();
       if (!rows.length) {
-        empty.append(create('p', { className: 'text-muted', textContent: data.length ? 'No hay períodos que coincidan con estos filtros.' : 'No hay períodos de alquiler en este año.' }), create('button', { className: 'btn btn-secondary btn-sm', type: 'button', textContent: 'Limpiar filtros', onClick: () => clear.click() }));
+        const pending = filters.status === 'pending' || filters.status === 'overdue';
+        const message = !data.length ? 'No hay períodos de alquiler en este año.' : pending ? Feedback.MESSAGES.noPendingPeriods : 'No hay períodos que coincidan con estos filtros.';
+        empty.append(Feedback.empty({ message, actionLabel: 'Limpiar filtros', onAction: () => clear.click() }));
       }
     };
     const load = async () => {
@@ -123,7 +125,7 @@ const RentalPeriods = {
         data = await API.rentals.declarations.periods(ctx.declarationId, { from: `${filters.year}-01`, to: `${filters.year}-12` });
       } catch (error) {
         empty.hidden = false;
-        empty.replaceChildren(create('p', { role: 'alert', className: 'text-danger', textContent: `No se pudieron cargar los períodos: ${error.message}` }));
+        empty.replaceChildren(Feedback.error(`No se pudieron cargar los períodos: ${error.message}`, { onRetry: () => load() }));
         return;
       } finally { table.element.removeAttribute('aria-busy'); }
       refreshProviders();

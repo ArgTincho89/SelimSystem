@@ -106,8 +106,8 @@ Budget is 800 lines (review_budget_lines); `size:exception` is recorded. Mitigat
 
 ## W11: feedback-and-a11y (commit: `feat(ui): feedback component and responsive pass`)
 
-- [ ] 11.1 RED `tests/ui/evolutivo5-feedback-contract.test.js`: loading/empty/error states, accessible labels, no `confirm(` in new files.
-- [ ] 11.2 Create `components/feedback.js`; adopt in new pages; CSS responsive pass; register scripts.
+- [x] 11.1 RED `tests/ui/evolutivo5-feedback-contract.test.js`: loading/empty/error states, accessible labels, no `confirm(` in new files.
+- [x] 11.2 Create `components/feedback.js`; adopt in new pages; CSS responsive pass; register scripts.
 
 ## W12: release (commit: `chore(release): evolutivo-5 version 1.13.0, changelog and cache bump`)
 

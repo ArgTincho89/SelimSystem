@@ -64,7 +64,8 @@ describe('Evolutivo 5 asset ficha redesign contract', () => {
   });
 
   it('shows the empty rental state, the disabled declare action with its hint and the rental history access', () => {
-    expect(ficha).toContain('Este inmueble no tiene un alquiler activo.');
+    expect(ficha).toContain('Feedback.MESSAGES.noActiveRental');
+    expect(read('js/components/feedback.js')).toContain('Este inmueble no tiene un alquiler activo.');
     expect(ficha).toContain('Finalizá el alquiler vigente antes de declarar uno nuevo');
     expect(ficha).toContain("textContent: 'Declarar alquiler', disabled: true");
     expect(ficha).toContain("textContent: 'Histórico de alquileres'");

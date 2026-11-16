@@ -129,7 +129,7 @@ function loadBrowser(files, names = [], globals = {}) {
     console, HTMLElement: FakeElement, ...globals
   };
   vm.createContext(context);
-  vm.runInContext(['js/utils/dom.js', ...files].map(file => fs.readFileSync(path.join(publicDir, file), 'utf8')).join('\n'), context);
+  vm.runInContext(['js/utils/dom.js', 'js/components/feedback.js', ...files].map(file => fs.readFileSync(path.join(publicDir, file), 'utf8')).join('\n'), context);
   const exported = names.length ? vm.runInContext(`({ ${names.join(', ')} })`, context) : {};
   return { context, ...exported };
 }

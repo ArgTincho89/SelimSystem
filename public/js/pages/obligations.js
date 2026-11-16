@@ -391,6 +391,10 @@ const ObligationsPage = {
           showToast('Obligación creada');
           return;
         }
+        if (existing && (existing.occurrences || []).some(occurrence => Number(occurrence.totalPaid) > 0)) {
+          const { confirmed } = await ConfirmDialog.open({ title: 'Editar obligación con pagos', confirmLabel: 'Guardar cambios', message: 'Esta obligación tiene pagos registrados. Los cambios no modifican los pagos ya hechos. ¿Querés continuar?' });
+          if (!confirmed) return;
+        }
         if (existing) await API.obligations.update(existing.id, data);
         else await API.obligations.create(data);
         Modal.hide();
@@ -455,7 +459,8 @@ const ObligationsPage = {
   },
 
   async voidResolution(obligation, occurrence) {
-    if (!confirm('¿Anular la resolución? La obligación volverá a figurar como pendiente.')) return;
+    const { confirmed } = await ConfirmDialog.open({ title: 'Anular resolución', danger: true, confirmLabel: 'Anular resolución', message: 'Vas a anular la resolución. La obligación volverá a figurar como pendiente. ¿Querés continuar?' });
+    if (!confirmed) return;
     await this.runAction(() => API.obligations.voidResolution(obligation.id, occurrence.id));
   },
 
@@ -586,7 +591,8 @@ const ObligationsPage = {
 
   // Soft delete: the obligation is cancelled (payment history stays) and disappears from the list.
   async deleteObligation(obligation) {
-    if (!confirm(`¿Eliminar la obligación "${obligation.title}"? Se conservará el historial de pagos.`)) return;
+    const { confirmed } = await ConfirmDialog.open({ title: 'Eliminar obligación', danger: true, confirmLabel: 'Eliminar obligación', message: `Vas a eliminar la obligación "${obligation.title}". Se conservará el historial de pagos. ¿Querés continuar?` });
+    if (!confirmed) return;
     await this.runAction(() => API.obligations.delete(obligation.id));
   },
 

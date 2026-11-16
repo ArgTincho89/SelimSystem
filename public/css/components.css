@@ -966,3 +966,30 @@ body.desktop-mode .fab {
     flex: 0 0 auto;
   }
 }
+
+/* Evolutivo 5 responsive and accessibility pass: shared feedback states, filter bars, monthly sheet, history table. */
+.feedback-empty,
+.feedback-error { display: grid; gap: 8px; justify-items: start; padding: 12px; }
+.feedback-error { border-left: 4px solid var(--danger); }
+.records-filters > *,
+.sheet-filters > * { min-width: 140px; flex: 1 1 140px; }
+.records-row { overflow-wrap: anywhere; }
+.monthly-sheet .sheet-totals { overflow-wrap: anywhere; }
+.alert-responsibility-title:focus-visible,
+.tabs-list [role="tab"]:focus-visible,
+.data-table button:focus-visible,
+.records-row button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+@media (max-width: 640px) {
+  .records-filters > *,
+  .sheet-filters > *,
+  .records-upload > * { flex: 1 1 100%; }
+  .asset-history-table,
+  .asset-history-table tbody,
+  .asset-history-table tr,
+  .asset-history-table td { display: block; width: 100%; }
+  .asset-history-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .asset-history-table tr { border: 1px solid var(--border-color); border-radius: var(--radius-md, 8px); margin-bottom: 8px; padding: 6px; }
+  .asset-history-table td[data-label]::before { content: attr(data-label) ': '; font-weight: 600; }
+  .alert-responsibility { padding: 8px; }
+}

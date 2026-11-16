@@ -37,7 +37,7 @@ const AlertsPage = {
       this.renderContent(content);
       App.setAlertBadge?.(alerts.length);
     } catch (error) {
-      content.replaceChildren(create('div', { className: 'empty-state', textContent: `No se pudieron cargar los avisos: ${error.message}` }));
+      content.replaceChildren(Feedback.error(`No se pudieron cargar los avisos: ${error.message}`, { onRetry: () => this.render() }));
     }
   },
 
@@ -82,7 +82,7 @@ const AlertsPage = {
       className: `alert-responsibility alert-responsibility-${group.key}`, dataset: { alertResponsibility: group.key }, 'aria-labelledby': heading,
       style: { display: 'grid', gap: '10px', marginBottom: '24px' }
     }, [create('h3', { id: heading, className: 'alert-responsibility-title', textContent: `${group.title} (${items.length})` })]);
-    if (!items.length) section.appendChild(create('p', { className: 'text-muted alert-responsibility-empty', textContent: group.empty }));
+    if (!items.length) section.appendChild(Feedback.empty({ message: group.empty }));
     Object.keys(this.TYPE_LABELS).forEach(typeKey => {
       const alerts = items.filter(item => item.type === typeKey);
       if (!alerts.length) return;

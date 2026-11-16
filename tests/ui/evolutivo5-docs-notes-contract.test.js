@@ -152,7 +152,7 @@ describe('Evolutivo 5 documents and notes UI contract', () => {
       await WealthRecords.renderNotes(root, { load: async () => [], create });
       root.find(element => element.attributes && element.attributes['aria-label'] === 'Título de la nota').value = 'Mi título';
       root.find(element => element.tagName === 'TEXTAREA').value = 'Texto';
-      byText(root, 'Añadir nota').click();
+      root.findAll(element => element.tagName === 'BUTTON' && element.textContent === 'Añadir nota').pop().click();
       await flush();
       expect(create).toHaveBeenCalledWith({ date: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/), title: 'Mi título', content: 'Texto' });
     });
