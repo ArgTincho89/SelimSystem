@@ -36,7 +36,7 @@ const RentalModal = {
     if (id === 'resumen') return this.renderSummary(ctx);
     if (id === 'periodos') return this.renderPeriods(ctx);
     if (id === 'contratos') return this.renderContracts(ctx);
-    return this.renderRecords(ctx, id);
+    return id === 'documentos' ? this.renderDocuments(ctx) : this.renderNotes(ctx);
   },
 
   money(list) {
@@ -463,14 +463,31 @@ const RentalModal = {
     return RentalPeriods.render(ctx);
   },
 
-  // Documentos / Notas (temporary): the per-contract panels, one for each modality of the rental.
-  async renderRecords(ctx) {
-    const root = create('div', { className: 'rental-records', style: { display: 'grid', gap: '12px' } });
-    for (const card of ctx.overview.modalities) {
-      const box = create('section', { className: 'card', style: { padding: '12px' } }, [create('h4', { textContent: card.modalityLabel })]);
-      await WealthRecords.renderPanel(box, 'contract', card.contractId);
-      root.appendChild(box);
-    }
+  // Documentos: everything linked to the rental (its contracts, periods and the rental itself). A new file attaches
+  // to the chosen modality contract, or to the rental as a whole.
+  async renderDocuments(ctx) {
+    const root = create('div', { className: 'rental-records' });
+    const targets = [{ value: `declaration:${ctx.declarationId}`, label: 'Todo el alquiler' }, ...ctx.overview.modalities.map(card => ({ value: `contract:${card.contractId}`, label: card.modalityLabel }))];
+    await WealthRecords.renderDocuments(root, {
+      title: 'Documentos del alquiler',
+      load: () => API.documents.list('declaration', ctx.declarationId, { includeRelated: '1' }),
+      targets,
+      upload: (file, target) => {
+        const [type, id] = String(target || targets[0].value).split(':');
+        return API.documents.upload(type, id, file);
+      }
+    });
+    return root;
+  },
+
+  // Notas: notes of the rental and of its contracts and periods, with date range, order, edit and delete.
+  async renderNotes(ctx) {
+    const root = create('div', { className: 'rental-records' });
+    await WealthRecords.renderNotes(root, {
+      title: 'Notas del alquiler',
+      load: range => API.wealthNotes.list('declaration', ctx.declarationId, { includeRelated: '1', ...range }),
+      create: data => API.wealthNotes.create({ targetType: 'declaration', targetId: ctx.declarationId, ...data })
+    });
     return root;
   }
 };

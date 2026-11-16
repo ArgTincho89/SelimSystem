@@ -191,16 +191,17 @@ const API = {
   },
 
   documents: {
-    list(targetType, targetId) {
-      const field = ({ asset: 'assetId', obligation: 'obligationId', contract: 'contractId', occurrence: 'occurrenceId', rentOccurrence: 'rentOccurrenceId', transaction: 'transactionId', tenant: 'tenantEntityId' })[targetType] || 'entityId';
-      const query = new URLSearchParams({ [field]: targetId });
+    list(targetType, targetId, extra = {}) {
+      const field = ({ asset: 'assetId', obligation: 'obligationId', contract: 'contractId', occurrence: 'occurrenceId', rentOccurrence: 'rentOccurrenceId', transaction: 'transactionId', tenant: 'tenantEntityId', declaration: 'declarationId' })[targetType] || 'entityId';
+      const query = new URLSearchParams({ [field]: targetId, ...extra });
       return API.get(`/documents?${query}`);
     },
+    remove(id) { return API.delete(`/documents/${encodeURIComponent(id)}`); },
     listBy(targets) {
       return API.get(`/documents?${new URLSearchParams(targets)}`);
     },
     upload(targetType, targetId, file) {
-      const field = ({ asset: 'assetId', obligation: 'obligationId', contract: 'contractId', occurrence: 'occurrenceId', rentOccurrence: 'rentOccurrenceId', transaction: 'transactionId', tenant: 'tenantEntityId' })[targetType] || 'entityId';
+      const field = ({ asset: 'assetId', obligation: 'obligationId', contract: 'contractId', occurrence: 'occurrenceId', rentOccurrence: 'rentOccurrenceId', transaction: 'transactionId', tenant: 'tenantEntityId', declaration: 'declarationId' })[targetType] || 'entityId';
       return API.documents.uploadTargets({ [field]: targetId }, file);
     },
     async uploadTargets(targets, file) {
@@ -228,11 +229,13 @@ const API = {
   },
 
   wealthNotes: {
-    list(targetType, targetId) {
-      const query = new URLSearchParams({ targetType, targetId });
+    list(targetType, targetId, extra = {}) {
+      const query = new URLSearchParams({ targetType, targetId, ...Object.fromEntries(Object.entries(extra).filter(([, value]) => value !== '' && value != null)) });
       return API.get(`/notes?${query}`);
     },
-    create(data) { return API.post('/notes', data); }
+    create(data) { return API.post('/notes', data); },
+    update(id, data) { return API.put(`/notes/${encodeURIComponent(id)}`, data); },
+    remove(id) { return API.delete(`/notes/${encodeURIComponent(id)}`); }
   },
 
   obligations: {

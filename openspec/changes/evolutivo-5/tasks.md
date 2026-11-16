@@ -81,9 +81,9 @@ Budget is 800 lines (review_budget_lines); `size:exception` is recorded. Mitigat
 
 ## W7: documents-and-notes (commit: `feat(rentals): rental documents and notes tabs`)
 
-- [ ] 7.1 RED `tests/routes/documents-declaration.test.js` + `tests/routes/notes-crud.test.js`: `declarationId` target, `uploadedBy`, `DELETE /documents/:id` (owner files only), notes `title` <=120, `PUT/DELETE`, `from/to`, `includeRelated=1`, log actions.
-- [ ] 7.2 `routes/documents.js`, `routes/wealth-notes.js`, `ROUTES` (`document.delete`, `note.update`, `note.delete`).
-- [ ] 7.3 `wealth-records.js` tabs, filters, edit/delete; `rentalModal.js` Documentos and Notas tabs. Add `tests/ui/evolutivo5-docs-notes-contract.test.js`.
+- [x] 7.1 RED `tests/routes/documents-declaration.test.js` + `tests/routes/notes-crud.test.js`: `declarationId` target, `uploadedBy`, `DELETE /documents/:id` (owner files only), notes `title` <=120, `PUT/DELETE`, `from/to`, `includeRelated=1`, log actions.
+- [x] 7.2 `routes/documents.js`, `routes/wealth-notes.js`, `ROUTES` (`document.delete`, `note.update`, `note.delete`).
+- [x] 7.3 `wealth-records.js` tabs, filters, edit/delete; `rentalModal.js` Documentos and Notas tabs. Add `tests/ui/evolutivo5-docs-notes-contract.test.js`.
 
 ## W8: monthly-sheet (commit: `feat(assets): monthly sheet modal`)
 
