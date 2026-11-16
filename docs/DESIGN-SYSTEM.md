@@ -1,6 +1,6 @@
 # SelimSystem — Sistema de diseño
 
-Documento de sistema de diseño de SelimSystem, **reconstruido por lectura directa del código** del repositorio (rama `master`). Describe tokens, componentes, layouts, gráficos, iconografía, motion, accesibilidad y el contrato de implementación necesarios para reproducir la interfaz actual en estructura, tokens y comportamiento, partiendo solo del documento funcional (`docs/DOCUMENTO-FUNCIONAL.md`) más este documento.
+Documento de sistema de diseño de SelimSystem, **reconstruido por lectura directa del código** del repositorio (rama `master`). Describe tokens, componentes, layouts, gráficos, iconografía, motion, accesibilidad y el contrato de implementación necesarios para reproducir la interfaz actual en estructura, tokens y comportamiento, partiendo solo del documento funcional (`Documento funcional.md`) más este documento.
 
 > **Cómo leer este documento.** Cada valor, clase y breakpoint citado existe en el código. Cuando algo es una **convención inferida** (por ejemplo, un espaciado que se repite sin ser token, o una regla deducida del uso repetido) se marca explícitamente con la etiqueta **[inferencia]**. Las inconsistencias detectadas se agrupan en la sección 12, **Deudas y riesgos del sistema actual**.
 
@@ -949,7 +949,7 @@ La suite E2E (`e2e/pages/*.ts`) usa estos selectores. **Renombrarlos rompe los t
 **Accesibilidad** (detallada en la sección 10.5): zoom bloqueado, `--text-muted` por debajo de AA para texto normal, botón de peligro con `white` sobre `--danger` (2.78:1), emoji sin `aria-hidden`, FAB sin `aria-label`, sin `data-testid`.
 
 **Documental**
-- La versión de la UI está desincronizada (`package.json` 1.11.9 vs `public/version.json` 1.11.2), lo que afecta el pie del login y el changelog (ver `docs/DOCUMENTO-FUNCIONAL.md`, sección 9).
+- La versión de la UI está desincronizada (`package.json` 1.11.9 vs `public/version.json` 1.11.2), lo que afecta el pie del login y el changelog (ver `Documento funcional.md`, sección 17).
 
 ---
 
@@ -961,7 +961,7 @@ Este documento fue **generado por lectura directa del código** (rama `master`).
 
 | Archivo | Qué aporta |
 |---|---|
-| `docs/DOCUMENTO-FUNCIONAL.md` | Contexto de producto, pantallas y reglas de negocio. |
+| `Documento funcional.md` | Contexto de producto, pantallas y reglas de negocio. |
 | `public/index.html` | Estructura del documento, meta tags, viewport, `theme-color`, carga de CSS/JS. |
 | `public/css/variables.css` | Todos los tokens de diseño. |
 | `public/css/base.css` | Reset, estilos base, utilidades, foco, breakpoint 768px, modo escritorio. |
@@ -996,7 +996,7 @@ Este documento fue **generado por lectura directa del código** (rama `master`).
 
 ### Fuera de alcance
 
-- Lógica de backend, cálculo financiero y persistencia (documentados en `docs/DOCUMENTO-FUNCIONAL.md`).
+- Lógica de backend, cálculo financiero y persistencia (documentados en `Documento funcional.md`).
 - Configuración de despliegue (`fly.toml`, `Dockerfile`, CI).
 - Tokens de las categorías sugeridas en `src/db/seed.js` (función no invocada; no forma parte de la UI actual).
 - Comportamiento de correos (recuperación de contraseña) y de la API más allá de lo que afecta a la presentación.
