@@ -156,6 +156,26 @@ function dueBadge(occurrence) {
   return { label: 'Pendiente', className: 'due-pending' };
 }
 
+// Status badge of the history, periods and rental header: { label, icon, className }. The state is conveyed by
+// text and icon, never by color alone. `ending-soon` is "Próximo a vencer"; unknown states read as "Pendiente".
+const STATUS_BADGES = {
+  pending: { label: 'Pendiente', icon: '○', className: 'status-pending' },
+  'ending-soon': { label: 'Próximo a vencer', icon: '⏳', className: 'status-soon' },
+  overdue: { label: 'Vencido', icon: '⚠', className: 'status-overdue' },
+  partial: { label: 'Parcial', icon: '◐', className: 'status-partial' },
+  paid: { label: 'Pagado', icon: '✔', className: 'status-done' },
+  collected: { label: 'Cobrado', icon: '✔', className: 'status-done' },
+  resolved: { label: 'Resuelto', icon: '✔', className: 'status-done' },
+  reverted: { label: 'Revertido', icon: '↩', className: 'status-reverted' },
+  cancelled: { label: 'Cancelado', icon: '✕', className: 'status-cancelled' },
+  active: { label: 'Activo', icon: '●', className: 'status-done' },
+  upcoming: { label: 'Por comenzar', icon: '○', className: 'status-pending' },
+  ended: { label: 'Finalizado', icon: '■', className: 'status-cancelled' }
+};
+function statusBadge(state) {
+  return Object.prototype.hasOwnProperty.call(STATUS_BADGES, state) ? STATUS_BADGES[state] : STATUS_BADGES.pending;
+}
+
 // Spanish label for a status code. Unknown or empty values never leak the raw code.
 function statusLabel(status) {
   return Object.prototype.hasOwnProperty.call(STATUS_LABELS, status) ? STATUS_LABELS[status] : 'Sin estado';

@@ -39,10 +39,10 @@ Budget is 800 lines (review_budget_lines); `size:exception` is recorded. Mitigat
 
 ## W1: asset-history (commit: `feat(assets): typed history timeline by year and month`)
 
-- [ ] 1.1 RED `tests/services/asset-history.test.js` + `tests/routes/assets-history.test.js`: years list, month, `all`, `from/to` (36-month cap -> 400), typed rows, reverted rows, 400 invalid, 404 asset, 401, user isolation, no writes.
-- [ ] 1.2 Create `src/services/asset-history.js` (over `alerts.readOnlyView`); add `GET /assets/:id/history` in `src/routes/assets.js`; `API.assets.history` in `public/js/api.js`.
-- [ ] 1.3 Create `public/js/pages/assetHistory.js` (move `showHistory`/`showReceipt` from `assets.js`; year/month selectors, detail push); `format.js` `statusBadge` with text + icon; register script in `index.html`/`sw.js`.
-- [ ] 1.4 Re-point `tests/ui/evolutivo4-history-contract.test.js`; add `tests/ui/evolutivo5-history-contract.test.js`.
+- [x] 1.1 RED `tests/services/asset-history.test.js` + `tests/routes/assets-history.test.js`: years list, month, `all`, `from/to` (36-month cap -> 400), typed rows, reverted rows, 400 invalid, 404 asset, 401, user isolation, no writes.
+- [x] 1.2 Create `src/services/asset-history.js` (over `alerts.readOnlyView`); add `GET /assets/:id/history` in `src/routes/assets.js`; `API.assets.history` in `public/js/api.js`.
+- [x] 1.3 Create `public/js/pages/assetHistory.js` (move `showHistory`/`showReceipt` from `assets.js`; year/month selectors, detail push); `format.js` `statusBadge` with text + icon; register script in `index.html`/`sw.js`.
+- [x] 1.4 Re-point `tests/ui/evolutivo4-history-contract.test.js`; add `tests/ui/evolutivo5-history-contract.test.js`.
 
 ## W2: ficha-redesign (commit: `feat(assets): redesigned ficha with rental card`)
 

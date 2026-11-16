@@ -666,3 +666,101 @@ body.desktop-mode .fab {
   transform-origin: top left;
   max-width: 100%;
 }
+
+/* Status badges: text + icon, never color alone. */
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 600;
+  font-size: var(--font-sm);
+  white-space: nowrap;
+}
+
+.status-pending,
+.status-cancelled {
+  color: var(--text-muted);
+}
+
+.status-soon,
+.status-partial {
+  color: var(--due-soon, #FF9F43);
+}
+
+.status-overdue {
+  color: var(--danger);
+  font-weight: 700;
+}
+
+.status-done {
+  color: var(--success, #2e7d32);
+}
+
+.status-reverted {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+/* Asset history table: a compact table on desktop, stacked label/value cards on phones. */
+.table-scroll {
+  overflow-x: auto;
+}
+
+.asset-history-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--font-sm);
+}
+
+.asset-history-table th,
+.asset-history-table td {
+  text-align: left;
+  padding: 6px 8px;
+  vertical-align: top;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.asset-history-row {
+  cursor: pointer;
+}
+
+.asset-history-row:hover {
+  background: var(--bg-hover, rgba(255, 255, 255, 0.04));
+}
+
+.history-part {
+  font-size: var(--font-sm);
+}
+
+@media (max-width: 640px) {
+  .asset-history-table thead {
+    position: absolute;
+    left: -9999px;
+  }
+
+  .asset-history-table,
+  .asset-history-table tbody,
+  .asset-history-table tr,
+  .asset-history-table td {
+    display: block;
+  }
+
+  .asset-history-table tr {
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md, 8px);
+    margin-bottom: 8px;
+    padding: 6px;
+  }
+
+  .asset-history-table td {
+    border: 0;
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .asset-history-table td::before {
+    content: attr(data-label);
+    font-weight: 700;
+  }
+}

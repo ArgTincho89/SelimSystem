@@ -423,7 +423,7 @@ function reverseCollection(db, userId, collectionId, storage = null) {
   try {
     allocations.forEach(item => { db.remove('rentCollectionAllocations', item.id, userId); removedAllocations.push(item); });
     if (transaction) { db.remove('transactions', transaction.id, userId); removedTransaction = transaction; }
-    db.update('rentCollections', collection.id, { reversedAt: new Date().toISOString(), reversedTransactionId: transaction?.id || null }, userId);
+    db.update('rentCollections', collection.id, { reversedAt: new Date().toISOString(), reversedTransactionId: transaction?.id || null, reversedOccurrenceIds: [...new Set(allocations.map(item => item.occurrenceId))] }, userId);
     documents.forEach(item => {
       if (onlyTarget(item)) { db.remove('documents', item.id, userId); removedDocuments.push(item); }
       else db.update('documents', item.id, { transactionId: null, detachedFromCollectionId: collection.id }, userId);

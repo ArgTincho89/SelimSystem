@@ -147,6 +147,10 @@ const API = {
     obligationHistory(id) {
       return API.get(`/assets/${encodeURIComponent(id)}/obligation-history`);
     },
+    history(id, filters = {}) {
+      const query = new URLSearchParams(Object.entries(filters).filter(([, value]) => value !== '' && value != null));
+      return API.get(`/assets/${encodeURIComponent(id)}/history${query.toString() ? `?${query}` : ''}`);
+    },
     monthlyView(id, filters = {}) {
       const query = new URLSearchParams(Object.entries(filters).filter(([, value]) => value !== '' && value != null));
       return API.get(`/assets/${encodeURIComponent(id)}/monthly-view${query.toString() ? `?${query}` : ''}`);

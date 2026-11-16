@@ -5,6 +5,7 @@ const assetFile = require('../services/asset-file');
 const assetForm = require('../services/asset-form');
 const { ageFor } = require('../services/asset-age');
 const ledger = require('../services/account-ledger');
+const assetHistory = require('../services/asset-history');
 const { validateOwnershipSet } =require('../utils/ownership-overlap');
 
 const router = express.Router();
@@ -302,6 +303,17 @@ router.get('/:id/obligation-history', (req, res) => {
   const asset = db.findById('assets', req.params.id, userId);
   if (!asset) return res.status(404).json({ error: 'Bien no encontrado' });
   res.json(economicOverview.obligationHistory(db, userId, asset));
+});
+
+router.get('/:id/history', (req, res) => {
+  const db = req.app.locals.db;
+  const userId = req.session.userId;
+  const asset = db.findById('assets', req.params.id, userId);
+  if (!asset) return res.status(404).json({ error: 'Bien no encontrado' });
+  const { year, month, from, to } = req.query;
+  const result = assetHistory.build(db, userId, asset, { year, month, from, to });
+  if (result.error) return res.status(result.status || 400).json({ error: result.error });
+  res.json(result.value);
 });
 
 router.get('/:id/file', (req, res) => {

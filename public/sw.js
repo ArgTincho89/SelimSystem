@@ -23,6 +23,7 @@ const STATIC_ASSETS = [
   '/js/pages/summary.js',
   '/js/pages/categories.js',
   '/js/pages/rentalDeclaration.js',
+  '/js/pages/assetHistory.js',
   '/js/pages/assets.js',
   '/js/pages/entities.js',
   '/js/pages/obligations.js',
