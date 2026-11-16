@@ -126,8 +126,8 @@ export class AssetsPage extends BasePage {
   async chooseHistoryPreviousYear(): Promise<void> {
     const year = String(new Date().getFullYear() - 1);
     const history = this.page.locator('.asset-history');
-    await history.getByLabel('Mes').selectOption('all');
-    await history.getByLabel('Año').selectOption(year);
+    await history.getByLabel('Mes', { exact: true }).selectOption('all');
+    await history.getByLabel('Año', { exact: true }).selectOption(year);
   }
 
   async expectHistoryRowState(concept: string, state: string): Promise<void> {
