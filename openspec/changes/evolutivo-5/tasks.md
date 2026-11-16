@@ -92,9 +92,9 @@ Budget is 800 lines (review_budget_lines); `size:exception` is recorded. Mitigat
 
 ## W9: alerts-responsibility (commit: `feat(alerts): owner and tenant responsibility sections`)
 
-- [ ] 9.1 RED `tests/routes/alerts-responsibility.test.js`: every alert has `responsibility`; tenant types per design; `document_pending` follows obligation; filter owner/tenant; invalid -> 400 "El responsable no es válido".
-- [ ] 9.2 `services/alerts.js`, `routes/alerts.js`; `pages/alerts.js` `data-alert-responsibility` sections wrapping `data-alert-group`.
-- [ ] 9.3 Re-point `evolutivo-s6`; add `tests/ui/evolutivo5-alerts-contract.test.js`; confirm `AlertsPage` e2e unchanged.
+- [x] 9.1 RED `tests/routes/alerts-responsibility.test.js`: every alert has `responsibility`; tenant types per design; `document_pending` follows obligation; filter owner/tenant; invalid -> 400 "El responsable no es válido".
+- [x] 9.2 `services/alerts.js`, `routes/alerts.js`; `pages/alerts.js` `data-alert-responsibility` sections wrapping `data-alert-group`.
+- [x] 9.3 Re-point `evolutivo-s6`; add `tests/ui/evolutivo5-alerts-contract.test.js`; confirm `AlertsPage` e2e unchanged.
 
 ## W10: payment-reversal (commit: `feat(obligations): revert registered payments`)
 

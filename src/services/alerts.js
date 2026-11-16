@@ -8,6 +8,9 @@ const ALERT_TYPES = [
   'obligation_due', 'obligation_overdue', 'partial_payment', 'tenant_obligation_pending', 'rent_due',
   'contract_expiry', 'rent_adjustment_due', 'card_installment_due', 'account_forecast', 'document_pending'
 ];
+// Alerts the tenant answers for (the rent side). Everything else affects the owner's own finances.
+const TENANT_TYPES = new Set(['tenant_obligation_pending', 'rent_due', 'contract_expiry', 'rent_adjustment_due']);
+const RESPONSIBILITIES = ['owner', 'tenant'];
 const DEFAULT_HORIZON_DAYS = 90;
 const DEFAULT_LIMIT = 200;
 const DOCUMENT_LOOKBACK_DAYS = 60;
@@ -87,7 +90,8 @@ function build(db, userId, today, filters) {
 
   const push = (alert, holders = []) => {
     const assetLabel = alert.assetName === undefined ? assetName(alert.assetId) : alert.assetName;
-    items.push({ ...alert, assetId: alert.assetId || null, assetName: assetLabel, _holders: holders.filter(Boolean) });
+    const responsibility = alert.responsibility || (TENANT_TYPES.has(alert.type) ? 'tenant' : 'owner');
+    items.push({ ...alert, responsibility, assetId: alert.assetId || null, assetName: assetLabel, _holders: holders.filter(Boolean) });
   };
 
   db.findAll(obligations.COLLECTION, userId).filter(item => item.status === 'active').forEach(obligation => {
@@ -156,6 +160,7 @@ function build(db, userId, today, filters) {
       if (hasReceipt) return;
       push({
         ...common(occurrence), id: `doc:${obligation.id}:${occurrence.date}`, type: 'document_pending', date: occurrence.date, status: 'pending',
+        responsibility: obligations.responsibilityFor(obligation, occurrence).responsibilityType === 'tenant' ? 'tenant' : 'owner',
         message: `Falta adjuntar el comprobante de pago de ${occurrence.title} de ${monthName(occurrence.date)}${asset ? ` correspondiente a ${asset}` : ''}.`
       }, holders);
     });
@@ -228,6 +233,7 @@ function list(db, userId, filters = {}) {
   return build(db, userId, today, filters)
     .filter(alert => !seen.has(alert.id) && seen.add(alert.id))
     .filter(alert => (!filters.type || alert.type === filters.type)
+      && (!filters.responsibility || alert.responsibility === filters.responsibility)
       && (!filters.assetId || alert.assetId === filters.assetId)
       && (!filters.holderId || alert._holders.includes(filters.holderId))
       && (!filters.from || alert.date >= filters.from)
@@ -237,4 +243,4 @@ function list(db, userId, filters = {}) {
     .map(({ _holders, ...alert }) => ({ ...alert, daysUntil: dateOnlyDaysBetween(today, alert.date) }));
 }
 
-module.exports = { ALERT_TYPES, DEFAULT_HORIZON_DAYS, DEFAULT_LIMIT, list, readOnlyView };
+module.exports = { ALERT_TYPES, RESPONSIBILITIES, DEFAULT_HORIZON_DAYS, DEFAULT_LIMIT, list, readOnlyView };
