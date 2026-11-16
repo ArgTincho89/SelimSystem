@@ -5,8 +5,9 @@ const root = path.join(__dirname, '../..');
 const read = file => fs.readFileSync(path.join(root, file), 'utf8');
 
 describe('Evolutivo 5 release contract', () => {
-  it('ships service worker cache v42', () => {
-    expect(read('public/sw.js')).toContain("CACHE_NAME = 'selimsystem-v42'");
+  it('ships service worker cache v42 or later', () => {
+    const version = Number(read('public/sw.js').match(/CACHE_NAME = 'selimsystem-v(\d+)'/)[1]);
+    expect(version).toBeGreaterThanOrEqual(42);
   });
 
   it('registers every new script in index.html and the service worker static assets', () => {
@@ -18,11 +19,13 @@ describe('Evolutivo 5 release contract', () => {
     });
   });
 
-  it('bumps the package version to 1.13.0 in package.json and the lockfile', () => {
-    expect(JSON.parse(read('package.json')).version).toBe('1.13.0');
+  it('keeps the package version at 1.13.x or later in package.json and the lockfile', () => {
+    const version = JSON.parse(read('package.json')).version;
+    const [major, minor] = version.split('.').map(Number);
+    expect(major * 1000 + minor).toBeGreaterThanOrEqual(1013);
     const lock = JSON.parse(read('package-lock.json'));
-    expect(lock.version).toBe('1.13.0');
-    expect(lock.packages[''].version).toBe('1.13.0');
+    expect(lock.version).toBe(version);
+    expect(lock.packages[''].version).toBe(version);
   });
 
   it('documents the release at the top of the changelog, in Spanish', () => {
@@ -37,7 +40,7 @@ describe('Evolutivo 5 release contract', () => {
 
   it('describes the new UI in the functional document', () => {
     const doc = read('Documento funcional.md');
-    expect(doc).toContain('**Versión del producto:** 1.13.0');
+    expect(doc).toContain(`**Versión del producto:** ${JSON.parse(read('package.json')).version}`);
     ['Ver ficha mensual', 'A cargo de titulares', 'A cargo de inquilinos', 'Revertir un pago', 'Ver historial de alquileres', 'Documentos y notas del alquiler', 'Ventana del alquiler'].forEach(text => expect(doc).toContain(text));
     expect(doc).not.toContain('1.12.0');
   });

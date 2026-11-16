@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.13.1] - 2026-11-16
+
+### Changed
+- La tabla de "Ver historial" del bien muestra líneas grises finas entre celdas y un encabezado sombreado en pantallas anchas.
+
 ## [1.13.0] - 2026-11-16
 
 ### Added

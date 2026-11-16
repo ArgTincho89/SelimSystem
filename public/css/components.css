@@ -717,7 +717,11 @@ body.desktop-mode .fab {
   text-align: left;
   padding: 6px 8px;
   vertical-align: top;
-  border-bottom: 1px solid var(--border-color);
+  border: 1px solid var(--border-color);
+}
+
+.asset-history-table thead th {
+  background: var(--bg-hover, rgba(255, 255, 255, 0.04));
 }
 
 .asset-history-row {
