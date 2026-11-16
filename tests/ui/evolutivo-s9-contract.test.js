@@ -11,8 +11,8 @@ describe('Evolutivo S9 UI contract', () => {
 
   it('renders the file summary above the monthly view with the business sections', () => {
     const source = read('js/pages/assets.js');
-    expect(source).toContain('renderAssetFile(asset, body)');
-    expect(source.indexOf('renderAssetFile(asset, body)')).toBeLessThan(source.indexOf('renderMonthlyView(asset, body)'));
+    expect(source).toContain('renderAssetFile(asset, economics)');
+    expect(source.indexOf('renderAssetFile(asset, economics)')).toBeLessThan(source.indexOf('renderMonthlyView(asset, economics)'));
     ['Titulares', 'Inquilino actual', 'Alquiler cobrado este mes', 'Costo de mantenimiento', 'Próximos vencimientos', 'Pendientes', 'Obligaciones', 'Documentos', 'Notas'].forEach(text => expect(source).toContain(text));
     expect(source).toContain('API.getAssetFile(asset.id)');
   });

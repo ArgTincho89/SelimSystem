@@ -11,7 +11,7 @@ describe('Evolutivo S7 UI contract', () => {
 
   it('renders the monthly table with the business columns', () => {
     const source = read('js/pages/assets.js');
-    expect(source).toContain('renderMonthlyView(asset, body)');
+    expect(source).toContain('renderMonthlyView(asset, economics)');
     ['Concepto', 'Responsable', 'Esperado', 'Pagado o cobrado', 'Estado', 'Comprobante', 'Pagado por inquilino'].forEach(text => expect(source).toContain(text));
     expect(source).toContain('API.assets.monthlyView(asset.id)');
   });

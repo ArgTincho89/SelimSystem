@@ -46,9 +46,9 @@ Budget is 800 lines (review_budget_lines); `size:exception` is recorded. Mitigat
 
 ## W2: ficha-redesign (commit: `feat(assets): redesigned ficha with rental card`)
 
-- [ ] 2.1 RED `tests/routes/assets-active-declaration.test.js`: `activeDeclarationId` set only with an active contract (not `usufruct` condition), null otherwise.
-- [ ] 2.2 `src/routes/assets.js`: add `activeDeclarationId`. `assets.js`: list buttons, `showDetails` header/obligations/rental card/docs-notes/economics; re-home recoveries, ownership and status history.
-- [ ] 2.3 Re-point `evolutivo2-s5`, `evolutivo3-s3`; add `tests/ui/evolutivo5-ficha-contract.test.js`.
+- [x] 2.1 RED `tests/routes/assets-active-declaration.test.js`: `activeDeclarationId` set only with an active contract (not `usufruct` condition), null otherwise.
+- [x] 2.2 `src/routes/assets.js`: add `activeDeclarationId`. `assets.js`: list buttons, `showDetails` header/obligations/rental card/docs-notes/economics; re-home recoveries, ownership and status history.
+- [x] 2.3 Re-point `evolutivo2-s5`, `evolutivo3-s3`; add `tests/ui/evolutivo5-ficha-contract.test.js`.
 
 ## W3: rental-modal-shell (commit: `feat(rentals): tabbed rental modal with overview`)
 

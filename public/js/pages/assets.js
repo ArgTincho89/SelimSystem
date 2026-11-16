@@ -69,10 +69,7 @@ const AssetsPage = {
         create('button', { className: 'btn btn-ghost btn-sm', textContent: 'Ficha', onClick: () => this.showDetails(asset.id) }),
         create('button', { className: 'btn btn-secondary btn-sm', textContent: 'Editar', onClick: async () => { try { this.showAssetModal(await API.assets.get(asset.id)); } catch (error) { showToast(error.message, 'error'); } } })
       ]);
-      if (asset.type === 'immovable') {
-        actions.appendChild(create('button', { className: 'btn btn-secondary btn-sm', textContent: 'Alquileres', onClick: () => this.showDetails(asset.id) }));
-        actions.appendChild(create('button', { className: 'btn btn-secondary btn-sm', textContent: asset.condition === 'rented' ? 'Editar alquiler' : 'Declarar alquiler', dataset: { declareRental: asset.id }, onClick: () => this.openDeclaration(asset.id, { onDone: () => this.render() }) }));
-      }
+      if (asset.type === 'immovable') actions.appendChild(this.rentalAccessButton(asset, { onDone: () => this.render() }));
       card.append(details, actions);
       list.appendChild(card);
     });
@@ -392,36 +389,248 @@ const AssetsPage = {
     return AssetHistory.open(id);
   },
 
+  // Ficha of an asset: a summary (header, data, obligations, rental card, documents and notes, economics),
+  // not the whole financial and contractual management. Rental details live in the rental modal.
   async showDetails(id) {
     try {
-      const asset = await API.assets.get(id);
-      const body = create('div', { style: { maxHeight: '65vh', overflowY: 'auto' } });
-      body.append(create('p', { textContent: `${asset.type === 'immovable' ? 'Inmueble' : 'Mueble'}${asset.type === 'immovable' && asset.condition ? ` · ${this.optionLabel(this.conditionOptions(), asset.condition)}` : ''}` }));
-      const typed = asset.type === 'immovable'
-        ? [['Tipo', this.optionLabel(this.propertyKindOptions(), asset.propertyKind)], ['Características', asset.characteristics], ['Ubicación', asset.location],
-          ['Superficie cubierta', asset.coveredAreaM2 != null ? `${asset.coveredAreaM2} m²` : ''], ['Superficie libre', asset.freeAreaM2 != null ? `${asset.freeAreaM2} m²` : ''], ['Identificación catastral', asset.cadastralId], ['Fecha de construcción', asset.constructionDate], [asset.age?.source === 'legacy' ? 'Antigüedad (dato anterior)' : 'Antigüedad', asset.age?.years != null ? `${asset.age.years} años` : '']]
-        : [['Tipo', asset.vehicleType === 'automovil' ? 'Automóvil' : ''], ['Marca', asset.brand], ['Dominio', asset.plate], ['KMs', asset.mileage], ['Color', asset.color]];
-      typed.forEach(([label, value]) => { if (value !== '' && value != null) body.appendChild(create('p', { style: { margin: '4px 0' }, textContent: `${label}: ${value}` })); });
-      if (asset.notes) body.appendChild(create('p', { textContent: `Notas: ${asset.notes}` }));
-      this.renderLegacyData(asset, body);
-      await this.renderAssetFile(asset, body);
-      await this.renderRecoveries(asset, body);
-      await this.renderEconomicAnalysis(asset, body);
-      this.renderMonthlyView(asset, body);
-      body.appendChild(create('h4', { textContent: 'Historial de titularidad', style: { marginTop: '14px' } }));
+      const [asset, obligationItems, owners] = await Promise.all([API.assets.get(id), API.obligations.list({ assetId: id }), API.owners.list()]);
+      this.owners = owners;
+      const body = create('div', { className: 'asset-ficha', style: { display: 'grid', gap: '14px' } });
+      body.appendChild(this.renderFichaHeader(asset));
+      body.appendChild(this.renderDataBlock(asset));
+      body.appendChild(this.renderObligationsList(asset, obligationItems, owners));
+      if (asset.type === 'immovable') await this.renderRentalCard(asset, body);
+      const records = create('section', { className: 'card', dataset: { fichaBlock: 'documents-notes' }, style: { padding: '12px' } }, [create('h3', { textContent: 'Documentos y notas del bien' })]);
+      await WealthRecords.renderPanel(records, 'asset', id);
+      body.appendChild(records);
+      const economics = create('section', { className: 'card', dataset: { fichaBlock: 'economics' }, style: { padding: '12px' } }, [create('h3', { textContent: 'Economía del bien' })]);
+      await this.renderAssetFile(asset, economics);
+      await this.renderEconomicAnalysis(asset, economics);
+      this.renderMonthlyView(asset, economics);
+      body.appendChild(economics);
+      // Re-homed from the rental modal: still reachable from the ficha.
+      const extra = create('section', { className: 'card', dataset: { fichaBlock: 'recoveries' }, style: { padding: '12px' } });
+      await this.renderRecoveries(asset, extra);
+      body.appendChild(extra);
+      const history = create('section', { className: 'card', dataset: { fichaBlock: 'history' }, style: { padding: '12px' } });
+      history.appendChild(create('h4', { textContent: 'Historial de titularidad' }));
       (asset.ownerships || []).forEach(record => {
         const line = create('div', { className: 'card', style: { marginTop: '8px' } });
         line.appendChild(create('p', { textContent: `${record.owner?.name || 'Titular'}${record.percentage !== null ? ` · ${record.percentage}%` : ''}` }));
         line.appendChild(create('small', { textContent: `${record.startDate}${record.endDate ? ` — ${record.endDate}` : ' — vigente'}${record.notes ? ` · ${record.notes}` : ''}` }));
-        body.appendChild(line);
+        history.appendChild(line);
       });
-      if (asset.type === 'immovable') await this.renderRentals(asset, body);
-      body.appendChild(create('h4', { textContent: 'Historial de estados', style: { marginTop: '14px' } }));
-      (asset.statusHistory || []).slice().reverse().forEach(event => body.appendChild(create('p', { textContent: `${statusLabel(event.status)} · ${new Date(event.changedAt).toLocaleDateString()}${event.notes ? ` · ${event.notes}` : ''}` })));
-      await WealthRecords.renderPanel(body, 'asset', id);
+      history.appendChild(create('h4', { textContent: 'Historial de estados', style: { marginTop: '14px' } }));
+      (asset.statusHistory || []).slice().reverse().forEach(event => history.appendChild(create('p', { textContent: `${statusLabel(event.status)} · ${new Date(event.changedAt).toLocaleDateString()}${event.notes ? ` · ${event.notes}` : ''}` })));
+      body.appendChild(history);
       const footer = create('div', {}, [create('button', { className: 'btn btn-primary', type: 'button', textContent: 'Cerrar', onClick: () => Modal.hide() })]);
-      Modal.show(asset.name, body, { footer });
+      Modal.show(asset.name, body, { footer, width: '1000px' });
     } catch (error) { showToast(error.message, 'error'); }
+  },
+
+  // Header: name, type, location, status, current holders with percentages and the main actions.
+  renderFichaHeader(asset) {
+    const current = (asset.ownerships || []).filter(record => !record.endDate);
+    const holders = current.map(record => `${record.owner?.name || 'Titular'}${record.percentage != null ? ` ${record.percentage}%` : ''}`).join(', ');
+    const location = asset.location || [asset.address, asset.locality, asset.province, asset.country].filter(Boolean).join(', ');
+    const state = asset.type === 'immovable' ? (this.optionLabel(this.conditionOptions(), asset.condition) || this.usageLabel(asset.usageStatus)) : '';
+    const actions = create('div', { className: 'ficha-actions', style: { display: 'flex', gap: '8px', flexWrap: 'wrap' } }, [
+      create('button', { className: 'btn btn-secondary btn-sm', type: 'button', textContent: 'Editar', onClick: async () => { try { this.showAssetModal(await API.assets.get(asset.id)); } catch (error) { showToast(error.message, 'error'); } } }),
+      create('button', { className: 'btn btn-ghost btn-sm', type: 'button', textContent: 'Ver historial', onClick: () => this.showHistory(asset.id) })
+    ]);
+    if (asset.type === 'immovable') actions.appendChild(this.rentalAccessButton(asset, { onDone: () => this.showDetails(asset.id) }));
+    return create('header', { className: 'ficha-header', dataset: { fichaBlock: 'header' }, style: { display: 'grid', gap: '6px' } }, [
+      create('h3', { textContent: asset.name, style: { margin: '0' } }),
+      create('div', { className: 'text-muted', textContent: [asset.type === 'immovable' ? 'Inmueble' : 'Mueble', location, state, `Estado: ${statusLabel(asset.status || 'active')}`].filter(Boolean).join(' · ') }),
+      create('div', { className: 'text-muted', textContent: `Titular${current.length > 1 ? 'es' : ''}: ${holders || 'sin titulares vigentes'}` }),
+      actions
+    ]);
+  },
+
+  // "Ver alquiler" when a current rental exists, "Declarar alquiler" otherwise. The decision uses the active
+  // declaration (a declaration with an active modality), never the asset condition alone.
+  rentalAccessButton(asset, options = {}) {
+    const declarationId = asset.activeDeclarationId || asset.declaration?.id || null;
+    const active = asset.activeDeclarationId !== undefined ? Boolean(asset.activeDeclarationId) : Boolean(asset.declaration && asset.declaration.status !== 'ended');
+    if (active) return create('button', { className: 'btn btn-primary btn-sm', type: 'button', textContent: 'Ver alquiler', dataset: { viewRental: asset.id }, onClick: () => this.openRental(asset.id, declarationId) });
+    return create('button', { className: 'btn btn-primary btn-sm', type: 'button', textContent: 'Declarar alquiler', dataset: { declareRental: asset.id }, onClick: () => this.openDeclaration(asset.id, { onDone: options.onDone || (() => this.render()) }) });
+  },
+
+  // Opens the rental of the asset. The rental modal (tabs) owns the experience; the legacy ficha section is
+  // the fallback while the modal is not loaded.
+  openRental(assetId, declarationId, options = {}) {
+    if (typeof RentalModal !== 'undefined') return RentalModal.open(declarationId, { assetId, tab: 'resumen', ...options });
+    return this.showRentalLegacy(assetId);
+  },
+
+  async showRentalLegacy(assetId) {
+    try {
+      const asset = await API.assets.get(assetId);
+      const body = create('div', { style: { maxHeight: '70vh', overflowY: 'auto' } });
+      await this.renderRentals(asset, body);
+      Modal.show(`Alquiler · ${asset.name}`, body, { width: '900px', footer: create('div', {}, [create('button', { className: 'btn btn-primary', type: 'button', textContent: 'Cerrar', onClick: () => Modal.hide() })]) });
+    } catch (error) { showToast(error.message, 'error'); }
+  },
+
+  // Data of the asset: classification, type, characteristics, location, areas, cadastral id, construction
+  // date, age, holders with their validity periods and the general notes.
+  renderDataBlock(asset) {
+    const section = create('section', { className: 'card', dataset: { fichaBlock: 'data' }, style: { padding: '12px' } }, [create('h3', { textContent: 'Datos del bien' })]);
+    section.appendChild(create('p', { textContent: `${asset.type === 'immovable' ? 'Inmueble' : 'Mueble'}${asset.type === 'immovable' && asset.condition ? ` · ${this.optionLabel(this.conditionOptions(), asset.condition)}` : ''}` }));
+    const typed = asset.type === 'immovable'
+      ? [['Tipo', this.optionLabel(this.propertyKindOptions(), asset.propertyKind)], ['Características', asset.characteristics], ['Ubicación', asset.location],
+        ['Superficie cubierta', asset.coveredAreaM2 != null ? `${asset.coveredAreaM2} m²` : ''], ['Superficie libre', asset.freeAreaM2 != null ? `${asset.freeAreaM2} m²` : ''], ['Identificación catastral', asset.cadastralId], ['Fecha de construcción', asset.constructionDate], [asset.age?.source === 'legacy' ? 'Antigüedad (dato anterior)' : 'Antigüedad', asset.age?.years != null ? `${asset.age.years} años` : '']]
+      : [['Tipo', asset.vehicleType === 'automovil' ? 'Automóvil' : ''], ['Marca', asset.brand], ['Dominio', asset.plate], ['KMs', asset.mileage], ['Color', asset.color]];
+    typed.forEach(([label, value]) => { if (value !== '' && value != null) section.appendChild(create('p', { style: { margin: '4px 0' }, textContent: `${label}: ${value}` })); });
+    const holders = (asset.ownerships || []).map(record => `${record.owner?.name || 'Titular'}${record.percentage != null ? ` · ${record.percentage}%` : ''} (${record.startDate}${record.endDate ? ` — ${record.endDate}` : ' — vigente'})`);
+    if (holders.length) section.appendChild(create('p', { style: { margin: '4px 0' }, textContent: `Titulares: ${holders.join('; ')}` }));
+    if (asset.notes) section.appendChild(create('p', { textContent: `Notas: ${asset.notes}` }));
+    this.renderLegacyData(asset, section);
+    return section;
+  },
+
+  // Compact obligations list with the actions valid for each responsibility.
+  renderObligationsList(asset, items, owners) {
+    const section = create('section', { className: 'card', dataset: { fichaBlock: 'obligations' }, style: { padding: '12px' } }, [create('h3', { textContent: 'Obligaciones del bien' })]);
+    const active = (items || []).filter(item => item.status !== 'cancelled');
+    if (!active.length) section.appendChild(create('p', { className: 'text-muted', textContent: 'Este bien todavía no tiene obligaciones. Usá "Agregar obligación" para cargar la primera.' }));
+    const providers = new Map((owners || []).map(owner => [owner.id, owner.name]));
+    const reload = () => this.showDetails(asset.id);
+    active.forEach(item => {
+      const tenantSide = item.responsibilityType === 'tenant';
+      const next = item.nextDue || null;
+      const badge = next ? dueBadge(next) : null;
+      const identifier = item.externalIdentifier ? `${this.identifierLabel(item.externalIdentifierType)}: ${item.externalIdentifier}` : '';
+      const details = [
+        obligationTypeLabel(item.type), providers.get(item.providerEntityId) || 'Sin proveedor', tenantSide ? 'A cargo del inquilino' : 'A cargo del titular', identifier,
+        item.estimatedAmount != null ? formatearMonedaConCodigo(item.estimatedAmount, item.currencyCode) : '',
+        item.recurrenceFrequency ? ObligationsPage.frequencyLabel(item.recurrenceFrequency) : 'Única vez'
+      ].filter(Boolean).join(' · ');
+      const actions = create('div', { style: { display: 'flex', gap: '6px', flexWrap: 'wrap' } }, [
+        create('button', { className: 'btn btn-ghost btn-sm', type: 'button', textContent: 'Ver obligación', 'aria-label': `Ver obligación ${item.title}`, onClick: () => { Modal.hide(); Router.navigate(`/obligations?focus=${encodeURIComponent(item.id)}`); } }),
+        ...(next && !tenantSide && next.status !== 'paid' ? [create('button', { className: 'btn btn-secondary btn-sm', type: 'button', textContent: 'Registrar pago', 'aria-label': `Registrar pago de ${item.title}`, onClick: () => this.payFromFicha(item, next, reload) })] : []),
+        ...(next && tenantSide && !next.resolution ? [create('button', { className: 'btn btn-secondary btn-sm', type: 'button', textContent: 'Resolver', 'aria-label': `Resolver ${item.title}`, onClick: () => this.resolveFromFicha(item, next, reload) })] : []),
+        create('button', { className: 'btn btn-ghost btn-sm', type: 'button', textContent: 'Editar obligación', 'aria-label': `Editar obligación ${item.title}`, onClick: () => this.editFromFicha(item, reload) })
+      ]);
+      section.appendChild(create('article', { className: 'ficha-obligation', dataset: { obligationId: item.id }, style: { display: 'grid', gap: '4px', padding: '8px 0', borderTop: '1px solid var(--border-color)' } }, [
+        create('strong', { textContent: item.title }),
+        create('div', { className: 'text-muted', textContent: details }),
+        create('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap' } }, next ? [create('span', { textContent: `Próximo vencimiento: ${next.date}` }), create('span', { className: badge.className, textContent: badge.label })] : [create('span', { textContent: 'Sin próximo vencimiento' })]),
+        actions
+      ]));
+    });
+    section.appendChild(create('button', { className: 'btn btn-primary btn-sm', type: 'button', textContent: 'Agregar obligación', style: { marginTop: '8px' }, onClick: () => { Modal.hide(); Router.navigate(`/obligations?newForAsset=${encodeURIComponent(asset.id)}`); } }));
+    return section;
+  },
+
+  async payFromFicha(obligation, occurrence, reload) {
+    try {
+      await ObligationsPage.loadLookups();
+      ObligationsPage.onChange = reload;
+      await ObligationsPage.pay(obligation, occurrence);
+    } catch (error) { showToast(error.message, 'error'); }
+  },
+
+  async resolveFromFicha(obligation, occurrence, reload) {
+    try {
+      await ObligationsPage.loadLookups();
+      ObligationsPage.onChange = reload;
+      await ObligationsPage.showResolveModal(obligation, occurrence);
+    } catch (error) { showToast(error.message, 'error'); }
+  },
+
+  async editFromFicha(obligation, reload) {
+    try {
+      await ObligationsPage.loadLookups();
+      ObligationsPage.assets = await API.assets.list();
+      ObligationsPage.onChange = reload;
+      await ObligationsPage.showCreateModal(obligation);
+    } catch (error) { showToast(error.message, 'error'); }
+  },
+
+  // Summary of a declaration for the ficha card: current monthly amount per currency, composition by
+  // modality, next collection, pending total and validity. Pure over the declaration view and `today`.
+  rentalSummary(declaration, today) {
+    const modalities = (declaration?.modalities || []).filter(item => item.status === 'active');
+    const live = item => (item.occurrences || []).filter(occurrence => !occurrence.cancelled && occurrence.status !== 'cancelled');
+    const composition = modalities.map(item => {
+      const occurrences = live(item);
+      const current = [...occurrences].reverse().find(occurrence => occurrence.date <= today) || occurrences[0] || null;
+      return { modality: item.kind, currencyCode: item.currencyCode, amount: current ? current.rentAmount : item.totalAmount };
+    });
+    const add = (map, currency, value) => map.set(currency, Math.round(((map.get(currency) || 0) + value) * 100) / 100);
+    const totalsBy = new Map();
+    composition.forEach(item => add(totalsBy, item.currencyCode, item.amount));
+    const pending = new Map();
+    let nextDate = null;
+    modalities.forEach(item => live(item).forEach(occurrence => {
+      if (occurrence.remainingMinor > 0 && occurrence.date <= today) add(pending, occurrence.currencyCode, occurrence.remainingAmount);
+      if (occurrence.remainingMinor > 0 && occurrence.date >= today && (!nextDate || occurrence.date < nextDate)) nextDate = occurrence.date;
+    }));
+    const starts = (declaration?.modalities || []).map(item => item.startDate).sort();
+    const ends = (declaration?.modalities || []).map(item => item.endDate);
+    return {
+      tenants: (declaration?.tenants || []).map(item => item.name),
+      from: starts[0] || null, to: ends.length && ends.every(Boolean) ? [...ends].sort().pop() : null,
+      composition, monthlyTotals: [...totalsBy].map(([currencyCode, amount]) => ({ currencyCode, amount })),
+      pendingTotals: [...pending].map(([currencyCode, amount]) => ({ currencyCode, amount })), nextCollection: nextDate
+    };
+  },
+
+  // Rental section of the ficha: an empty state with "Declarar alquiler", or the summary card with
+  // "Ver alquiler" (the declare action stays disabled while a rental is in force). Plus the rental history.
+  async renderRentalCard(asset, container) {
+    const section = create('section', { className: 'card', dataset: { fichaBlock: 'rental' }, style: { padding: '12px', display: 'grid', gap: '6px' } }, [create('h3', { textContent: 'Alquiler' })]);
+    container.appendChild(section);
+    const money = list => list.map(item => formatearMonedaConCodigo(item.amount, item.currencyCode)).join(' + ') || '—';
+    if (!asset.activeDeclarationId && !asset.declaration) {
+      section.append(
+        create('p', { className: 'text-muted', textContent: 'Este inmueble no tiene un alquiler activo.' }),
+        this.rentalAccessButton(asset, { onDone: () => this.showDetails(asset.id) })
+      );
+    } else {
+      const declarationId = asset.activeDeclarationId || asset.declaration.id;
+      let declaration = null;
+      try { declaration = (await API.rentals.declarations.list(asset.id)).find(item => item.id === declarationId) || null; } catch (error) { section.appendChild(create('p', { className: 'text-muted', textContent: `No se pudo cargar el alquiler: ${error.message}` })); }
+      if (declaration) {
+        const summary = this.rentalSummary(declaration, getToday());
+        const line = (label, value) => section.appendChild(create('div', { className: 'label-value' }, [create('strong', { textContent: `${label}:` }), create('span', { textContent: value })]));
+        line('Inquilino', summary.tenants.join(', ') || '—');
+        line('Vigencia', `${summary.from || '—'} — ${summary.to || 'sin fecha de fin'}`);
+        line('Estado del alquiler', statusLabel(declaration.status));
+        line('Monto mensual vigente', money(summary.monthlyTotals));
+        summary.composition.forEach(item => line(modalityLabel(item.modality) || 'Alquiler', formatearMonedaConCodigo(item.amount, item.currencyCode)));
+        line('Próximo cobro', summary.nextCollection || 'Sin cobros próximos');
+        line('Total pendiente de cobro', money(summary.pendingTotals));
+        section.appendChild(create('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center', marginTop: '6px' } }, [
+          this.rentalAccessButton(asset),
+          create('button', { className: 'btn btn-secondary btn-sm', type: 'button', textContent: 'Declarar alquiler', disabled: true, 'aria-describedby': 'declare-blocked-hint' }),
+          create('small', { id: 'declare-blocked-hint', className: 'text-muted', textContent: 'Finalizá el alquiler vigente antes de declarar uno nuevo' })
+        ]));
+      }
+    }
+    section.appendChild(create('button', { className: 'btn btn-ghost btn-sm', type: 'button', textContent: 'Histórico de alquileres', dataset: { rentalHistory: asset.id }, style: { justifySelf: 'start' }, onClick: () => this.showRentalHistory(asset) }));
+  },
+
+  // "Histórico de alquileres": every rental of the asset (current and finished), with a "Ver" action.
+  async showRentalHistory(asset) {
+    const body = create('div', { className: 'rental-history', style: { display: 'grid', gap: '8px' } }, [create('div', { className: 'loading', textContent: 'Cargando alquileres...' })]);
+    Modal.push(`Histórico de alquileres · ${asset.name}`, body, { width: '820px' });
+    let rows;
+    try { rows = await API.rentals.declarations.list(asset.id); } catch (error) { body.replaceChildren(create('p', { className: 'empty-state', role: 'alert', textContent: error.message })); return; }
+    if (!rows.length) { body.replaceChildren(create('p', { className: 'empty-state', textContent: 'Este inmueble todavía no tuvo alquileres.' })); return; }
+    body.replaceChildren(...rows.map(declaration => {
+      const starts = declaration.modalities.map(item => item.startDate).sort();
+      const ends = declaration.modalities.map(item => item.endDate);
+      const period = `${starts[0] || '—'} — ${ends.every(Boolean) ? [...ends].sort().pop() : 'sin fecha de fin'}`;
+      return create('article', { className: 'card', dataset: { rentalHistoryRow: declaration.id }, style: { padding: '10px', display: 'flex', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap', alignItems: 'center' } }, [
+        create('div', {}, [
+          create('strong', { textContent: period }),
+          create('div', { className: 'text-muted', textContent: `${declaration.tenants.map(item => item.name).join(', ') || 'Sin inquilino'} · ${declaration.modalities.map(item => modalityLabel(item.kind)).join(' + ')} · ${declaration.status === 'active' ? 'Activo' : 'Finalizado'}` })
+        ]),
+        create('button', { className: 'btn btn-ghost btn-sm', type: 'button', textContent: 'Ver', 'aria-label': `Ver alquiler ${period}`, onClick: () => this.openRental(asset.id, declaration.id, { readOnly: declaration.status !== 'active' }) })
+      ]);
+    }));
   },
 
   async renderRecoveries(asset, container) {
