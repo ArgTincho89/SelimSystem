@@ -1,4 +1,9 @@
 const Charts = {
+  // Theme-aware canvas colors (see utils/theme.js); charts redraw when the theme changes.
+  color(name, fallback) {
+    return typeof Theme !== 'undefined' ? Theme.color(name, fallback) : fallback;
+  },
+
   redraw(container) {
     if (!container) return;
     container.querySelectorAll('canvas').forEach(canvas => canvas.__chartDraw?.());
@@ -110,13 +115,13 @@ const Charts = {
       startAngle += sliceAngle;
     });
 
-    ctx.fillStyle = '#e8e8e8';
+    ctx.fillStyle = Charts.color('--text-primary', '#e8e8e8');
     ctx.font = compact ? 'bold 8px -apple-system, sans-serif' : 'bold 16px -apple-system, sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(formatearEuro(total), cx, cy - (compact ? 4 : 8));
     ctx.font = compact ? '7px -apple-system, sans-serif' : '11px -apple-system, sans-serif';
-    ctx.fillStyle = '#a0a0b0';
+    ctx.fillStyle = Charts.color('--text-secondary', '#a0a0b0');
     ctx.fillText('Total', cx, cy + (compact ? 5 : 10));
 
     const points = segments.map(segment => ({
@@ -175,7 +180,7 @@ const Charts = {
     const barWidth = Math.min(chartW / data.length * 0.6, 40);
     const gap = chartW / data.length;
 
-    ctx.strokeStyle = '#2a2a4a';
+    ctx.strokeStyle = Charts.color('--border', '#2a2a4a');
     ctx.lineWidth = 1;
     const gridSteps = compact ? 2 : 4;
     for (let i = 0; i <= gridSteps; i++) {
@@ -186,7 +191,7 @@ const Charts = {
       ctx.stroke();
 
       const val = maxVal - (maxVal / gridSteps) * i;
-      ctx.fillStyle = '#6c6c7c';
+      ctx.fillStyle = Charts.color('--text-muted', '#6c6c7c');
       ctx.font = compact ? '8px -apple-system, sans-serif' : '10px -apple-system, sans-serif';
       ctx.textAlign = 'right';
       ctx.textBaseline = 'middle';
@@ -210,7 +215,7 @@ const Charts = {
       ctx.quadraticCurveTo(x, y, x + r, y);
       ctx.fill();
 
-      ctx.fillStyle = '#6c6c7c';
+      ctx.fillStyle = Charts.color('--text-muted', '#6c6c7c');
       ctx.font = compact ? '8px -apple-system, sans-serif' : '10px -apple-system, sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'top';
@@ -265,7 +270,7 @@ const Charts = {
     const minVal = Math.min(0, ...allVals);
     const range = maxVal - minVal || 1;
 
-    ctx.strokeStyle = '#2a2a4a';
+    ctx.strokeStyle = Charts.color('--border', '#2a2a4a');
     ctx.lineWidth = 1;
     const gridSteps = compact ? 2 : 4;
     for (let i = 0; i <= gridSteps; i++) {
@@ -276,7 +281,7 @@ const Charts = {
       ctx.stroke();
 
       const val = maxVal - (range / gridSteps) * i;
-      ctx.fillStyle = '#6c6c7c';
+      ctx.fillStyle = Charts.color('--text-muted', '#6c6c7c');
       ctx.font = compact ? '8px -apple-system, sans-serif' : '10px -apple-system, sans-serif';
       ctx.textAlign = 'right';
       ctx.textBaseline = 'middle';
@@ -312,7 +317,7 @@ const Charts = {
     labels.forEach((label, i) => {
       if (i % labelStep !== 0 && i !== labels.length - 1) return;
       const x = padding.left + gap * i;
-      ctx.fillStyle = '#6c6c7c';
+      ctx.fillStyle = Charts.color('--text-muted', '#6c6c7c');
       ctx.font = compact ? '8px -apple-system, sans-serif' : '10px -apple-system, sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'top';
@@ -344,3 +349,5 @@ const Charts = {
     }, points);
   }
 };
+
+if (typeof document !== 'undefined') document.addEventListener('themechange', () => Charts.redraw(document));

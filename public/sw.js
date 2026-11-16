@@ -1,4 +1,4 @@
-const CACHE_NAME = 'selimsystem-v45';
+const CACHE_NAME = 'selimsystem-v46';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
@@ -12,6 +12,7 @@ const STATIC_ASSETS = [
   '/js/router.js',
   '/js/utils/dom.js',
   '/js/utils/fit-text.js',
+  '/js/utils/theme.js',
   '/js/utils/format.js',
   '/js/components/moneyInput.js',
   '/js/components/navbar.js',

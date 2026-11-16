@@ -54,3 +54,40 @@
 
   --transition: 0.2s ease;
 }
+
+:root {
+  color-scheme: dark;
+}
+
+/* Light theme (Perfil > Apariencia): same tokens, light surfaces and darker accents for contrast. */
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  --bg-primary: #f4f6fb;
+  --bg-secondary: #ffffff;
+  --bg-card: #ffffff;
+  --bg-input: #ffffff;
+  --bg-hover: #eaeef5;
+
+  --text-primary: #1d2333;
+  --text-secondary: #4a5266;
+  --text-muted: #687087;
+
+  --accent: #138a82;
+  --accent-hover: #0f746d;
+  --accent-light: rgba(19, 138, 130, 0.12);
+
+  --due-soon: #c25e00;
+  --danger: #c93c3c;
+  --danger-hover: #b03131;
+  --success: #138a82;
+  --warning: #a77800;
+
+  --income-color: #138a82;
+  --expense-color: #c93c3c;
+  --refund-color: #a77800;
+
+  --border: #d6dbe6;
+  --shadow: 0 2px 8px rgba(29, 35, 51, 0.08);
+  --shadow-lg: 0 4px 16px rgba(29, 35, 51, 0.12);
+}

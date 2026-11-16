@@ -1,4 +1,29 @@
 const ProfilePage = {
+  // Perfil > Apariencia: dark / light switch, saved on this device (see utils/theme.js).
+  renderAppearanceSection() {
+    const section = create('div', { className: 'profile-section', id: 'profile-appearance' });
+    section.appendChild(create('h3', { textContent: 'Apariencia', style: { marginBottom: '12px' } }));
+    const group = create('div', { className: 'theme-switch', role: 'radiogroup', 'aria-label': 'Apariencia' });
+    const options = [['dark', 'Modo oscuro'], ['light', 'Modo claro']];
+    const buttons = options.map(([value, label]) => create('button', {
+      type: 'button',
+      className: 'btn btn-secondary theme-option',
+      role: 'radio',
+      textContent: label,
+      dataset: { theme: value },
+      onClick: () => { Theme.set(value); sync(); }
+    }));
+    const sync = () => buttons.forEach(button => {
+      const selected = button.dataset.theme === Theme.current();
+      button.setAttribute('aria-checked', String(selected));
+      button.classList.toggle('selected', selected);
+    });
+    buttons.forEach(button => group.appendChild(button));
+    sync();
+    section.appendChild(group);
+    return section;
+  },
+
   async render() {
     const content = $('#page-content');
     const navbar = $('#navbar');
@@ -107,6 +132,7 @@ const ProfilePage = {
     infoSection.appendChild(emailRow);
 
     content.appendChild(infoSection);
+    content.appendChild(this.renderAppearanceSection());
 
     const logsBtn = create('button', {
       className: 'btn btn-ghost btn-full',

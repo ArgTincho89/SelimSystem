@@ -1975,3 +1975,34 @@ body:not(.desktop-mode) .home-stats .stat-value-multi .stat-currency-amount:not(
 .alert-responsibility-title { margin: 0 0 4px; padding-left: 10px; border-left: 4px solid var(--accent); font-size: var(--font-lg, 1.1rem); }
 .alert-responsibility-tenant .alert-responsibility-title { border-left-style: double; border-left-width: 6px; }
 .alert-responsibility-empty { margin: 0; }
+
+/* Light theme: surfaces that use fixed dark colors instead of tokens. */
+:root[data-theme="light"] .desktop-stat-card,
+:root[data-theme="light"] .desktop-home-transactions,
+:root[data-theme="light"] .desktop-home-analytics {
+  background: var(--bg-secondary);
+  border-color: var(--border);
+}
+
+:root[data-theme="light"] .desktop-favorite-card {
+  background: linear-gradient(145deg, #e6f6f4, #d9f0ee);
+  border-color: rgba(19, 138, 130, 0.45);
+}
+
+:root[data-theme="light"] .desktop-new-transaction {
+  background: var(--accent);
+  color: #ffffff;
+}
+
+:root[data-theme="light"] .desktop-home-analytics-scroll > .chart-container,
+:root[data-theme="light"] .desktop-home-analytics-scroll > .summary-section,
+:root[data-theme="light"] .chart-tooltip,
+:root[data-theme="light"] .category-item.category-child,
+:root[data-theme="light"] .desktop-transaction-item {
+  background: var(--bg-hover);
+  border-color: var(--border);
+}
+
+:root[data-theme="light"] .modal-overlay {
+  background: rgba(29, 35, 51, 0.45) !important;
+}

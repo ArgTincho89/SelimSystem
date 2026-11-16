@@ -1067,3 +1067,48 @@ input::placeholder {
   .asset-history-table td[data-label]::before { content: attr(data-label) ': '; font-weight: 600; }
   .alert-responsibility { padding: 8px; }
 }
+
+/* Perfil > Apariencia switch. */
+.theme-switch {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.theme-option.selected {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--bg-primary);
+}
+
+/* Month navigator: clickable month and year inside the label, and the picker grid. */
+.month-nav-part {
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  padding: 0 2px;
+  text-decoration: underline dotted var(--text-muted);
+  text-underline-offset: 4px;
+}
+
+.month-nav-part:hover {
+  color: var(--accent);
+}
+
+.month-nav-part:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.month-picker-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+.month-picker-option.selected {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--bg-primary);
+}

@@ -1,6 +1,6 @@
 # SelimSystem — Documento funcional
 
-**Versión del producto:** 1.13.3
+**Versión del producto:** 1.14.0
 **Entorno productivo:** https://selimsystem.fly.dev
 **Fecha del documento:** 16/11/2026
 
@@ -182,7 +182,7 @@ Configuración
 
 ### 5.2 Selector de mes
 
-Permite ir a meses anteriores y **futuros** (para ver lo programado).
+Permite ir a meses anteriores y **futuros** (para ver lo programado). Al tocar el **nombre del mes** se abre un selector con los doce meses; al tocar el **año**, un selector de año (se conserva el mes elegido).
 
 ### 5.3 Tarjetas de métricas
 
@@ -673,6 +673,7 @@ Acciones: **Agregar**, **Ver ficha** (datos, documentos y notas), **Editar** y *
 
 - **Foto de perfil:** **Cambiar foto** (imagen de hasta 2 MB, se recorta cuadrada) y **Eliminar foto**. Sin foto se muestra la inicial del nombre. La foto se guarda en el servidor.
 - **Datos de la cuenta:** usuario y email.
+- **Apariencia:** **Modo oscuro** (predeterminado) o **Modo claro**. Se guarda en el dispositivo y se aplica al instante en toda la app.
 - **Logs:** abre la pantalla de Logs.
 - **Acciones de cuenta:**
   - **Cambiar email:** nuevo email y contraseña actual. El email no puede estar en uso.

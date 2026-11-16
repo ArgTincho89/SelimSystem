@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.14.0] - 2026-11-16
+
+### Added
+- Perfil > Apariencia: elegir entre "Modo oscuro" y "Modo claro". La elección se guarda en el dispositivo y también ajusta los gráficos.
+- Selector de mes de Inicio (y Resumen): al tocar el mes se abre un selector de mes, y al tocar el año, un selector de año.
+
 ## [1.13.3] - 2026-11-16
 
 ### Changed
