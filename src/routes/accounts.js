@@ -101,14 +101,26 @@ router.post('/', (req, res) => {
     const owner = db.findById('legalOwners', ownerId, userId);
     if (!owner || (Array.isArray(owner.roles) ? !owner.roles.includes('owner') : owner.role && owner.role !== 'owner')) return res.status(400).json({ error: 'Titular legal no encontrado' });
   }
-  if (primary && db.findAll('accounts', userId).some(account => account.primary && account.activo)) return res.status(409).json({ error: 'Ya existe una cuenta principal activa' });
   const account = db.create('accounts', {
-    nombre: accountName, currency, ownerId: ownerId || null, parentId: parent ? parent.id : null, primary: primary === true, legacyPrimary: false,
+    nombre: accountName, currency, ownerId: ownerId || null, parentId: parent ? parent.id : null, primary: false, legacyPrimary: false,
     activo: true, archivedAt: null, order: Number.isInteger(order) ? order : db.findAll('accounts', userId).length,
     presentation: presentation || 'default', openingBalanceMinor: null, openingDate: null,
     reconciled: false, includedMovementIds: []
   }, userId);
-  res.status(201).json({ ...account, balance: null, balanceMinor: null, balanceStatus: 'needs_reconciliation' });
+  let created = account;
+  if (primary === true) {
+    // The new account becomes the only principal in one write; if it fails, the new account is removed again.
+    const snapshot = ledger.accountsForUser(db, userId);
+    try {
+      db.replace('accounts', userId, snapshot.map(item => ({ ...item, primary: item.id === account.id })));
+      created = db.findById('accounts', account.id, userId);
+    } catch {
+      db.clearCache();
+      db.replace('accounts', userId, snapshot.filter(item => item.id !== account.id).map(item => ({ ...item, primary: Boolean(item.primary) })));
+      return res.status(500).json({ error: 'No se pudo crear la cuenta principal' });
+    }
+  }
+  res.status(201).json({ ...created, balance: null, balanceMinor: null, balanceStatus: 'needs_reconciliation' });
 });
 
 router.patch('/order', (req, res) => {
@@ -200,7 +212,12 @@ router.put('/:id', (req, res) => {
     const accounts = ledger.accountsForUser(db, userId);
     db.replace('accounts', userId, accounts.map(item => ({ ...item, primary: item.id === account.id })));
   } else if (primary === false && account.primary) {
-    return res.status(409).json({ error: 'Debe existir exactamente una cuenta principal activa' });
+    // Unchecking needs an explicit, eligible replacement that is promoted in the same write.
+    const replacementId = req.body.newPrimaryId;
+    const replacement = typeof replacementId === 'string' ? db.findById('accounts', replacementId, userId) : null;
+    if (!replacement || replacement.id === account.id || !replacement.activo || replacement.parentId) return res.status(400).json({ error: 'Elegí una cuenta activa para que sea la nueva principal' });
+    const accounts = ledger.accountsForUser(db, userId);
+    db.replace('accounts', userId, accounts.map(item => ({ ...item, primary: item.id === replacement.id })));
   }
   if (presentation !== undefined) updates.presentation = ['default', 'compact', 'color'].includes(presentation) ? presentation : account.presentation;
   const updated = db.update('accounts', account.id, updates, userId);

@@ -376,19 +376,42 @@ const SettingsPage = {
     const primaryLabel = create('label', { className: 'checkbox-label' });
     const primary = create('input', { type: 'checkbox', className: 'form-checkbox' });
     primary.checked = account?.primary || false;
-    primary.disabled = Boolean(account?.primary);
-    if (!account && this.accounts.some(item => item.primary && item.activo)) primary.disabled = true;
     const isSub = Boolean(parent || account?.parentId);
     if (isSub) { primary.checked = false; primary.disabled = true; primaryLabel.style.display = 'none'; }
     primaryLabel.appendChild(primary);
     primaryLabel.appendChild(document.createTextNode(' Cuenta principal'));
     form.appendChild(primaryLabel);
+    // Unchecking the principal needs a replacement chosen in the same dialog.
+    const replacementOptions = account?.primary ? this.accounts.filter(item => item.id !== account.id && item.activo && !item.parentId) : [];
+    const replacement = create('select', { id: 'account-new-primary', className: 'form-control', 'aria-label': 'Nueva cuenta principal' });
+    replacement.appendChild(create('option', { value: '', textContent: 'Elegí una cuenta' }));
+    replacementOptions.forEach(item => replacement.appendChild(create('option', { value: item.id, textContent: item.nombre || item.name })));
+    const replacementGroup = this.field('Nueva cuenta principal', replacement);
+    replacementGroup.hidden = true;
+    replacementGroup.style.display = 'none';
+    form.appendChild(replacementGroup);
+    if (account?.primary) {
+      if (!replacementOptions.length) {
+        primary.disabled = true;
+        form.appendChild(create('p', { className: 'text-muted', textContent: 'Para dejar de ser la principal, primero necesitás otra cuenta activa que pueda serlo.' }));
+      } else {
+        on(primary, 'change', () => {
+          replacementGroup.hidden = primary.checked;
+          replacementGroup.style.display = primary.checked ? 'none' : '';
+          if (primary.checked) replacement.value = '';
+        });
+      }
+    }
     const save = create('button', { className: 'btn btn-primary', type: 'submit', textContent: account ? 'Guardar cuenta' : (parent ? 'Crear sub-cuenta' : 'Crear cuenta') });
     form.appendChild(save);
     on(form, 'submit', async event => {
       event.preventDefault();
       try {
-        if (account) await API.accounts.update(account.id, { name: name.value.trim(), currency: currencyValue, primary: primary.checked, ownerId: owner.value || null });
+        if (account) {
+          const unchecking = Boolean(account.primary) && !primary.checked;
+          if (unchecking && !replacement.value) return this.showError(form, 'Elegí una cuenta activa para que sea la nueva principal');
+          await API.accounts.update(account.id, { name: name.value.trim(), currency: currencyValue, primary: primary.checked, ownerId: owner.value || null, ...(unchecking ? { newPrimaryId: replacement.value } : {}) });
+        }
         else await API.accounts.create({ name: name.value.trim(), currency: currencyValue, primary: primary.checked, ownerId: owner.value || null, ...(parent ? { parentId: parent.id } : {}) });
         Modal.hide();
         await this.render();

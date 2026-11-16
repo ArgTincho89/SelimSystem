@@ -74,16 +74,16 @@ Review budget is 800 lines (`review_budget_lines`); `size:exception` is recorded
 
 ## W5: log-filters-and-undo (commit: `feat(logs): filters panel and undo from logs`)
 
-- [ ] 5.1 RED `tests/routes/evolutivo6-log-filters.test.js`: `assetId`/`ownerId`/`tenantId`/`categoryId` AND semantics, filter before pagination, legacy rows excluded, no filters unchanged, 400 "Filtro inválido", `undoable` for payment/resolution/collection.
-- [ ] 5.2 `src/routes/activity-logs.js`, `src/services/activity-log.js`: filters and computed `undoable`; `API.activityLogs.list` params.
-- [ ] 5.3 `public/js/pages/logs.js`: filter panel (Bien, Titular, Inquilino, Categoría, "Limpiar filtros"), empty state, "Deshacer" via `UndoDialog` when `undoable`.
-- [ ] 5.4 Test `tests/ui/evolutivo6-logs-contract.test.js`.
+- [x] 5.1 RED `tests/routes/evolutivo6-log-filters.test.js`: `assetId`/`ownerId`/`tenantId`/`categoryId` AND semantics, filter before pagination, legacy rows excluded, no filters unchanged, 400 "Filtro inválido", `undoable` for payment/resolution/collection.
+- [x] 5.2 `src/routes/activity-logs.js`, `src/services/activity-log.js`: filters and computed `undoable`; `API.activityLogs.list` params.
+- [x] 5.3 `public/js/pages/logs.js`: filter panel (Bien, Titular, Inquilino, Categoría, "Limpiar filtros"), empty state, "Deshacer" via `UndoDialog` when `undoable`.
+- [x] 5.4 Test `tests/ui/evolutivo6-logs-contract.test.js`.
 
 ## W6: principal-accounts (commit: `feat(accounts): set and change the principal account`)
 
-- [ ] 6.1 RED `tests/routes/evolutivo6-accounts-principal.test.js`: create with `primary:true` swaps (exactly one principal), sub-account 400, uncheck needs valid `newPrimaryId` (exists, differs, `activo`, no `parentId`) else 400, rollback on failure.
-- [ ] 6.2 `src/routes/accounts.js`: swap via single `db.replace`; replace the 409 at `:203` with 400.
-- [ ] 6.3 `public/js/pages/settings.js`: principal checkbox on create; "Nueva cuenta principal" select on uncheck; disabled with hint when no eligible account. Update `accounts` tests (409 -> swap/400).
+- [x] 6.1 RED `tests/routes/evolutivo6-accounts-principal.test.js`: create with `primary:true` swaps (exactly one principal), sub-account 400, uncheck needs valid `newPrimaryId` (exists, differs, `activo`, no `parentId`) else 400, rollback on failure.
+- [x] 6.2 `src/routes/accounts.js`: swap via single `db.replace`; replace the 409 at `:203` with 400.
+- [x] 6.3 `public/js/pages/settings.js`: principal checkbox on create; "Nueva cuenta principal" select on uncheck; disabled with hint when no eligible account. Update `accounts` tests (409 -> swap/400).
 
 ## W7: categories-in-settings (commit: `feat(settings): move categories into Configuración`)
 
