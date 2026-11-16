@@ -285,6 +285,7 @@ const API = {
       if (params.from) query.set('from', params.from);
       if (params.to) query.set('to', params.to);
       if (params.timezone) query.set('timezone', params.timezone);
+      ['assetId', 'ownerId', 'tenantId', 'categoryId'].forEach(key => { if (params[key]) query.set(key, params[key]); });
       const serialized = query.toString();
       return API.get(`/activity-logs${serialized ? `?${serialized}` : ''}`);
     }

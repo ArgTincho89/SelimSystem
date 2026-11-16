@@ -368,8 +368,32 @@ function dayIn(timezone) {
   };
 }
 
+// Whether the stored undo descriptor still points at an active target. Computed on read, never stored.
+function isUndoable(db, userId, item) {
+  const undo = item && item.outcome === 'success' ? item.undo : null;
+  if (!undo || typeof undo !== 'object') return false;
+  try {
+    if (undo.type === 'obligation.payment') return db.findById('transactions', undo.transactionId, userId)?.obligationOccurrenceId === undo.occurrenceId;
+    if (undo.type === 'obligation.resolution') return db.findById('obligationResolutions', undo.resolutionId, userId)?.status === 'active';
+    if (undo.type === 'rental.collection') {
+      const target = db.findById('rentCollectionGroups', undo.collectionId, userId) || db.findById('rentCollections', undo.collectionId, userId);
+      return Boolean(target) && !target.reversedAt;
+    }
+  } catch { return false; }
+  return false;
+}
+
+const FILTER_KEYS = ['assetId', 'ownerId', 'tenantId', 'categoryId'];
+
+// A filter is absent (undefined or ''), or a string of at most 100 characters.
+function validFilters(query = {}) {
+  return FILTER_KEYS.every(key => query[key] === undefined || query[key] === '' || (typeof query[key] === 'string' && query[key].length <= 100));
+}
+
 // from/to are inclusive YYYY-MM-DD days evaluated in `timezone` (callers validate them first).
-function list(db, userId, { limit, before, from, to, timezone = 'UTC' } = {}) {
+// assetId/ownerId/tenantId/categoryId combine with AND and run before pagination; owners and tenants match by
+// membership of the stored arrays. Entries without the metadata (legacy) never match a filter.
+function list(db, userId, { limit, before, from, to, timezone = 'UTC', assetId, ownerId, tenantId, categoryId } = {}) {
   const size = Math.min(200, Math.max(1, Number.parseInt(limit, 10) || 50));
   const beforeValid = typeof before === 'string' && !Number.isNaN(Date.parse(before)) ? new Date(before).toISOString() : null;
   const fromDay = isIsoDate(from) ? from : null;
@@ -380,11 +404,15 @@ function list(db, userId, { limit, before, from, to, timezone = 'UTC' } = {}) {
     const day = localDay(item.timestamp);
     return (!fromDay || day >= fromDay) && (!toDay || day <= toDay);
   };
+  const matches = item => (!assetId || item.assetId === assetId)
+    && (!ownerId || (Array.isArray(item.ownerIds) && item.ownerIds.includes(ownerId)))
+    && (!tenantId || (Array.isArray(item.tenantIds) && item.tenantIds.includes(tenantId)))
+    && (!categoryId || item.categoryId === categoryId);
   const sorted = db.findAll(COLLECTION, userId)
-    .filter(item => (!beforeValid || item.timestamp < beforeValid) && inRange(item))
+    .filter(item => (!beforeValid || item.timestamp < beforeValid) && inRange(item) && matches(item))
     .sort((a, b) => (a.timestamp < b.timestamp ? 1 : -1));
-  const items = sorted.slice(0, size);
+  const items = sorted.slice(0, size).map(item => ({ ...item, undoable: isUndoable(db, userId, item) }));
   return { items, nextBefore: sorted.length > size ? items[items.length - 1].timestamp : null };
 }
 
-module.exports = { describe, deriveMeta, obligationMeta, formatAmount, COLLECTION, ROUTES, refineRoute, labelFor, buildMessage, append, pruneOld, list, resolveContext, isSkipped, normalizePath, periodLabel, isIsoDate, isValidTimezone };
+module.exports = { validFilters, isUndoable, describe, deriveMeta, obligationMeta, formatAmount, COLLECTION, ROUTES, refineRoute, labelFor, buildMessage, append, pruneOld, list, resolveContext, isSkipped, normalizePath, periodLabel, isIsoDate, isValidTimezone };
