@@ -17,8 +17,8 @@ router.get('/', (req, res) => {
   declarations.backfillDeclarations(db, userId);
   const rows = db.findAll('rentalDeclarations', userId)
     .filter(item => !req.query.assetId || item.assetId === req.query.assetId)
-    .map(item => declarations.view(db, userId, item));
-  res.json(rows);
+    .map(item => (req.query.summary === '1' ? declarations.summary(db, userId, item) : declarations.view(db, userId, item)));
+  res.json(req.query.summary === '1' ? rows.sort((a, b) => String(b.from).localeCompare(String(a.from))) : rows);
 });
 
 function findDeclaration(req, res) {
@@ -100,6 +100,20 @@ router.post('/:id/modalities/:contractId/end', (req, res) => {
   const result = declarations.endModality(db, userId, declaration, req.params.contractId, req.body || {});
   if (result.error) return failed(res, result);
   respond(res, db, userId, result.value);
+});
+
+// Deletes a finished rental (confirmed in the UI). The files of removed documents go after the commit.
+router.delete('/:id', (req, res) => {
+  const db = req.app.locals.db;
+  const userId = req.session.userId;
+  const declaration = findDeclaration(req, res);
+  if (!declaration) return;
+  const result = declarations.remove(db, userId, declaration);
+  if (result.error) return failed(res, result);
+  const { removedDocuments, detachedDocumentIds, deletedAt } = result.value;
+  removedDocuments.forEach(item => { try { req.app.locals.documentStorage?.remove(userId, item.storageKey); } catch { /* an orphan file is harmless */ } });
+  ledger.refreshAlerts(db, userId);
+  res.json({ deleted: true, deletedAt, deletedDocumentIds: removedDocuments.map(item => item.id), detachedDocumentIds });
 });
 
 router.post('/:id/end', (req, res) => {

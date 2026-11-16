@@ -70,14 +70,76 @@ const RentalModal = {
         create('button', { className: 'btn btn-danger btn-sm rental-finish', type: 'button', textContent: 'Finalizar alquiler', onClick: () => this.finishRental(ctx) })
       );
     }
+    if (ended) {
+      const management = ctx.overview.management;
+      if (management.editable) actions.appendChild(create('button', { className: 'btn btn-secondary btn-sm', type: 'button', textContent: 'Editar alquiler', onClick: () => this.editRental(ctx, { historical: true }) }));
+      else actions.appendChild(create('small', { className: 'text-muted', textContent: 'No se puede editar: tiene cobros, documentos, notas u obligaciones vinculadas.' }));
+      if (management.deletable) actions.appendChild(create('button', { className: 'btn btn-danger btn-sm', type: 'button', textContent: 'Eliminar alquiler', dataset: { deleteRental: 'true' }, onClick: () => this.deleteRental({ declarationId: ctx.declarationId, assetId: ctx.assetId, impact: management.impact }, () => AssetsPage.showDetails(ctx.assetId)) }));
+      else actions.appendChild(create('small', { className: 'text-muted', textContent: 'Para eliminarlo, primero deshacé sus cobros.' }));
+    }
     ctx.header.replaceChildren(facts, actions);
   },
 
-  async editRental(ctx) {
+  async editRental(ctx, { historical = false } = {}) {
     try {
       const asset = await API.assets.get(ctx.assetId);
-      await RentalDeclarationModal.show(AssetsPage, asset, { onDone: () => ctx.reopen() });
+      const declaration = historical ? await API.rentals.declarations.get(ctx.declarationId) : null;
+      await RentalDeclarationModal.show(AssetsPage, asset, { onDone: () => ctx.reopen(), ...(declaration ? { declaration } : {}) });
     } catch (error) { showToast(error.message, 'error'); }
+  },
+
+  // Deleting a finished rental: strong confirmation with its impact; blocked by the server while collections exist.
+  async deleteRental({ declarationId, impact }, afterDone) {
+    const extra = impact.periods || impact.documents || impact.notes || impact.linkedObligations;
+    const lines = ['Estás por eliminar un alquiler y potencialmente sus datos asociados.', 'Esta acción no se puede deshacer.', '¿Querés continuar?'];
+    if (extra) lines.splice(1, 0, `Este alquiler tiene ${impact.periods} período${impact.periods === 1 ? '' : 's'}, ${impact.documents} documento${impact.documents === 1 ? '' : 's'} y ${impact.notes} nota${impact.notes === 1 ? '' : 's'} asociados que se eliminan o se desvinculan.`);
+    const { confirmed } = await ConfirmDialog.open({
+      title: 'Eliminar alquiler', danger: true, confirmLabel: 'Eliminar alquiler', message: lines.join('\n'),
+      details: [['Períodos', impact.periods], ['Documentos', impact.documents], ['Notas', impact.notes], ['Obligaciones vinculadas', impact.linkedObligations], ['Cobros deshechos (se conservan para auditoría)', impact.reversedCollections]]
+    });
+    if (!confirmed) return;
+    try {
+      await API.rentals.declarations.remove(declarationId);
+      showToast('Alquiler eliminado');
+      await afterDone();
+    } catch (error) { showToast(error.message, 'error'); }
+  },
+
+  // "Histórico de alquileres": every rental of the asset (lightweight summary list), "Ver" opens it read-only
+  // (the current one opens the main modal) and a finished one can be deleted with a strong confirmation.
+  async showHistory(asset) {
+    const body = create('div', { className: 'rental-history', style: { display: 'grid', gap: '8px' } }, [create('div', { className: 'loading', textContent: 'Cargando alquileres...' })]);
+    Modal.push(`Histórico de alquileres · ${asset.name}`, body, { width: '860px' });
+    const load = async () => {
+      let rows;
+      try { rows = await API.rentals.declarations.summary(asset.id); } catch (error) { body.replaceChildren(create('p', { className: 'empty-state', role: 'alert', textContent: error.message })); return; }
+      if (!rows.length) {
+        body.replaceChildren(create('div', { className: 'empty-state' }, [create('p', { className: 'empty-state-text', textContent: 'Este inmueble todavía no tuvo alquileres.' }), create('p', { className: 'text-muted', textContent: 'Cuando declares uno, va a aparecer en esta lista.' })]));
+        return;
+      }
+      body.replaceChildren(...rows.map(row => this.historyRow(asset, row, load)));
+    };
+    await load();
+  },
+
+  historyRow(asset, row, reload) {
+    const period = `${this.shortDate(row.from)} – ${row.to ? this.shortDate(row.to) : 'sin fecha de fin'}`;
+    const active = row.state === 'active';
+    const actions = create('div', { style: { display: 'flex', gap: '6px', flexWrap: 'wrap' } }, [
+      create('button', { className: 'btn btn-ghost btn-sm', type: 'button', textContent: 'Ver', 'aria-label': `Ver alquiler ${period}`, onClick: () => AssetsPage.openRental(asset.id, row.id, { readOnly: !active }) })
+    ]);
+    if (row.deletable) actions.appendChild(create('button', { className: 'btn btn-ghost btn-sm', type: 'button', textContent: 'Eliminar', 'aria-label': `Eliminar alquiler ${period}`, onClick: () => this.deleteRental({ declarationId: row.id, impact: row.impact }, reload) }));
+    return create('article', { className: 'card', dataset: { rentalHistoryRow: row.id }, style: { padding: '10px', display: 'flex', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap', alignItems: 'center' } }, [
+      create('div', {}, [
+        create('strong', { textContent: period }),
+        create('div', { className: 'text-muted', textContent: `${row.tenants.map(item => item.name).join(', ') || 'Sin inquilino'} · ${row.modalities.map(kind => modalityLabel(kind)).join(' + ')} · ${active ? 'Activo' : 'Finalizado'}` })
+      ]),
+      actions
+    ]);
+  },
+
+  shortDate(date) {
+    return date ? date.split('-').reverse().join('/') : '';
   },
 
   // "Actualizar alquiler": one modality directly, or a short chooser when several are active.

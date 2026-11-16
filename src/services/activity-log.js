@@ -63,6 +63,7 @@ const ROUTES = [
   r('POST', '/obligations/:id/occurrences/:occurrenceId/payments', 'obligation.payment', 'Registraste un pago de la obligación', 'registrar un pago de una obligación', 'obligation', { id: 'id', join: '' }),
   r('POST', '/rentals/declarations/:id/end', 'rental.declaration-end', 'Finalizaste el alquiler de', 'finalizar un alquiler', 'declaration', { id: 'id', join: '' }),
   r('POST', '/rentals/declarations/:id/modalities/:contractId/end', 'rental.contract-end', 'Finalizaste un contrato del alquiler de', 'finalizar un contrato de un alquiler', 'declaration', { id: 'id', join: '' }),
+  r('DELETE', '/rentals/declarations/:id', 'rental.declaration-delete', 'Eliminaste el alquiler de', 'eliminar un alquiler', 'declaration', { id: 'id', join: '' }),
   r('POST', '/rentals/declarations', 'rental.declaration-create', 'Declaraste el alquiler de', 'declarar un alquiler', 'declaration', { join: '' }),
   r('PUT', '/rentals/declarations/:id', 'rental.declaration-update', 'Modificaste el alquiler de', 'modificar un alquiler', 'declaration', { id: 'id', join: '' }),
   r('POST', '/rentals/collections/:id/reverse', 'rental.collection-undo', 'Deshiciste el cobro del alquiler', 'deshacer un cobro de alquiler', 'collection', { id: 'id', withAmount: true }),

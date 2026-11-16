@@ -75,9 +75,9 @@ Budget is 800 lines (review_budget_lines); `size:exception` is recorded. Mitigat
 
 ## W6: rental-deletion-history (commit: `feat(rentals): delete rental and rental history list`)
 
-- [ ] 6.1 RED `tests/routes/rental-declaration-delete.test.js`: 409 active, 409 non-reversed collections, cascade, rental-only documents removed, others detached, `obligations.rentalContractId` null, `rentalDeletions` tombstone, reversed collections kept, log `rental.declaration-delete`.
-- [ ] 6.2 `rental-declarations.js` `remove` + `summary=1` view (`editable`, `deletable`, `impact`); `DELETE /rentals/declarations/:id`; `ROUTES`.
-- [ ] 6.3 `rentalModal.js` history list and delete confirm with impact; `rentalDeclaration.js` safe edit. Add `tests/ui/evolutivo5-rental-history-contract.test.js`.
+- [x] 6.1 RED `tests/routes/rental-declaration-delete.test.js`: 409 active, 409 non-reversed collections, cascade, rental-only documents removed, others detached, `obligations.rentalContractId` null, `rentalDeletions` tombstone, reversed collections kept, log `rental.declaration-delete`.
+- [x] 6.2 `rental-declarations.js` `remove` + `summary=1` view (`editable`, `deletable`, `impact`); `DELETE /rentals/declarations/:id`; `ROUTES`.
+- [x] 6.3 `rentalModal.js` history list and delete confirm with impact; `rentalDeclaration.js` safe edit. Add `tests/ui/evolutivo5-rental-history-contract.test.js`.
 
 ## W7: documents-and-notes (commit: `feat(rentals): rental documents and notes tabs`)
 

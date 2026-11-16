@@ -601,25 +601,9 @@ const AssetsPage = {
     section.appendChild(create('button', { className: 'btn btn-ghost btn-sm', type: 'button', textContent: 'Histórico de alquileres', dataset: { rentalHistory: asset.id }, style: { justifySelf: 'start' }, onClick: () => this.showRentalHistory(asset) }));
   },
 
-  // "Histórico de alquileres": every rental of the asset (current and finished), with a "Ver" action.
-  async showRentalHistory(asset) {
-    const body = create('div', { className: 'rental-history', style: { display: 'grid', gap: '8px' } }, [create('div', { className: 'loading', textContent: 'Cargando alquileres...' })]);
-    Modal.push(`Histórico de alquileres · ${asset.name}`, body, { width: '820px' });
-    let rows;
-    try { rows = await API.rentals.declarations.list(asset.id); } catch (error) { body.replaceChildren(create('p', { className: 'empty-state', role: 'alert', textContent: error.message })); return; }
-    if (!rows.length) { body.replaceChildren(create('p', { className: 'empty-state', textContent: 'Este inmueble todavía no tuvo alquileres.' })); return; }
-    body.replaceChildren(...rows.map(declaration => {
-      const starts = declaration.modalities.map(item => item.startDate).sort();
-      const ends = declaration.modalities.map(item => item.endDate);
-      const period = `${starts[0] || '—'} — ${ends.every(Boolean) ? [...ends].sort().pop() : 'sin fecha de fin'}`;
-      return create('article', { className: 'card', dataset: { rentalHistoryRow: declaration.id }, style: { padding: '10px', display: 'flex', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap', alignItems: 'center' } }, [
-        create('div', {}, [
-          create('strong', { textContent: period }),
-          create('div', { className: 'text-muted', textContent: `${declaration.tenants.map(item => item.name).join(', ') || 'Sin inquilino'} · ${declaration.modalities.map(item => modalityLabel(item.kind)).join(' + ')} · ${declaration.status === 'active' ? 'Activo' : 'Finalizado'}` })
-        ]),
-        create('button', { className: 'btn btn-ghost btn-sm', type: 'button', textContent: 'Ver', 'aria-label': `Ver alquiler ${period}`, onClick: () => this.openRental(asset.id, declaration.id, { readOnly: declaration.status !== 'active' }) })
-      ]);
-    }));
+  // "Histórico de alquileres": the list (view, safe edit, delete) lives in the rental modal.
+  showRentalHistory(asset) {
+    return RentalModal.showHistory(asset);
   },
 
   async renderRecoveries(asset, container) {

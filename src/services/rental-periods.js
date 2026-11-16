@@ -222,7 +222,7 @@ function overview(db, userId, declaration, options = {}) {
   const side = types => monthAlerts.filter(alert => types.includes(alert.type));
   return {
     value: {
-      declarationId: declaration.id, assetId: declaration.assetId, year,
+      declarationId: declaration.id, assetId: declaration.assetId, year, management: declarations.summary(db, userId, declaration),
       header: {
         status: headerStatus(contracts, today),
         assetName: db.findById('assets', declaration.assetId, userId)?.name || '',

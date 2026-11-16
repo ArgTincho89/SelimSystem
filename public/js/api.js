@@ -296,7 +296,9 @@ const API = {
     allocate(collectionId, data) { return API.post(`/rentals/collections/${encodeURIComponent(collectionId)}/allocations`, data); },
     declarations: {
       list(assetId) { return API.get(`/rentals/declarations${assetId ? `?assetId=${encodeURIComponent(assetId)}` : ''}`); },
+      summary(assetId) { return API.get(`/rentals/declarations?assetId=${encodeURIComponent(assetId)}&summary=1`); },
       get(id) { return API.get(`/rentals/declarations/${encodeURIComponent(id)}`); },
+      remove(id) { return API.delete(`/rentals/declarations/${encodeURIComponent(id)}`); },
       periods(id, filters = {}) {
         const query = new URLSearchParams(Object.entries(filters).filter(([, value]) => value !== '' && value != null));
         return API.get(`/rentals/declarations/${encodeURIComponent(id)}/periods${query.toString() ? `?${query}` : ''}`);
