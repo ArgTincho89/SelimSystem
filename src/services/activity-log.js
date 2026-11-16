@@ -137,6 +137,100 @@ const LABELS = {
   }
 };
 
+// Plain "1.234,5" amounts (es-AR), independent of the ICU build.
+function formatAmount(value) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return '';
+  const [whole, fraction = ''] = (Math.round(Math.abs(value) * 100) / 100).toFixed(2).replace(/0+$/, '').replace(/\.$/, '').split('.');
+  const grouped = whole.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  return `${value < 0 ? '-' : ''}${grouped}${fraction ? `,${fraction}` : ''}`;
+}
+
+function formatDueDate(value) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value || ''));
+  return match ? `${match[3]}/${match[2]}/${match[1]}` : '';
+}
+
+// Builds the descriptive label of a log entry from the facts a route provides. A missing fact drops its fragment,
+// so the message never contains "undefined" or empty brackets. Facts: title, assetName, period, amount + currencyCode
+// (or amounts[]), dueDate, installment ({ number, total }). `base` is used when the route gives no title.
+function describe(route, facts = {}, base = '') {
+  const title = typeof facts.title === 'string' ? facts.title.trim() : '';
+  const assetName = typeof facts.assetName === 'string' ? facts.assetName.trim() : '';
+  const head = title ? `${title}${assetName ? ` de la propiedad ${assetName}` : ''}` : base;
+  const amounts = (Array.isArray(facts.amounts) ? facts.amounts : [{ amount: facts.amount, currencyCode: facts.currencyCode }])
+    .map(item => (item && formatAmount(item.amount) ? `${item.currencyCode ? `${item.currencyCode} ` : ''}${formatAmount(item.amount)}` : ''))
+    .filter(Boolean).join(' + ');
+  const installment = facts.installment && Number.isInteger(facts.installment.number) && Number.isInteger(facts.installment.total) && facts.installment.number > 0 && facts.installment.total >= facts.installment.number
+    ? `cuota ${facts.installment.number}/${facts.installment.total}` : '';
+  const due = formatDueDate(facts.dueDate);
+  return [head, amounts && `por un monto de ${amounts}`, due && `con vencimiento ${due}`, installment].filter(Boolean).join(', ').slice(0, 300);
+}
+
+function activeOwnerIds(db, userId, assetId, today = new Date().toISOString().slice(0, 10)) {
+  if (!assetId) return [];
+  return [...new Set(db.findAll('assetOwnerships', userId)
+    .filter(item => item.assetId === assetId && (!item.startDate || item.startDate <= today) && (!item.endDate || item.endDate >= today))
+    .map(item => item.ownerId).filter(Boolean))];
+}
+
+const emptyMeta = () => ({ assetId: null, ownerIds: [], tenantIds: [], categoryId: null });
+
+function contractTenants(db, userId, contractId) {
+  const contract = contractId ? db.findById('rentalContracts', contractId, userId) : null;
+  return contract ? { assetId: contract.assetId || null, tenantIds: [...(contract.tenantIds || [])] } : { assetId: null, tenantIds: [] };
+}
+
+// Generic write-time references for an entity: asset, owners of the asset, tenants and category.
+// Resolved before the handler runs (so deletes keep them) and again after it for created entities.
+function deriveMeta(db, userId, entityType, entityId) {
+  const meta = emptyMeta();
+  if (!entityType || !entityId || typeof entityId !== 'string') return meta;
+  try {
+    if (entityType === 'asset') meta.assetId = db.findById('assets', entityId, userId) ? entityId : null;
+    else if (entityType === 'category') meta.categoryId = db.findById('categories', entityId, userId) ? entityId : null;
+    else if (entityType === 'obligation') {
+      const obligation = db.findById('obligations', entityId, userId);
+      if (obligation) {
+        meta.assetId = obligation.assetId || null;
+        meta.categoryId = obligation.categoryId || null;
+        meta.tenantIds = contractTenants(db, userId, obligation.rentalContractId).tenantIds;
+      }
+    } else if (entityType === 'contract') Object.assign(meta, contractTenants(db, userId, entityId));
+    else if (entityType === 'declaration') meta.assetId = db.findById('rentalDeclarations', entityId, userId)?.assetId || null;
+    else if (entityType === 'collection') {
+      const ids = new Set(collectionIdsOf(db, userId, entityId));
+      const tenants = new Set();
+      db.findAll('rentCollectionAllocations', userId).filter(item => ids.has(item.collectionId)).forEach(item => {
+        const occurrence = db.findById('rentOccurrences', item.occurrenceId, userId);
+        const found = occurrence ? contractTenants(db, userId, occurrence.contractId) : null;
+        if (!found) return;
+        meta.assetId = meta.assetId || found.assetId;
+        found.tenantIds.forEach(id => tenants.add(id));
+      });
+      meta.tenantIds = [...tenants];
+    }
+    meta.ownerIds = activeOwnerIds(db, userId, meta.assetId);
+  } catch { return emptyMeta(); }
+  return meta;
+}
+
+// Meta of an obligation write (resolution, payment, reversal). Owners: the asset holders, or the account owner
+// when the obligation has no asset. `undo` is only passed by the actions that can be undone.
+function obligationMeta(db, userId, obligation, occurrence, { amount, currencyCode, tenantIds, accountId, categoryId, undo } = {}) {
+  const meta = deriveMeta(db, userId, 'obligation', obligation.id);
+  let ownerIds = meta.ownerIds;
+  if (!ownerIds.length && !obligation.assetId) {
+    const ownerId = db.findById('accounts', accountId || occurrence.accountId || obligation.accountId, userId)?.ownerId;
+    ownerIds = ownerId ? [ownerId] : [];
+  }
+  return {
+    assetId: obligation.assetId || null, ownerIds, tenantIds: Array.isArray(tenantIds) ? tenantIds : meta.tenantIds,
+    categoryId: categoryId || occurrence.categoryId || obligation.categoryId || null,
+    facts: { title: obligation.title || '', assetName: assetNameOf(db, userId, obligation.assetId), amount, currencyCode: currencyCode || occurrence.currencyCode, dueDate: occurrence.date, installment: occurrence.installment || obligation.installment || null },
+    undo: undo || null
+  };
+}
+
 // A created account that has a parent is logged as "Creaste la subcuenta X de Y".
 function refineRoute(db, userId, route, entityId) {
   if (!route || route.action !== 'account.create' || !entityId) return { route, label: '' };
@@ -187,10 +281,11 @@ function withAmount(db, userId, collectionId, label) {
 // Resolves the route definition and the entity label before the handler runs (needed for PUT/DELETE/reverse).
 function resolveContext(db, userId, method, path) {
   const found = matchRoute(method, path);
-  const context = { route: found?.route || null, params: found?.params || {}, entityId: null, entityLabel: '' };
+  const context = { route: found?.route || null, params: found?.params || {}, entityId: null, entityLabel: '', derived: emptyMeta() };
   if (!found) return context;
   context.entityId = found.route.id ? found.params[found.route.id] : null;
   context.entityLabel = labelFor(db, userId, found.route.entityType, context.entityId);
+  context.derived = deriveMeta(db, userId, found.route.entityType, context.entityId);
   if (found.route.withAmount) context.entityLabel = withAmount(db, userId, context.entityId, context.entityLabel);
   // Deleting a rent collection's transaction undoes the collection.
   if (found.route.action === 'transaction.delete') {
@@ -198,6 +293,7 @@ function resolveContext(db, userId, method, path) {
     if (tx?.rentCollectionId) {
       context.route = ROUTES.find(item => item.action === 'rental.collection-undo');
       context.entityId = tx.rentCollectionId;
+      context.derived = deriveMeta(db, userId, 'collection', tx.rentCollectionId);
       context.entityLabel = withAmount(db, userId, tx.rentCollectionId, labelFor(db, userId, 'collection', tx.rentCollectionId));
     }
   }
@@ -238,7 +334,9 @@ function append(db, userId, entry) {
   const record = {
     timestamp: entry.timestamp || new Date().toISOString(), method: entry.method, route: entry.route, action: entry.action,
     entityType: entry.entityType || null, entityId: entry.entityId || null, entityLabel: entry.entityLabel || '',
-    outcome: entry.outcome, statusCode: entry.statusCode, message: entry.message
+    outcome: entry.outcome, statusCode: entry.statusCode, message: entry.message,
+    assetId: entry.assetId || null, ownerIds: Array.isArray(entry.ownerIds) ? entry.ownerIds : [], tenantIds: Array.isArray(entry.tenantIds) ? entry.tenantIds : [],
+    categoryId: entry.categoryId || null, undo: entry.undo || null
   };
   // Strictly increasing timestamps keep "before" pagination exact.
   const existing = db.findAll(COLLECTION, userId);
@@ -289,4 +387,4 @@ function list(db, userId, { limit, before, from, to, timezone = 'UTC' } = {}) {
   return { items, nextBefore: sorted.length > size ? items[items.length - 1].timestamp : null };
 }
 
-module.exports = { COLLECTION, ROUTES, refineRoute, labelFor, buildMessage, append, pruneOld, list, resolveContext, isSkipped, normalizePath, periodLabel, isIsoDate, isValidTimezone };
+module.exports = { describe, deriveMeta, obligationMeta, formatAmount, COLLECTION, ROUTES, refineRoute, labelFor, buildMessage, append, pruneOld, list, resolveContext, isSkipped, normalizePath, periodLabel, isIsoDate, isValidTimezone };

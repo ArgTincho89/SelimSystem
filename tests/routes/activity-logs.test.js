@@ -3,7 +3,7 @@ const { setupRentFixture } = require('../helpers/rent-fixture');
 const { cleanupTestDb } = require('../helpers/setup');
 const activityLog = require('../../src/services/activity-log');
 
-const STORED_KEYS = ['action', 'createdAt', 'entityId', 'entityLabel', 'entityType', 'id', 'message', 'method', 'outcome', 'route', 'statusCode', 'timestamp'];
+const STORED_KEYS = ['action', 'assetId', 'categoryId', 'createdAt', 'entityId', 'entityLabel', 'entityType', 'id', 'message', 'method', 'outcome', 'ownerIds', 'route', 'statusCode', 'tenantIds', 'timestamp', 'undo'];
 
 describe('Activity logs', () => {
   let f;
@@ -159,7 +159,7 @@ describe('Activity logs', () => {
     const collected = await f.collect(contract, ['2025-01-01', '2025-02-01']);
     expect(collected.status).toBe(201);
     expect(count()).toBe(before + 1);
-    expect((await logs()).items[0].message).toBe('Registraste el cobro del alquiler de Casa Centro, período enero 2025, febrero 2025');
+    expect((await logs()).items[0].message).toBe('Registraste el cobro del alquiler de Casa Centro, período enero 2025, febrero 2025, por un monto de ARS 200.000');
     await f.agent.post(`/api/rentals/collections/${collected.body.id}/reverse`).send({ reason: 'Prueba' });
     expect((await logs()).items[0].message).toBe('Deshiciste el cobro del alquiler de Casa Centro, período enero 2025, febrero 2025, importe ARS 200000, motivo: Prueba');
     expect(count()).toBe(before + 2);

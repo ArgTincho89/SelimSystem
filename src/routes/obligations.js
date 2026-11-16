@@ -4,6 +4,7 @@ const { requireAuth } = require('../middleware/auth');
 const ledger = require('../services/account-ledger');
 const obligations = require('../services/obligations');
 const paymentReversal = require('../services/obligation-payment-reversal');
+const activityLog = require('../services/activity-log');
 
 const router = express.Router();
 router.use(requireAuth);
@@ -220,6 +221,10 @@ router.post('/:id/occurrences/:occurrenceId/resolution', (req, res) => {
   if (!obligation || !occurrence || occurrence.obligationId !== obligation.id) return res.status(404).json({ error: 'Ocurrencia no encontrada' });
   const result = obligations.createResolution(db, userId, obligation, occurrence, req.body || {});
   if (result.error) return res.status(result.status || 400).json({ error: result.error });
+  res.locals.activityMeta = activityLog.obligationMeta(db, userId, obligation, occurrence, {
+    amount: ledger.fromMinorUnits(result.resolution.amountMinor, result.resolution.currencyCode), currencyCode: result.resolution.currencyCode, tenantIds: [result.resolution.tenantEntityId],
+    undo: { type: 'obligation.resolution', obligationId: obligation.id, occurrenceId: occurrence.id, resolutionId: result.resolution.id }
+  });
   res.status(201).json({ resolution: result.resolution, occurrence: obligations.occurrenceView(db, userId, occurrence, ledger.localDateForUser(db, userId)) });
 });
 
@@ -232,6 +237,9 @@ router.delete('/:id/occurrences/:occurrenceId/resolution', (req, res) => {
   const result = obligations.voidResolution(db, userId, occurrence, (req.body || {}).reason);
   if (result.error) return res.status(result.status || 400).json({ error: result.error });
   res.locals.activityNote = result.resolution.voidReason;
+  res.locals.activityMeta = activityLog.obligationMeta(db, userId, obligation, occurrence, {
+    amount: ledger.fromMinorUnits(result.resolution.amountMinor, result.resolution.currencyCode), currencyCode: result.resolution.currencyCode, tenantIds: [result.resolution.tenantEntityId]
+  });
   res.json({ resolution: result.resolution, occurrence: obligations.occurrenceView(db, userId, occurrence, ledger.localDateForUser(db, userId)) });
 });
 
@@ -298,6 +306,10 @@ router.post('/:id/occurrences/:occurrenceId/payments', (req, res) => {
     db.clearCache();
     return res.status(500).json({ error: 'No se pudo registrar el pago' });
   }
+  res.locals.activityMeta = activityLog.obligationMeta(db, userId, obligation, occurrence, {
+    amount: transaction.monto, currencyCode: transaction.currencyCode, accountId: account.id, categoryId: category.id,
+    undo: { type: 'obligation.payment', obligationId: obligation.id, occurrenceId: occurrence.id, transactionId: transaction.id }
+  });
   res.status(201).json({ transaction, occurrence: obligations.occurrenceView(db, userId, occurrence, ledger.localDateForUser(db, userId)) });
 });
 
@@ -330,6 +342,7 @@ router.post('/:id/occurrences/:occurrenceId/payments/:paymentId/revert', (req, r
   const result = paymentReversal.revert(db, userId, { obligation, occurrence, transaction, reason: (req.body || {}).reason });
   if (result.error) return res.status(result.status || 400).json({ error: result.error });
   if (result.reversal.reason) res.locals.activityNote = result.reversal.reason;
+  res.locals.activityMeta = activityLog.obligationMeta(db, userId, obligation, occurrence, { amount: transaction.monto, currencyCode: transaction.currencyCode, accountId: transaction.accountId, categoryId: transaction.categoryId });
   res.json({
     reversal: result.reversal, reconciliationReset: result.reconciliationReset,
     occurrence: obligations.occurrenceView(db, userId, db.findById('obligationOccurrences', occurrence.id, userId), ledger.localDateForUser(db, userId))

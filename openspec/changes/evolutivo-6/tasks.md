@@ -66,11 +66,11 @@ Review budget is 800 lines (`review_budget_lines`); `size:exception` is recorded
 
 ## W4: log-enrichment (commit: `feat(logs): descriptive messages and structured metadata`)
 
-- [ ] 4.1 RED `tests/services/activity-log.test.js` (extend) + `tests/routes/evolutivo6-log-meta.test.js`: `describe` fragments, missing facts dropped, "cuota n/m" only with installment data, 300-char cap, `assetId`/`ownerIds`/`tenantIds`/`categoryId`/`undo` stored on success only.
-- [ ] 4.2 `src/middleware/activity-log.js`: merge `res.locals.activityMeta` on success; derive asset/category/tenants from `entityType`; never read bodies.
-- [ ] 4.3 `src/services/activity-log.js`: new fields, `describe(route, facts)`; routes in W3 files set `activityMeta` (facts, `undo` descriptors). Verify installment fields during apply.
-- [ ] 4.4 Spec alignment: edit `openspec/changes/evolutivo-6/specs/activity-log-enrichment/spec.md` wording `tenantId` -> `tenantIds[]` (record stores array; query param stays `tenantId`, membership match).
-- [ ] 4.5 Update `evolutivo4-logs-contract`.
+- [x] 4.1 RED `tests/services/activity-log.test.js` (extend) + `tests/routes/evolutivo6-log-meta.test.js`: `describe` fragments, missing facts dropped, "cuota n/m" only with installment data, 300-char cap, `assetId`/`ownerIds`/`tenantIds`/`categoryId`/`undo` stored on success only.
+- [x] 4.2 `src/middleware/activity-log.js`: merge `res.locals.activityMeta` on success; derive asset/category/tenants from `entityType`; never read bodies.
+- [x] 4.3 `src/services/activity-log.js`: new fields, `describe(route, facts)`; routes in W3 files set `activityMeta` (facts, `undo` descriptors). Verify installment fields during apply.
+- [x] 4.4 Spec alignment: edit `openspec/changes/evolutivo-6/specs/activity-log-enrichment/spec.md` wording `tenantId` -> `tenantIds[]` (record stores array; query param stays `tenantId`, membership match).
+- [x] 4.5 Update `evolutivo4-logs-contract`.
 
 ## W5: log-filters-and-undo (commit: `feat(logs): filters panel and undo from logs`)
 

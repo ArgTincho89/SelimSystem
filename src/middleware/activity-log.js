@@ -3,7 +3,8 @@ const activityLog = require('../services/activity-log');
 const WRITE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 
 // Records one audit entry per authenticated write request on 'finish'. It never alters the response:
-// every failure is swallowed and reported to the console only. Bodies, queries and headers are never read.
+// every failure is swallowed and reported to the console only. Bodies, queries and headers are never read:
+// routes pass structured context through res.locals.activityMeta instead.
 function activityLogMiddleware(req, res, next) {
   try {
     const userId = req.session && req.session.userId;
@@ -23,6 +24,17 @@ function activityLogMiddleware(req, res, next) {
         const outcome = res.statusCode < 400 ? 'success' : 'failure';
         const entityId = context.entityId || (outcome === 'success' ? createdId : null);
         let label = context.entityLabel || (entityId ? activityLog.labelFor(db, userId, context.route && context.route.entityType, entityId) : '');
+        // Structured context (success only): derived from the entity, refined by what the route knows via res.locals.activityMeta.
+        const meta = { assetId: null, ownerIds: [], tenantIds: [], categoryId: null, undo: null };
+        if (outcome === 'success') {
+          const known = context.derived || {};
+          const later = activityLog.deriveMeta(db, userId, context.route && context.route.entityType, entityId);
+          const given = res.locals && res.locals.activityMeta && typeof res.locals.activityMeta === 'object' ? res.locals.activityMeta : {};
+          ['assetId', 'categoryId'].forEach(key => { meta[key] = given[key] || known[key] || later[key] || null; });
+          ['ownerIds', 'tenantIds'].forEach(key => { meta[key] = [given[key], known[key], later[key]].find(value => Array.isArray(value) && value.length) || []; });
+          meta.undo = given.undo || null;
+          if (given.facts && context.route) label = activityLog.describe(context.route, given.facts, label);
+        }
         // A route may attach one short, user-written note (the reason of a payment reversal) to its entry.
         const note = outcome === 'success' && res.locals && typeof res.locals.activityNote === 'string' ? res.locals.activityNote.trim().slice(0, 120) : '';
         if (note) label = `${label}${label ? ', ' : ''}motivo: ${note}`;
@@ -34,7 +46,7 @@ function activityLogMiddleware(req, res, next) {
         activityLog.append(db, userId, {
           method: req.method, route: route ? route.pattern : `/${path.split('/')[1] || ''}`, action: route ? route.action : 'generic',
           entityType: route ? route.entityType : null, entityId, entityLabel: label, outcome, statusCode: res.statusCode,
-          message: activityLog.buildMessage({ route, label, path, outcome })
+          message: activityLog.buildMessage({ route, label, path, outcome }), ...meta
         });
       } catch (err) {
         console.error('[ACTIVITY-LOG]', err.message);

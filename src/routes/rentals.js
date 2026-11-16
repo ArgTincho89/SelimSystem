@@ -275,6 +275,10 @@ router.post('/collections', (req, res) => {
     db.clearCache();
     return res.status(500).json({ error: 'No se pudo registrar el cobro' });
   }
+  res.locals.activityMeta = {
+    facts: { amount: collection.amount, currencyCode: collection.currencyCode },
+    undo: { type: 'rental.collection', collectionId: collection.id }
+  };
   res.status(201).json(rentals.collectionView(db, userId, collection));
 });
 
@@ -284,6 +288,12 @@ router.post('/collections/month', (req, res) => {
   const userId = req.session.userId;
   const result = rentCollections.createMonthCollection(db, userId, req.body || {});
   if (result.error) return res.status(result.status).json({ error: result.error });
+  if (!result.value.replayed) {
+    res.locals.activityMeta = {
+      facts: { amounts: (result.value.totals || []).map(row => ({ amount: row.amount, currencyCode: row.currencyCode })) },
+      undo: { type: 'rental.collection', collectionId: result.value.id }
+    };
+  }
   res.status(result.value.replayed ? 200 : 201).json(result.value);
 });
 

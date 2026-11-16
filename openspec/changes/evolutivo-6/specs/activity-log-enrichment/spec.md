@@ -23,17 +23,17 @@ Log messages for obligation resolution, payment and rent collection SHALL includ
 - THEN the message omits the amount fragment and contains no "undefined"
 
 #### Scenario: Installment obligation
-- GIVEN an obligation with installment 3/12
+- GIVEN an obligation occurrence that carries installment data 3/12 (obligation occurrences carry none today; the fragment is omitted otherwise)
 - WHEN it is paid
 - THEN the message shows the installment as "cuota 3/12"
 
 ### Requirement: Write-time metadata
 
-Entries created by these actions SHALL store additive fields: `assetId`, `ownerIds`, `tenantId`, `categoryId` (when applicable) and an `undo` descriptor (target type, ids and, for payments, the transaction id). Routes SHALL provide them through `res.locals.activityMeta`. Existing entries without these fields SHALL stay valid and readable. A failed request SHALL NOT store an `undo` descriptor.
+Entries created by these actions SHALL store additive fields: `assetId`, `ownerIds`, `tenantIds` (array; the log query parameter stays `tenantId` and matches by membership), `categoryId` (when applicable) and an `undo` descriptor (target type, ids and, for payments, the transaction id). Routes SHALL provide them through `res.locals.activityMeta`. Existing entries without these fields SHALL stay valid and readable. A failed request SHALL NOT store an `undo` descriptor.
 
 #### Scenario: Metadata stored
 - WHEN an obligation is resolved
-- THEN the entry stores the asset id, owner ids, tenant id and category id
+- THEN the entry stores the asset id, owner ids, tenant ids and category id
 
 #### Scenario: Old entry
 - GIVEN an entry created before this change
