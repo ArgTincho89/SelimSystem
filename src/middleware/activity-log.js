@@ -23,6 +23,9 @@ function activityLogMiddleware(req, res, next) {
         const outcome = res.statusCode < 400 ? 'success' : 'failure';
         const entityId = context.entityId || (outcome === 'success' ? createdId : null);
         let label = context.entityLabel || (entityId ? activityLog.labelFor(db, userId, context.route && context.route.entityType, entityId) : '');
+        // A route may attach one short, user-written note (the reason of a payment reversal) to its entry.
+        const note = outcome === 'success' && res.locals && typeof res.locals.activityNote === 'string' ? res.locals.activityNote.trim().slice(0, 120) : '';
+        if (note) label = `${label}${label ? ', ' : ''}motivo: ${note}`;
         let route = context.route;
         if (outcome === 'success' && !context.entityId) {
           const refined = activityLog.refineRoute(db, userId, route, entityId);

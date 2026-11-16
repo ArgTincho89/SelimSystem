@@ -58,7 +58,10 @@ describe('Evolutivo 3 S4b rental declaration modal UI contract', () => {
 
   it('wires the actions in the assets page and loads the script', () => {
     expect(assets).toContain('Declarar alquiler');
-    expect(assets).toContain('Editar alquiler');
+    const rentalModal = read('js/pages/rentalModal.js');
+    expect(rentalModal).toContain('Editar alquiler');
+    expect(rentalModal).toContain('Finalizar alquiler');
+    expect(rentalModal).toContain('RentalDeclarationModal.show(AssetsPage, asset');
     expect(assets).toContain('Finalizar alquiler');
     expect(assets).toContain('API.rentals.declarations.end(');
     expect(assets).not.toContain('showRentalContractModal');

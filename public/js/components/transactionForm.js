@@ -110,7 +110,9 @@ const TransactionForm = {
     const deleteMethodButton = create('button', { className: 'btn btn-ghost btn-sm', type: 'button', textContent: 'Eliminar medio' });
     on(deleteMethodButton, 'click', async () => {
       const selected = paymentMethods.find(item => item.id === paymentMethodSelect.value);
-      if (!selected || !confirm(`¿Eliminar el medio “${selected.name}”?`)) return;
+      if (!selected) return;
+      const { confirmed } = await ConfirmDialog.open({ title: 'Eliminar medio de pago', danger: true, confirmLabel: 'Eliminar medio', message: `Vas a eliminar el medio “${selected.name}”. ¿Querés continuar?` });
+      if (!confirmed) return;
       try {
         await API.finance.deletePaymentMethod(selected.id);
         paymentMethods.splice(paymentMethods.indexOf(selected), 1);

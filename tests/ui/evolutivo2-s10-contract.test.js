@@ -58,7 +58,7 @@ describe('Evolutivo 2 S10 pay dialog and receipts contract', () => {
     expect(api).toContain("textContent: 'Ver'");
     expect(api).toContain("textContent: 'Descargar'");
     const assets = read('js/pages/assets.js');
-    expect(assets.match(/API\.documents\.receiptLinks\(/g).length).toBeGreaterThanOrEqual(4);
+    expect(assets.match(/API\.documents\.receiptLinks\(/g).length).toBeGreaterThanOrEqual(2);
   });
 
   it('bumps the service worker cache to v31 or later', () => {

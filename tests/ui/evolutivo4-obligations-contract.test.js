@@ -47,7 +47,7 @@ describe('Evolutivo 4 obligation card contract', () => {
   it('offers Editar, Eliminar (with confirm) and Registrar pago', () => {
     expect(source).toContain("textContent: 'Eliminar'");
     expect(source).toContain("textContent: 'Registrar pago'");
-    expect(source).toMatch(/async deleteObligation\(obligation\) \{\s*if \(!confirm\(/);
+    expect(source).toMatch(/async deleteObligation\(obligation\) \{\s*const \{ confirmed \} = await ConfirmDialog\.open\(/);
     expect(source).toContain('API.obligations.delete(obligation.id)');
     expect(source).not.toContain("textContent: 'Cancelar obligación'");
   });

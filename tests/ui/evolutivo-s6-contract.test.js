@@ -32,6 +32,10 @@ describe('Evolutivo S6 UI contract', () => {
     expect(source).toContain('AssetsPage.showRentMonthModal(');
     expect(source).toContain('API.documents.uploadTargets(');
     expect(source).toContain('API.getAlerts(');
+    // evolutivo-5: the type groups live inside the owner / tenant responsibility groups.
+    expect(source).toContain('A cargo de titulares');
+    expect(source).toContain('A cargo de inquilinos');
+    expect(source).toContain('dataset: { alertGroup: typeKey }');
   });
 
   it('keeps the per-source alert widgets', () => {

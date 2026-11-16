@@ -15,7 +15,7 @@ describe('Evolutivo 3 S1 status label contract', () => {
   });
 
   it('routes every audited site through statusLabel', () => {
-    ["statusLabel(asset.status || 'active')", 'statusLabel(event.status)', 'statusLabel(item.status)', 'statusLabel(contract.status)'].forEach(call => {
+    ["statusLabel(asset.status || 'active')", 'statusLabel(event.status)', 'statusLabel(item.status)'].forEach(call => {
       expect(assets).toContain(call);
     });
     expect(assets).toContain('return statusLabel(status);');

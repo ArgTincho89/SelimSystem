@@ -1,4 +1,4 @@
-const CACHE_NAME = 'selimsystem-v41';
+const CACHE_NAME = 'selimsystem-v42';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
@@ -16,6 +16,10 @@ const STATIC_ASSETS = [
   '/js/components/navbar.js',
   '/js/components/modal.js',
   '/js/components/monthSelector.js',
+  '/js/components/feedback.js',
+  '/js/components/tabs.js',
+  '/js/components/dataTable.js',
+  '/js/components/confirmDialog.js',
   '/js/components/transactionForm.js',
   '/js/components/charts.js',
   '/js/pages/login.js',
@@ -23,7 +27,10 @@ const STATIC_ASSETS = [
   '/js/pages/summary.js',
   '/js/pages/categories.js',
   '/js/pages/rentalDeclaration.js',
+  '/js/pages/assetHistory.js',
   '/js/pages/assets.js',
+  '/js/pages/rentalPeriods.js',
+  '/js/pages/rentalModal.js',
   '/js/pages/entities.js',
   '/js/pages/obligations.js',
   '/js/pages/alerts.js',

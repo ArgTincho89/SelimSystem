@@ -82,7 +82,7 @@ async function inspectFile(file) {
   return { bytes: bytes.length, contentType: definition.contentType, displayName, type };
 }
 
-const TARGET_FIELDS = ['assetId', 'entityId', 'obligationId', 'contractId', 'occurrenceId', 'rentOccurrenceId', 'transactionId', 'tenantEntityId'];
+const TARGET_FIELDS = ['assetId', 'entityId', 'obligationId', 'contractId', 'occurrenceId', 'rentOccurrenceId', 'transactionId', 'tenantEntityId', 'declarationId'];
 const TARGET_ERROR = 'Indica un destino válido: bien, persona u organización, obligación, contrato, vencimiento, período de alquiler, movimiento o inquilino';
 
 function idOf(body, field) {
@@ -98,6 +98,11 @@ function resolveTargets(db, userId, body) {
   const target = { ...given };
   if (given.assetId && !db.findById('assets', given.assetId, userId)) return { error: TARGET_ERROR };
   if (given.entityId && !db.findById('legalOwners', given.entityId, userId)) return { error: TARGET_ERROR };
+  let declaration = null;
+  if (given.declarationId) {
+    declaration = db.findById('rentalDeclarations', given.declarationId, userId);
+    if (!declaration) return { error: 'El alquiler no es válido' };
+  }
   if (given.transactionId && !db.findById('transactions', given.transactionId, userId)) return { error: 'El movimiento no es válido' };
   if (given.tenantEntityId) {
     const tenant = db.findById('legalOwners', given.tenantEntityId, userId);
@@ -129,14 +134,19 @@ function resolveTargets(db, userId, body) {
     if (derivedAssetId && contract.assetId && derivedAssetId !== contract.assetId) return { error: 'Los destinos del documento pertenecen a bienes distintos' };
     derivedAssetId = derivedAssetId || contract.assetId || null;
   }
+  if (declaration) {
+    if (derivedAssetId && declaration.assetId && derivedAssetId !== declaration.assetId) return { error: 'Los destinos del documento pertenecen a bienes distintos' };
+    derivedAssetId = derivedAssetId || declaration.assetId || null;
+  }
   if (derivedAssetId && given.assetId && given.assetId !== derivedAssetId) return { error: 'El bien indicado no coincide con el destino del documento' };
   if (derivedAssetId) target.assetId = derivedAssetId;
   return { target };
 }
 
-function publicMetadata(document) {
+function publicMetadata(document, db = null) {
   const { storageKey, ...metadata } = document;
-  return metadata;
+  const uploader = db && document.uploadedBy ? db.findUserById(document.uploadedBy) : null;
+  return uploader ? { ...metadata, uploadedByName: uploader.nombre || '' } : metadata;
 }
 
 function uploadMiddleware(req, res, next) {
@@ -150,20 +160,29 @@ function uploadMiddleware(req, res, next) {
   });
 }
 
+// Everything a rental owns: its contracts and their generated periods.
+function relatedTargets(db, userId, declarationId) {
+  const contractIds = new Set(db.findAll('rentalContracts', userId).filter(item => item.declarationId === declarationId).map(item => item.id));
+  const occurrenceIds = new Set(db.findAll('rentOccurrences', userId).filter(item => contractIds.has(item.contractId)).map(item => item.id));
+  return { matches: item => item.declarationId === declarationId || contractIds.has(item.contractId) || occurrenceIds.has(item.rentOccurrenceId) };
+}
+
 router.get('/', (req, res) => {
   const db = req.app.locals.db;
   const userId = req.session.userId;
   const filters = TARGET_FIELDS.filter(field => idOf(req.query, field));
   if (!filters.length) return res.status(400).json({ error: TARGET_ERROR });
   // Legacy targets must exist and belong to the user; newer links may dangle and simply match nothing.
-  const legacy = { assetId: 'assets', entityId: 'legalOwners', obligationId: 'obligations', contractId: 'rentalContracts' };
+  const legacy = { assetId: 'assets', entityId: 'legalOwners', obligationId: 'obligations', contractId: 'rentalContracts', declarationId: 'rentalDeclarations' };
   for (const field of filters) {
     if (legacy[field] && !db.findById(legacy[field], idOf(req.query, field), userId)) return res.status(400).json({ error: TARGET_ERROR });
   }
+  const declarationId = idOf(req.query, 'declarationId');
+  const related = declarationId && req.query.includeRelated === '1' ? relatedTargets(db, userId, declarationId) : null;
   const documents = db.findAll('documents', userId)
-    .filter(item => filters.every(field => (item[field] || null) === idOf(req.query, field)))
+    .filter(item => (related ? related.matches(item) : filters.every(field => (item[field] || null) === idOf(req.query, field))))
     .sort((a, b) => b.uploadedAt.localeCompare(a.uploadedAt));
-  res.json(documents.map(publicMetadata));
+  res.json(documents.map(item => publicMetadata(item, db)));
 });
 
 router.post('/', uploadMiddleware, async (req, res) => {
@@ -204,13 +223,28 @@ router.post('/', uploadMiddleware, async (req, res) => {
       contentType: inspected.contentType,
       size: inspected.bytes,
       storageKey: file.filename,
-      uploadedAt: new Date().toISOString()
+      uploadedAt: new Date().toISOString(),
+      uploadedBy: userId
     }, userId);
-    res.status(201).json(publicMetadata(document));
+    res.status(201).json(publicMetadata(document, db));
   } catch {
     discardUpload();
     res.status(500).json({ error: 'No se pudo registrar el documento' });
   }
+});
+
+router.delete('/:id', (req, res) => {
+  const db = req.app.locals.db;
+  const userId = req.session.userId;
+  const document = db.findById('documents', req.params.id, userId);
+  if (!document) return res.status(404).json({ error: 'Documento no encontrado' });
+  // Resolutions list their receipts: drop the reference before the metadata disappears.
+  db.findAll('obligationResolutions', userId)
+    .filter(item => Array.isArray(item.documentIds) && item.documentIds.includes(document.id))
+    .forEach(item => db.update('obligationResolutions', item.id, { documentIds: item.documentIds.filter(id => id !== document.id) }, userId));
+  db.remove('documents', document.id, userId);
+  try { req.app.locals.documentStorage.remove(userId, document.storageKey); } catch { /* an orphan file is harmless */ }
+  res.json({ deleted: true, id: document.id });
 });
 
 router.get('/:id/content', async (req, res) => {
@@ -246,7 +280,7 @@ router.get('/:id/content', async (req, res) => {
 router.get('/:id', (req, res) => {
   const document = req.app.locals.db.findById('documents', req.params.id, req.session.userId);
   if (!document) return res.status(404).json({ error: 'Documento no encontrado' });
-  res.json(publicMetadata(document));
+  res.json(publicMetadata(document, req.app.locals.db));
 });
 
 module.exports = { router, MAX_FILE_SIZE, detectFileType, inspectFile, resolveTargets, TARGET_FIELDS };

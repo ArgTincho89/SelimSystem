@@ -2,7 +2,7 @@
 // to the existing flows of the obligations, assets and installments modules.
 const AlertsPage = {
   alerts: [],
-  filters: { type: '', assetId: '' },
+  filters: { type: '', assetId: '', responsibility: '' },
   assets: [],
 
   TYPE_LABELS: {
@@ -18,6 +18,12 @@ const AlertsPage = {
     account_forecast: 'Saldo insuficiente en cuentas'
   },
 
+  // Two top-level groups by responsibility. The group is conveyed by its header text, never by color alone.
+  RESPONSIBILITY_GROUPS: [
+    { key: 'owner', title: 'A cargo de titulares', empty: 'No hay obligaciones a cargo de los titulares.' },
+    { key: 'tenant', title: 'A cargo de inquilinos', empty: 'No hay obligaciones a cargo del inquilino.' }
+  ],
+
   async render(params = {}) {
     const content = $('#page-content');
     $('#navbar').style.display = '';
@@ -31,7 +37,7 @@ const AlertsPage = {
       this.renderContent(content);
       App.setAlertBadge?.(alerts.length);
     } catch (error) {
-      content.replaceChildren(create('div', { className: 'empty-state', textContent: `No se pudieron cargar los avisos: ${error.message}` }));
+      content.replaceChildren(Feedback.error(`No se pudieron cargar los avisos: ${error.message}`, { onRetry: () => this.render() }));
     }
   },
 
@@ -51,10 +57,12 @@ const AlertsPage = {
     type.setAttribute('aria-label', 'Tipo de aviso');
     const asset = this.select([['', 'Todos los bienes'], ...this.assets.map(item => [item.id, item.name])], this.filters.assetId);
     asset.setAttribute('aria-label', 'Bien');
-    form.append(type, asset, create('button', { className: 'btn btn-secondary', type: 'submit', textContent: 'Filtrar' }));
+    const responsibility = this.select([['', 'Todos los responsables'], ['owner', 'Titular'], ['tenant', 'Inquilino']], this.filters.responsibility);
+    responsibility.setAttribute('aria-label', 'Responsable');
+    form.append(type, responsibility, asset, create('button', { className: 'btn btn-secondary', type: 'submit', textContent: 'Filtrar' }));
     on(form, 'submit', event => {
       event.preventDefault();
-      this.filters = { type: type.value, assetId: asset.value };
+      this.filters = { type: type.value, assetId: asset.value, responsibility: responsibility.value };
       this.render();
     });
     content.appendChild(form);
@@ -63,15 +71,28 @@ const AlertsPage = {
       content.appendChild(create('div', { className: 'empty-state', innerHTML: '<div class="empty-state-icon">✅</div><p class="empty-state-text">No hay avisos pendientes</p>' }));
       return;
     }
+    this.RESPONSIBILITY_GROUPS.filter(group => !this.filters.responsibility || this.filters.responsibility === group.key)
+      .forEach(group => content.appendChild(this.renderResponsibilityGroup(group)));
+  },
+
+  renderResponsibilityGroup(group) {
+    const items = this.alerts.filter(item => (item.responsibility || 'owner') === group.key);
+    const heading = `group-${group.key}`;
+    const section = create('section', {
+      className: `alert-responsibility alert-responsibility-${group.key}`, dataset: { alertResponsibility: group.key }, 'aria-labelledby': heading,
+      style: { display: 'grid', gap: '10px', marginBottom: '24px' }
+    }, [create('h3', { id: heading, className: 'alert-responsibility-title', textContent: `${group.title} (${items.length})` })]);
+    if (!items.length) section.appendChild(Feedback.empty({ message: group.empty }));
     Object.keys(this.TYPE_LABELS).forEach(typeKey => {
-      const group = this.alerts.filter(item => item.type === typeKey);
-      if (!group.length) return;
-      const section = create('section', { dataset: { alertGroup: typeKey }, style: { display: 'grid', gap: '10px', marginBottom: '18px' } }, [
-        create('h3', { textContent: `${this.TYPE_LABELS[typeKey]} (${group.length})` })
+      const alerts = items.filter(item => item.type === typeKey);
+      if (!alerts.length) return;
+      const typeGroup = create('section', { dataset: { alertGroup: typeKey }, style: { display: 'grid', gap: '10px', marginBottom: '8px' } }, [
+        create('h4', { textContent: `${this.TYPE_LABELS[typeKey]} (${alerts.length})` })
       ]);
-      group.forEach(alert => section.appendChild(this.renderAlert(alert)));
-      content.appendChild(section);
+      alerts.forEach(alert => typeGroup.appendChild(this.renderAlert(alert)));
+      section.appendChild(typeGroup);
     });
+    return section;
   },
 
   renderAlert(alert) {
@@ -98,11 +119,11 @@ const AlertsPage = {
       case 'obligation_due':
       case 'obligation_overdue':
       case 'partial_payment':
-        return [['Registrar pago', () => this.payObligation(alert), true], ['Adjuntar comprobante', () => this.attachReceipt(alert)], viewObligation];
+        return [['Registrar pago', () => this.payObligation(alert), true], ['Adjuntar comprobante', () => this.attachReceipt(alert)], viewObligation, ...(alert.assetId ? [viewAsset] : [])];
       case 'tenant_obligation_pending':
-        return [['Resolver', () => this.resolveObligation(alert), true], ['Adjuntar comprobante', () => this.attachReceipt(alert)], viewObligation];
+        return [['Resolver', () => this.resolveObligation(alert), true], ['Adjuntar comprobante', () => this.attachReceipt(alert)], viewObligation, ...(alert.assetId ? [viewAsset] : [])];
       case 'document_pending':
-        return [['Adjuntar comprobante', () => this.attachReceipt(alert), true], viewObligation];
+        return [['Adjuntar comprobante', () => this.attachReceipt(alert), true], ['Revertir pago', () => this.revertPayment(alert)], viewObligation, ...(alert.assetId ? [viewAsset] : [])];
       case 'rent_due':
         return [['Registrar cobro', () => this.collectRent(alert), true], ...(alert.assetId ? [viewAsset] : [])];
       case 'card_installment_due':
@@ -139,6 +160,12 @@ const AlertsPage = {
     await ObligationsPage.loadLookups();
     ObligationsPage.onChange = () => this.reload();
     await ObligationsPage.showResolveModal(obligation, occurrence);
+  },
+
+  // Only document_pending alerts reach a payment (Avisos does not list payments otherwise).
+  async revertPayment(alert) {
+    const { obligation, occurrence } = await this.occurrenceOf(alert);
+    await ObligationsPage.revertFromOccurrence(obligation, occurrence, () => this.reload());
   },
 
   async attachReceipt(alert) {

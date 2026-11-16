@@ -50,7 +50,7 @@ describe('Evolutivo 2 S5 asset form UI contract', () => {
   it('shows legacy values read-only under Datos anteriores only when present', () => {
     expect(source).toContain("textContent: 'Datos anteriores'");
     expect(source).toContain('if (!lines.length) return;');
-    expect(source).toContain('this.renderLegacyData(asset, body);');
+    expect(source).toContain('this.renderLegacyData(asset, section);');
   });
 
   it('keeps existing detail sections', () => {

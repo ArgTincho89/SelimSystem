@@ -63,7 +63,8 @@ const RentalDeclarationModal = {
   // `options.newDeclaration` declares another (non-overlapping) rental even when one is in force.
   async show(page, asset, options = {}) {
     const readOnly = Boolean(options.readOnly);
-    const declaration = !options.newDeclaration && asset.declaration && asset.declaration.status !== 'ended' ? asset.declaration : null;
+    // `options.declaration` edits a historical (finished) rental, which the server only allows when it is safe.
+    const declaration = options.declaration || (!options.newDeclaration && asset.declaration && asset.declaration.status !== 'ended' ? asset.declaration : null);
     const editing = Boolean(declaration);
     // Obligations created from this (unsaved) declaration are linked to it through this token.
     const pendingToken = editing ? null : (globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}-declaration`);
@@ -83,7 +84,8 @@ const RentalDeclarationModal = {
     const sets = new Map();
     const checks = create('div', { style: { display: 'grid', gap: '4px', margin: '8px 0' } });
     body.appendChild(checks);
-    const existing = new Map((declaration?.modalities || []).filter(item => item.status === 'active' || item.status === 'draft').map(item => [item.kind, item]));
+    const editableStatuses = options.declaration ? ['active', 'draft', 'ended'] : ['active', 'draft'];
+    const existing = new Map((declaration?.modalities || []).filter(item => editableStatuses.includes(item.status)).map(item => [item.kind, item]));
     this.MODALITIES.forEach(([kind, title]) => {
       const set = this.buildFieldset(kind, title, existing.get(kind) || {});
       const checkbox = create('input', { type: 'checkbox', dataset: { modalityCheck: kind } });

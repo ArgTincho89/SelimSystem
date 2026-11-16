@@ -1969,3 +1969,9 @@ body:not(.desktop-mode) .home-stats .stat-value-multi .stat-currency-amount:not(
     max-height: 80vh;
   }
 }
+
+/* Avisos: two top-level groups by responsibility (the group is also named in the header text). */
+.alert-responsibility { border: 1px solid var(--border-color); border-radius: var(--radius-md, 8px); padding: 12px; }
+.alert-responsibility-title { margin: 0 0 4px; padding-left: 10px; border-left: 4px solid var(--accent); font-size: var(--font-lg, 1.1rem); }
+.alert-responsibility-tenant .alert-responsibility-title { border-left-style: double; border-left-width: 6px; }
+.alert-responsibility-empty { margin: 0; }

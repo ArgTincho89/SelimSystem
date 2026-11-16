@@ -1,6 +1,7 @@
 const ledger = require('./account-ledger');
 const rentals = require('./rentals');
 const obligations = require('./obligations');
+const alerts = require('./alerts');
 
 const CONTRACT_TYPE_BY_KIND = { galpon: 'industrial', lote: 'other' };
 const TOUCHED = ['rentalDeclarations', 'rentalContracts', 'rentOccurrences', 'assets', 'obligations', 'obligationOccurrences', 'documents'];
@@ -223,8 +224,8 @@ function settle(db, userId, assetId, declarationId) {
   db.update('rentalDeclarations', declarationId, { endedAt: open ? null : ledger.localDateForUser(db, userId) }, userId);
 }
 
-function withRollback(db, userId, work) {
-  const snapshot = TOUCHED.map(name => [name, db.findAll(name, userId)]);
+function withRollback(db, userId, work, extra = []) {
+  const snapshot = [...TOUCHED, ...extra].map(name => [name, db.findAll(name, userId)]);
   try {
     return { value: work() };
   } catch (error) {
@@ -267,10 +268,13 @@ function create(db, userId, body) {
 }
 
 function update(db, userId, declaration, body) {
+  const historical = !contractsOf(db, userId, declaration.id).some(isActive);
+  if (historical && !summary(db, userId, declaration).editable) return fail(NOT_EDITABLE, 409);
   const planned = plan(db, userId, body, declaration);
   if (planned.error) return planned;
   const { asset, notes, tenantIds, entries, removed, responsibilities } = planned.value;
   const written = withRollback(db, userId, () => {
+    if (historical) purge(db, userId, declaration);
     entries.forEach(entry => {
       if (entry.previous) {
         rebuildOccurrences(db, userId, entry.previous);
@@ -280,12 +284,13 @@ function update(db, userId, declaration, body) {
       }
     });
     removed.forEach(contract => endContract(db, userId, contract));
+    if (historical) markPastEnded(db, userId, declaration);
     db.update('rentalDeclarations', declaration.id, { tenantIds, notes }, userId);
     finalizePending(db, userId, planned.value);
     applyResponsibilities(db, userId, responsibilities);
     settle(db, userId, asset.id, declaration.id);
     return db.findById('rentalDeclarations', declaration.id, userId);
-  });
+  }, ['rentalConditions']);
   return written.error ? written : { value: written.value };
 }
 
@@ -315,4 +320,177 @@ function end(db, userId, declaration, body = {}) {
   return written.error ? written : { value: written.value };
 }
 
-module.exports = { view, contractsOf, activeDeclarationFor, backfillDeclarations, create, update, end, findOverlap };
+const ALREADY_ENDED = 'No se puede finalizar este contrato porque ya está finalizado.';
+const NOT_EDITABLE = 'No se puede editar este alquiler porque tiene cobros, documentos, notas u obligaciones vinculadas.';
+const ACTIVE_DELETE = 'Finalizá el alquiler antes de eliminarlo';
+const COLLECTIONS_DELETE = 'No se puede eliminar este alquiler porque tiene cobros registrados. Deshacé los cobros primero.';
+const RENTAL_TARGETS = ['contractId', 'rentOccurrenceId', 'declarationId'];
+const OTHER_TARGETS = ['obligationId', 'occurrenceId', 'entityId', 'transactionId', 'tenantEntityId'];
+
+/** Everything that hangs from one rental: contracts, generated occurrences, collections, documents, notes, obligations. */
+function footprint(db, userId, declaration) {
+  const contracts = contractsOf(db, userId, declaration.id);
+  const contractIds = new Set(contracts.map(item => item.id));
+  const occurrences = db.findAll('rentOccurrences', userId).filter(item => contractIds.has(item.contractId));
+  const occurrenceIds = new Set(occurrences.map(item => item.id));
+  const collections = db.findAll('rentCollections', userId);
+  const allocated = new Set(db.findAll('rentCollectionAllocations', userId).filter(item => occurrenceIds.has(item.occurrenceId)).map(item => item.collectionId));
+  const live = collections.filter(item => !item.reversedAt && allocated.has(item.id));
+  const reversed = collections.filter(item => item.reversedAt && Array.isArray(item.reversedOccurrenceIds) && item.reversedOccurrenceIds.some(id => occurrenceIds.has(id)));
+  const documents = db.findAll('documents', userId).filter(item => contractIds.has(item.contractId) || occurrenceIds.has(item.rentOccurrenceId) || item.declarationId === declaration.id);
+  const notes = db.findAll('wealthNotes', userId).filter(item => (item.targetType === 'declaration' && item.targetId === declaration.id)
+    || (item.targetType === 'contract' && contractIds.has(item.targetId)) || (item.targetType === 'rentOccurrence' && occurrenceIds.has(item.targetId)));
+  const linkedObligations = db.findAll('obligations', userId).filter(item => contractIds.has(item.rentalContractId));
+  return { contracts, contractIds, occurrences, occurrenceIds, live, reversed, documents, notes, linkedObligations };
+}
+
+/** Lightweight row of the rental history: validity, tenants, modalities, state and what an edit or delete would touch. */
+function summary(db, userId, declaration) {
+  const data = footprint(db, userId, declaration);
+  const real = data.contracts.filter(item => item.status !== 'draft');
+  const ends = real.map(item => item.endDate);
+  const impact = {
+    collections: data.live.length, reversedCollections: data.reversed.length, periods: data.occurrences.length,
+    documents: data.documents.length, notes: data.notes.length, linkedObligations: data.linkedObligations.length
+  };
+  const active = real.some(isActive);
+  return {
+    id: declaration.id, assetId: declaration.assetId, from: real.map(item => item.startDate).sort()[0] || null,
+    to: ends.length && ends.every(Boolean) ? [...ends].sort().pop() : null,
+    tenants: (declaration.tenantIds || []).map(id => db.findById('legalOwners', id, userId)).filter(Boolean).map(item => ({ id: item.id, name: item.name })),
+    modalities: real.map(item => rentals.modalityOf(item)).filter((kind, index, list) => list.indexOf(kind) === index),
+    state: active ? 'active' : 'ended',
+    editable: impact.collections === 0 && impact.reversedCollections === 0 && impact.documents === 0 && impact.notes === 0 && impact.linkedObligations === 0,
+    deletable: !active && impact.collections === 0, impact
+  };
+}
+
+/** Removes the contracts, conditions and generated occurrences of a rental that has nothing attached. */
+function purge(db, userId, declaration) {
+  const data = footprint(db, userId, declaration);
+  data.occurrences.forEach(item => db.remove('rentOccurrences', item.id, userId));
+  db.findAll('rentalConditions', userId).filter(item => data.contractIds.has(item.contractId)).forEach(item => db.remove('rentalConditions', item.id, userId));
+  data.contracts.forEach(item => db.remove('rentalContracts', item.id, userId));
+}
+
+/** Contracts written with an end date already in the past are history: they are saved as ended. */
+function markPastEnded(db, userId, declaration) {
+  const today = ledger.localDateForUser(db, userId);
+  contractsOf(db, userId, declaration.id).filter(item => isActive(item) && item.endDate && item.endDate < today)
+    .forEach(item => db.update('rentalContracts', item.id, { status: 'ended' }, userId));
+}
+
+/**
+ * Deletes a finished rental with its contracts, conditions, occurrences, notes and rental-only documents
+ * (other documents are detached). Blocked while it is active or while non-reversed collections exist.
+ * A `rentalDeletions` tombstone keeps the snapshot; reversed collections stay for the audit. Atomic.
+ * Returns the removed document records so the caller can delete their files after the commit.
+ */
+function remove(db, userId, declaration) {
+  const data = footprint(db, userId, declaration);
+  if (data.contracts.some(isActive)) return fail(ACTIVE_DELETE, 409);
+  if (data.live.length) return fail(COLLECTIONS_DELETE, 409);
+  const rentalOnly = item => !OTHER_TARGETS.some(field => item[field]);
+  const removedDocuments = data.documents.filter(rentalOnly);
+  const detached = data.documents.filter(item => !rentalOnly(item));
+  const written = withRollback(db, userId, () => {
+    const tombstone = db.create('rentalDeletions', {
+      declarationId: declaration.id, assetId: declaration.assetId, deletedAt: new Date().toISOString(),
+      snapshot: {
+        declaration: { ...declaration }, contracts: data.contracts.map(item => ({ ...item })),
+        conditions: db.findAll('rentalConditions', userId).filter(item => data.contractIds.has(item.contractId)).map(item => ({ ...item })),
+        periods: data.occurrences.length, reversedCollectionIds: data.reversed.map(item => item.id),
+        documentIds: data.documents.map(item => item.id), noteIds: data.notes.map(item => item.id), linkedObligationIds: data.linkedObligations.map(item => item.id)
+      }
+    }, userId);
+    removedDocuments.forEach(item => db.remove('documents', item.id, userId));
+    detached.forEach(item => {
+      const patch = {};
+      RENTAL_TARGETS.forEach(field => { if (item[field]) patch[field] = null; });
+      db.update('documents', item.id, patch, userId);
+    });
+    data.notes.forEach(item => db.remove('wealthNotes', item.id, userId));
+    data.linkedObligations.forEach(item => db.update('obligations', item.id, { rentalContractId: null }, userId));
+    data.occurrences.forEach(item => db.remove('rentOccurrences', item.id, userId));
+    db.findAll('rentalConditions', userId).filter(item => data.contractIds.has(item.contractId)).forEach(item => db.remove('rentalConditions', item.id, userId));
+    data.contracts.forEach(item => db.remove('rentalContracts', item.id, userId));
+    db.remove('rentalDeclarations', declaration.id, userId);
+    return tombstone;
+  }, ['rentalConditions', 'wealthNotes', 'rentalDeletions']);
+  if (written.error) return written;
+  return { value: { deletedAt: written.value.deletedAt, tombstoneId: written.value.id, removedDocuments, detachedDocumentIds: detached.map(item => item.id) } };
+}
+
+/** Validated early-termination date (default today) of one or more active contracts, or a failure. */
+function endDateFor(db, userId, contracts, body) {
+  const requested = body && body.endDate !== undefined && body.endDate !== null && body.endDate !== '' ? body.endDate : null;
+  if (requested === null) return { value: null };
+  if (!rentals.validDate(requested)) return fail('La fecha de finalización no es válida');
+  if (requested < contracts.map(item => item.startDate).sort()[0]) return fail('La fecha de finalización no puede ser anterior al inicio del contrato');
+  const agreed = contracts.every(item => item.endDate) ? contracts.map(item => item.endDate).sort().pop() : null;
+  if (agreed && requested > agreed) return fail('La fecha de finalización no puede ser posterior a la pactada; editá el alquiler para extenderlo');
+  const today = ledger.localDateForUser(db, userId);
+  const collectedAfter = db.findAll('rentOccurrences', userId).some(item => contracts.some(contract => contract.id === item.contractId) && item.date > requested && !item.cancelled && rentals.occurrenceView(db, userId, item, today).paidMinor > 0);
+  if (collectedAfter) return fail('Hay períodos cobrados posteriores a esa fecha; deshacé esos cobros primero', 409);
+  return { value: requested };
+}
+
+/** Same cutoff as `endContract`: unpaid periods after it are cancelled (null = every unpaid period). */
+function cancellationCutoff(contract, endOn, today) {
+  if (endOn && contract.startDate <= endOn && endOn >= today) return endOn;
+  const notStarted = endOn ? contract.startDate > endOn : contract.startDate > today;
+  if (notStarted) return null;
+  return endOn || (contract.endDate && contract.endDate < today ? contract.endDate : today);
+}
+
+/** Uncollected periods that ending these contracts on `endOn` would cancel (read-only, nothing is persisted). */
+function cancelledPeriods(db, userId, contracts, endOn) {
+  const today = ledger.localDateForUser(db, userId);
+  const view = alerts.readOnlyView(db);
+  const through = plusMonths12(db, userId);
+  return contracts.flatMap(contract => {
+    const cutoff = cancellationCutoff(contract, endOn, today);
+    return rentals.generateOccurrences(view, userId, contract, through)
+      .filter(item => !item.cancelled && item.status !== 'cancelled' && item.paidMinor === 0 && (cutoff === null || item.date > cutoff))
+      .map(item => ({
+        contractId: contract.id, modality: rentals.modalityOf(contract), occurrenceId: item.id, date: item.date, period: item.period,
+        amount: item.rentAmount, currencyCode: item.currencyCode
+      }));
+  }).sort((a, b) => a.date.localeCompare(b.date) || a.modality.localeCompare(b.modality));
+}
+
+/** "Finalizar contrato": ends one modality (same settlement as ending the rental). */
+function endModality(db, userId, declaration, contractId, body = {}) {
+  const contract = contractsOf(db, userId, declaration.id).find(item => item.id === contractId);
+  if (!contract) return fail('Contrato no encontrado', 404);
+  if (!isActive(contract)) return fail(ALREADY_ENDED, 409);
+  const endOn = endDateFor(db, userId, [contract], body);
+  if (endOn.error) return endOn;
+  const written = withRollback(db, userId, () => {
+    endContract(db, userId, contract, endOn.value);
+    settle(db, userId, declaration.assetId, declaration.id);
+    return db.findById('rentalDeclarations', declaration.id, userId);
+  });
+  return written.error ? written : { value: written.value };
+}
+
+/** Read-only preview of ending the whole rental or one modality: the periods that get cancelled (and tenant obligations). */
+function endPreview(db, userId, declaration, { contractId = null, endDate } = {}) {
+  const active = contractsOf(db, userId, declaration.id).filter(isActive);
+  const contracts = contractId ? active.filter(item => item.id === contractId) : active;
+  if (contractId && !contracts.length) {
+    return contractsOf(db, userId, declaration.id).some(item => item.id === contractId) ? fail(ALREADY_ENDED, 409) : fail('Contrato no encontrado', 404);
+  }
+  if (!contracts.length) return fail('El alquiler ya está finalizado', 409);
+  const endOn = endDateFor(db, userId, contracts, { endDate });
+  if (endOn.error) return endOn;
+  const value = { cancelledPeriods: cancelledPeriods(db, userId, contracts, endOn.value) };
+  if (!contractId) {
+    value.tenantObligations = db.findAll('obligations', userId)
+      .filter(item => item.assetId === declaration.assetId && item.status !== 'cancelled' && item.responsibilityType === 'tenant')
+      .map(item => ({ obligationId: item.id, title: item.title }));
+  }
+  return { value };
+}
+
+module.exports = { view, summary, remove, contractsOf, activeDeclarationFor, backfillDeclarations, create, update, end, endModality, endPreview, findOverlap, ALREADY_ENDED };

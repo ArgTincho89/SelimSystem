@@ -239,8 +239,10 @@ function reverseGroup(db, userId, group, storage = null) {
   const written = atomically(db, userId, () => {
     collections.forEach(collection => {
       const transaction = db.findById('transactions', collection.transactionId, userId);
+      const collectionOccurrenceIds = [];
       db.findAll('rentCollectionAllocations', userId).filter(item => item.collectionId === collection.id).forEach(item => {
         reopened.add(item.occurrenceId);
+        collectionOccurrenceIds.push(item.occurrenceId);
         db.remove('rentCollectionAllocations', item.id, userId);
       });
       if (transaction) {
@@ -255,7 +257,7 @@ function reverseGroup(db, userId, group, storage = null) {
         });
         db.remove('transactions', transaction.id, userId);
       }
-      db.update('rentCollections', collection.id, { reversedAt, reversedTransactionId: transaction?.id || null }, userId);
+      db.update('rentCollections', collection.id, { reversedAt, reversedTransactionId: transaction?.id || null, reversedOccurrenceIds: [...new Set(collectionOccurrenceIds)] }, userId);
     });
     db.update(GROUPS, group.id, { reversedAt }, userId);
   }, 'No se pudo deshacer el cobro');

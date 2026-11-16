@@ -147,6 +147,10 @@ const API = {
     obligationHistory(id) {
       return API.get(`/assets/${encodeURIComponent(id)}/obligation-history`);
     },
+    history(id, filters = {}) {
+      const query = new URLSearchParams(Object.entries(filters).filter(([, value]) => value !== '' && value != null));
+      return API.get(`/assets/${encodeURIComponent(id)}/history${query.toString() ? `?${query}` : ''}`);
+    },
     monthlyView(id, filters = {}) {
       const query = new URLSearchParams(Object.entries(filters).filter(([, value]) => value !== '' && value != null));
       return API.get(`/assets/${encodeURIComponent(id)}/monthly-view${query.toString() ? `?${query}` : ''}`);
@@ -187,16 +191,17 @@ const API = {
   },
 
   documents: {
-    list(targetType, targetId) {
-      const field = ({ asset: 'assetId', obligation: 'obligationId', contract: 'contractId', occurrence: 'occurrenceId', rentOccurrence: 'rentOccurrenceId', transaction: 'transactionId', tenant: 'tenantEntityId' })[targetType] || 'entityId';
-      const query = new URLSearchParams({ [field]: targetId });
+    list(targetType, targetId, extra = {}) {
+      const field = ({ asset: 'assetId', obligation: 'obligationId', contract: 'contractId', occurrence: 'occurrenceId', rentOccurrence: 'rentOccurrenceId', transaction: 'transactionId', tenant: 'tenantEntityId', declaration: 'declarationId' })[targetType] || 'entityId';
+      const query = new URLSearchParams({ [field]: targetId, ...extra });
       return API.get(`/documents?${query}`);
     },
+    remove(id) { return API.delete(`/documents/${encodeURIComponent(id)}`); },
     listBy(targets) {
       return API.get(`/documents?${new URLSearchParams(targets)}`);
     },
     upload(targetType, targetId, file) {
-      const field = ({ asset: 'assetId', obligation: 'obligationId', contract: 'contractId', occurrence: 'occurrenceId', rentOccurrence: 'rentOccurrenceId', transaction: 'transactionId', tenant: 'tenantEntityId' })[targetType] || 'entityId';
+      const field = ({ asset: 'assetId', obligation: 'obligationId', contract: 'contractId', occurrence: 'occurrenceId', rentOccurrence: 'rentOccurrenceId', transaction: 'transactionId', tenant: 'tenantEntityId', declaration: 'declarationId' })[targetType] || 'entityId';
       return API.documents.uploadTargets({ [field]: targetId }, file);
     },
     async uploadTargets(targets, file) {
@@ -224,11 +229,13 @@ const API = {
   },
 
   wealthNotes: {
-    list(targetType, targetId) {
-      const query = new URLSearchParams({ targetType, targetId });
+    list(targetType, targetId, extra = {}) {
+      const query = new URLSearchParams({ targetType, targetId, ...Object.fromEntries(Object.entries(extra).filter(([, value]) => value !== '' && value != null)) });
       return API.get(`/notes?${query}`);
     },
-    create(data) { return API.post('/notes', data); }
+    create(data) { return API.post('/notes', data); },
+    update(id, data) { return API.put(`/notes/${encodeURIComponent(id)}`, data); },
+    remove(id) { return API.delete(`/notes/${encodeURIComponent(id)}`); }
   },
 
   obligations: {
@@ -248,6 +255,8 @@ const API = {
     cancelOccurrence(id, occurrenceId) { return API.post(`/obligations/${encodeURIComponent(id)}/occurrences/${encodeURIComponent(occurrenceId)}/cancel`, {}); },
     updateOccurrence(id, occurrenceId, data) { return API.put(`/obligations/${encodeURIComponent(id)}/occurrences/${encodeURIComponent(occurrenceId)}`, data); },
     paymentContext(id, occurrenceId) { return API.get(`/obligations/${encodeURIComponent(id)}/occurrences/${encodeURIComponent(occurrenceId)}/payment-context`); },
+    payment(id, occurrenceId, paymentId) { return API.get(`/obligations/${encodeURIComponent(id)}/occurrences/${encodeURIComponent(occurrenceId)}/payments/${encodeURIComponent(paymentId)}`); },
+    revertPayment(id, occurrenceId, paymentId, data = {}) { return API.post(`/obligations/${encodeURIComponent(id)}/occurrences/${encodeURIComponent(occurrenceId)}/payments/${encodeURIComponent(paymentId)}/revert`, data); },
     pay(id, occurrenceId, data) { return API.post(`/obligations/${encodeURIComponent(id)}/occurrences/${encodeURIComponent(occurrenceId)}/payments`, data); },
     createResolution(id, occurrenceId, data) { return API.post(`/obligations/${encodeURIComponent(id)}/occurrences/${encodeURIComponent(occurrenceId)}/resolution`, data); },
     voidResolution(id, occurrenceId) { return API.delete(`/obligations/${encodeURIComponent(id)}/occurrences/${encodeURIComponent(occurrenceId)}/resolution`); },
@@ -276,6 +285,10 @@ const API = {
     create(data) { return API.post('/rentals', data); },
     update(id, data) { return API.put(`/rentals/${encodeURIComponent(id)}`, data); },
     addCondition(id, data) { return API.post(`/rentals/${encodeURIComponent(id)}/conditions`, data); },
+    previewCondition(id, filters = {}) {
+      const query = new URLSearchParams(Object.entries(filters).filter(([, value]) => value !== '' && value != null));
+      return API.get(`/rentals/${encodeURIComponent(id)}/conditions/preview?${query}`);
+    },
     cancelOccurrence(id, occurrenceId) { return API.post(`/rentals/${encodeURIComponent(id)}/occurrences/${encodeURIComponent(occurrenceId)}/cancel`, {}); },
     alerts() { return API.get('/rentals/alerts'); },
     collections(contractId) { return API.get(`/rentals/collections/list${contractId ? `?contractId=${encodeURIComponent(contractId)}` : ''}`); },
@@ -288,9 +301,29 @@ const API = {
     allocate(collectionId, data) { return API.post(`/rentals/collections/${encodeURIComponent(collectionId)}/allocations`, data); },
     declarations: {
       list(assetId) { return API.get(`/rentals/declarations${assetId ? `?assetId=${encodeURIComponent(assetId)}` : ''}`); },
+      summary(assetId) { return API.get(`/rentals/declarations?assetId=${encodeURIComponent(assetId)}&summary=1`); },
+      get(id) { return API.get(`/rentals/declarations/${encodeURIComponent(id)}`); },
+      remove(id) { return API.delete(`/rentals/declarations/${encodeURIComponent(id)}`); },
+      periods(id, filters = {}) {
+        const query = new URLSearchParams(Object.entries(filters).filter(([, value]) => value !== '' && value != null));
+        return API.get(`/rentals/declarations/${encodeURIComponent(id)}/periods${query.toString() ? `?${query}` : ''}`);
+      },
+      overview(id, filters = {}) {
+        const query = new URLSearchParams(Object.entries(filters).filter(([, value]) => value !== '' && value != null));
+        return API.get(`/rentals/declarations/${encodeURIComponent(id)}/overview${query.toString() ? `?${query}` : ''}`);
+      },
       create(data) { return API.post('/rentals/declarations', data); },
       update(id, data) { return API.put(`/rentals/declarations/${encodeURIComponent(id)}`, data); },
-      end(id, data = {}) { return API.post(`/rentals/declarations/${encodeURIComponent(id)}/end`, data); }
+      end(id, data = {}) { return API.post(`/rentals/declarations/${encodeURIComponent(id)}/end`, data); },
+      endPreview(id, filters = {}) {
+        const query = new URLSearchParams(Object.entries(filters).filter(([, value]) => value !== '' && value != null));
+        return API.get(`/rentals/declarations/${encodeURIComponent(id)}/end-preview${query.toString() ? `?${query}` : ''}`);
+      },
+      endModality(id, contractId, data = {}) { return API.post(`/rentals/declarations/${encodeURIComponent(id)}/modalities/${encodeURIComponent(contractId)}/end`, data); },
+      endModalityPreview(id, contractId, filters = {}) {
+        const query = new URLSearchParams(Object.entries(filters).filter(([, value]) => value !== '' && value != null));
+        return API.get(`/rentals/declarations/${encodeURIComponent(id)}/modalities/${encodeURIComponent(contractId)}/end-preview${query.toString() ? `?${query}` : ''}`);
+      }
     }
   }
 };

@@ -2,8 +2,8 @@ const fs = require('fs');
 const path = require('path');
 const read = file => fs.readFileSync(path.join(__dirname, '../../public', file), 'utf8');
 const monthDialog = () => {
-  const assets = read('js/pages/assets.js');
-  return assets.slice(assets.indexOf('async showRentMonthModal('), assets.indexOf('// Multi-period collection for one contract'));
+  const periods = read('js/pages/rentalPeriods.js');
+  return periods.slice(periods.indexOf('async collectMonth('), periods.indexOf('// Multi-period collection for one contract'));
 };
 
 describe('Evolutivo 3 S4c month-level rent UI contract', () => {
@@ -32,18 +32,18 @@ describe('Evolutivo 3 S4c month-level rent UI contract', () => {
     expect(dialog).toContain('seleccioná la cuenta de destino');
   });
   it('shows month rows in the history with the per-modality lines collapsed', () => {
-    const assets = read('js/pages/assets.js');
-    expect(assets).toContain('renderRentMonths(');
-    expect(assets).toContain('Meses de alquiler');
-    expect(assets).toContain("create('details'");
-    expect(assets).toContain('Cobrar mes');
+    const periods = read('js/pages/rentalPeriods.js');
+    expect(periods).toContain('DataTable.create(');
+    expect(periods).toContain('rentMonth: row.monthKey || row.period');
+    expect(periods).toContain("textContent: 'Registrar cobro'");
     expect(read('js/api.js')).toContain('/rentals/months');
   });
   it('uses "Deshacer cobro" with inline confirmation on months, occurrences and the collections list', () => {
-    const assets = read('js/pages/assets.js');
-    expect(assets).not.toContain('Anular cobro');
-    expect(assets.match(/this\.undoCollections\(/g).length).toBeGreaterThanOrEqual(3);
-    expect(assets).toContain('La conciliación de la cuenta quedó pendiente de revisar');
+    const periods = read('js/pages/rentalPeriods.js');
+    expect(periods).not.toContain('Anular cobro');
+    expect(periods.match(/this\.undoCollections\(/g).length).toBeGreaterThanOrEqual(1);
+    expect(read('js/pages/assetHistory.js')).toContain('AssetsPage.undoCollections(');
+    expect(periods).toContain('La conciliación de la cuenta quedó pendiente de revisar');
   });
   it('Transacciones deletes a rent collection as "Deshacer cobro"', () => {
     const home = read('js/pages/home.js');

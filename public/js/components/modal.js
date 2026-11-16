@@ -1,6 +1,7 @@
 // Dialogs. `show` replaces every open dialog; `push` opens a dialog on top of the current one (the
 // dialogs below keep their state); `hide` closes the top dialog only. `options.onClose` runs when its
-// dialog is closed or replaced.
+// dialog is closed or replaced. `options.layout: 'panel'` keeps `options.header` (an element) fixed above a
+// scrolling body; with `options.fullscreenOnMobile` the dialog fills the screen on phones.
 const Modal = {
   previousFocus: null,
   layers: [],
@@ -21,8 +22,9 @@ const Modal = {
     const depth = this.layers.length;
     const titleId = depth ? `modal-title-${depth}` : 'modal-title';
 
+    const panel = options.layout === 'panel';
     const overlay = create('div', {
-      className: 'modal-overlay',
+      className: panel && options.fullscreenOnMobile ? 'modal-overlay modal-overlay-fullscreen' : 'modal-overlay',
       dataset: { modalDepth: String(depth) },
       style: {
         position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
@@ -32,12 +34,14 @@ const Modal = {
     });
 
     const modal = create('div', {
-      className: 'card fade-in',
+      className: panel ? `card fade-in modal-panel${options.fullscreenOnMobile ? ' modal-fullscreen-mobile' : ''}` : 'card fade-in',
       role: 'dialog',
       'aria-modal': 'true',
       'aria-labelledby': titleId,
       tabindex: '-1',
-      style: { width: '100%', maxWidth: options.width || '440px', maxHeight: '90vh', overflowY: 'auto' }
+      style: panel
+        ? { width: '100%', maxWidth: options.width || '440px', maxHeight: '92vh', overflowY: 'hidden', display: 'flex', flexDirection: 'column' }
+        : { width: '100%', maxWidth: options.width || '440px', maxHeight: '90vh', overflowY: 'auto' }
     });
 
     const header = create('div', {
@@ -55,15 +59,24 @@ const Modal = {
 
     modal.appendChild(header);
 
+    // Panel layout: the header element stays visible while only the body scrolls.
+    let bodyHost = modal;
+    if (panel) {
+      if (options.header instanceof HTMLElement) modal.appendChild(create('div', { className: 'modal-panel-header' }, [options.header]));
+      bodyHost = create('div', { className: 'modal-panel-body' });
+      modal.appendChild(bodyHost);
+    }
+
     if (typeof content === 'string') {
       const body = create('div', { innerHTML: content });
-      modal.appendChild(body);
+      bodyHost.appendChild(body);
     } else if (content instanceof HTMLElement) {
-      modal.appendChild(content);
+      bodyHost.appendChild(content);
     }
 
     if (options.footer) {
       const footer = create('div', {
+        ...(panel ? { className: 'modal-panel-footer' } : {}),
         style: { marginTop: '16px', display: 'flex', gap: '8px', justifyContent: 'flex-end' }
       });
       if (typeof options.footer === 'string') {

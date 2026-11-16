@@ -5,6 +5,8 @@ const assetFile = require('../services/asset-file');
 const assetForm = require('../services/asset-form');
 const { ageFor } = require('../services/asset-age');
 const ledger = require('../services/account-ledger');
+const assetHistory = require('../services/asset-history');
+const rentalDeclarations = require('../services/rental-declarations');
 const { validateOwnershipSet } =require('../utils/ownership-overlap');
 
 const router = express.Router();
@@ -179,11 +181,13 @@ function ownershipsForAsset(db, userId, assetId) {
 }
 
 function assetResponse(db, userId, asset) {
+  const described = assetForm.describe(db, userId, asset);
   return {
     ...asset,
     age: ageFor(asset, ledger.localDateForUser(db, userId)),
     ownerships: ownershipsForAsset(db, userId, asset.id),
-    ...assetForm.describe(db, userId, asset),
+    ...described,
+    activeDeclarationId: described.declaration ? described.declaration.id : null,
     statusHistory: db.findAll('assetStatusHistory', userId).filter(event => event.assetId === asset.id).sort((a, b) => a.changedAt.localeCompare(b.changedAt))
   };
 }
@@ -217,7 +221,9 @@ router.get('/', (req, res) => {
   res.json(assets.filter(asset => matchesFilter(asset, filters, owners, ownerships)).map(asset => ({
     ...asset,
     age: ageFor(asset, today),
-    owners: ownershipsForAsset(db, userId, asset.id).filter(record => !record.endDate).map(record => record.owner).filter(Boolean)
+    owners: ownershipsForAsset(db, userId, asset.id).filter(record => !record.endDate).map(record => record.owner).filter(Boolean),
+    // "Vigente": a declaration with at least one active modality (`condition` alone can be usufruct).
+    activeDeclarationId: asset.type === 'immovable' ? (rentalDeclarations.activeDeclarationFor(db, userId, asset.id)?.id || null) : null
   })));
 });
 
@@ -302,6 +308,17 @@ router.get('/:id/obligation-history', (req, res) => {
   const asset = db.findById('assets', req.params.id, userId);
   if (!asset) return res.status(404).json({ error: 'Bien no encontrado' });
   res.json(economicOverview.obligationHistory(db, userId, asset));
+});
+
+router.get('/:id/history', (req, res) => {
+  const db = req.app.locals.db;
+  const userId = req.session.userId;
+  const asset = db.findById('assets', req.params.id, userId);
+  if (!asset) return res.status(404).json({ error: 'Bien no encontrado' });
+  const { year, month, from, to } = req.query;
+  const result = assetHistory.build(db, userId, asset, { year, month, from, to });
+  if (result.error) return res.status(result.status || 400).json({ error: result.error });
+  res.json(result.value);
 });
 
 router.get('/:id/file', (req, res) => {

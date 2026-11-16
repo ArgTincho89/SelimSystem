@@ -1,6 +1,7 @@
 const express = require('express');
 const ledger = require('../services/account-ledger');
 const declarations = require('../services/rental-declarations');
+const rentalPeriods = require('../services/rental-periods');
 
 const router = express.Router();
 
@@ -16,8 +17,39 @@ router.get('/', (req, res) => {
   declarations.backfillDeclarations(db, userId);
   const rows = db.findAll('rentalDeclarations', userId)
     .filter(item => !req.query.assetId || item.assetId === req.query.assetId)
-    .map(item => declarations.view(db, userId, item));
-  res.json(rows);
+    .map(item => (req.query.summary === '1' ? declarations.summary(db, userId, item) : declarations.view(db, userId, item)));
+  res.json(req.query.summary === '1' ? rows.sort((a, b) => String(b.from).localeCompare(String(a.from))) : rows);
+});
+
+function findDeclaration(req, res) {
+  const declaration = req.app.locals.db.findById('rentalDeclarations', req.params.id, req.session.userId);
+  if (!declaration) res.status(404).json({ error: 'Declaración de alquiler no encontrada' });
+  return declaration;
+}
+
+// The rental with its modalities (and the next 12 months of periods, as the list does).
+router.get('/:id', (req, res) => {
+  const declaration = findDeclaration(req, res);
+  if (!declaration) return;
+  respond(res, req.app.locals.db, req.session.userId, declaration);
+});
+
+// Header, modality cards, collection progress and alerts. Read-only: generated periods stay in memory.
+router.get('/:id/overview', (req, res) => {
+  const declaration = findDeclaration(req, res);
+  if (!declaration) return;
+  const result = rentalPeriods.overview(req.app.locals.db, req.session.userId, declaration, { year: req.query.year });
+  if (result.error) return res.status(result.status || 400).json({ error: result.error });
+  res.json(result.value);
+});
+
+// One row per month: modalities, owner and tenant obligations, collections, receipts and notes. Read-only.
+router.get('/:id/periods', (req, res) => {
+  const declaration = findDeclaration(req, res);
+  if (!declaration) return;
+  const result = rentalPeriods.periods(req.app.locals.db, req.session.userId, declaration, { from: req.query.from, to: req.query.to });
+  if (result.error) return res.status(result.status || 400).json({ error: result.error });
+  res.json(result.value);
 });
 
 function failed(res, result) {
@@ -40,6 +72,48 @@ router.put('/:id', (req, res) => {
   const result = declarations.update(db, userId, declaration, req.body);
   if (result.error) return failed(res, result);
   respond(res, db, userId, result.value);
+});
+
+// Read-only previews: the periods that ending the rental (or one modality) would cancel. Never logged.
+router.get('/:id/end-preview', (req, res) => {
+  const declaration = findDeclaration(req, res);
+  if (!declaration) return;
+  const result = declarations.endPreview(req.app.locals.db, req.session.userId, declaration, { endDate: req.query.endDate });
+  if (result.error) return failed(res, result);
+  res.json(result.value);
+});
+
+router.get('/:id/modalities/:contractId/end-preview', (req, res) => {
+  const declaration = findDeclaration(req, res);
+  if (!declaration) return;
+  const result = declarations.endPreview(req.app.locals.db, req.session.userId, declaration, { contractId: req.params.contractId, endDate: req.query.endDate });
+  if (result.error) return failed(res, result);
+  res.json(result.value);
+});
+
+// "Finalizar contrato": ends one modality of the rental.
+router.post('/:id/modalities/:contractId/end', (req, res) => {
+  const db = req.app.locals.db;
+  const userId = req.session.userId;
+  const declaration = findDeclaration(req, res);
+  if (!declaration) return;
+  const result = declarations.endModality(db, userId, declaration, req.params.contractId, req.body || {});
+  if (result.error) return failed(res, result);
+  respond(res, db, userId, result.value);
+});
+
+// Deletes a finished rental (confirmed in the UI). The files of removed documents go after the commit.
+router.delete('/:id', (req, res) => {
+  const db = req.app.locals.db;
+  const userId = req.session.userId;
+  const declaration = findDeclaration(req, res);
+  if (!declaration) return;
+  const result = declarations.remove(db, userId, declaration);
+  if (result.error) return failed(res, result);
+  const { removedDocuments, detachedDocumentIds, deletedAt } = result.value;
+  removedDocuments.forEach(item => { try { req.app.locals.documentStorage?.remove(userId, item.storageKey); } catch { /* an orphan file is harmless */ } });
+  ledger.refreshAlerts(db, userId);
+  res.json({ deleted: true, deletedAt, deletedDocumentIds: removedDocuments.map(item => item.id), detachedDocumentIds });
 });
 
 router.post('/:id/end', (req, res) => {
