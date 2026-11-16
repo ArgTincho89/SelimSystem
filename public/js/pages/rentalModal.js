@@ -452,10 +452,30 @@ const RentalModal = {
         this.line('Criterio de ajuste', card.adjustmentCriterion || '—'),
         this.line('Próximo ajuste', card.nextAdjustmentDate || '—')
       ]);
+      const documentsSlot = create('div', { className: 'contract-documents', dataset: { contractDocuments: card.contractId }, style: { display: 'flex', gap: '8px', flexWrap: 'wrap' } });
+      article.appendChild(documentsSlot);
+      this.loadContractDocuments(documentsSlot, card.contractId);
       if (!ctx.readOnly) article.appendChild(this.cardActions(ctx, card, { collect: false }));
       root.appendChild(article);
     });
     return root;
+  },
+
+  // Fills the card slot with view/download actions for the contract's documents; nothing is shown without documents.
+  async loadContractDocuments(slot, contractId) {
+    let documents = [];
+    try {
+      documents = await API.documents.list('contract', contractId);
+    } catch {
+      return;
+    }
+    (Array.isArray(documents) ? documents : []).forEach(doc => {
+      const name = doc.title || doc.fileName || '';
+      slot.append(
+        create('button', { className: 'btn btn-secondary btn-sm', type: 'button', textContent: 'Ver documento', dataset: { contractDocument: 'view' }, 'aria-label': `Ver documento ${name}`.trim(), onClick: () => AssetHistory.showReceipt(doc) }),
+        create('a', { className: 'btn btn-ghost btn-sm', href: API.documents.contentUrl(doc.id, true), textContent: 'Descargar documento', dataset: { contractDocument: 'download' }, 'aria-label': `Descargar documento ${name}`.trim() })
+      );
+    });
   },
 
   // Períodos: the unified monthly table (one row per month: modalities, obligations, state and actions).
