@@ -93,8 +93,8 @@ Review budget is 800 lines (`review_budget_lines`); `size:exception` is recorded
 
 ## W8: iva-by-owner (commit: `feat(home): IVA by owner for the selected month`)
 
-- [ ] 8.1 RED `tests/ui/evolutivo6-iva-contract.test.js`: rows for every role owner, 0 when absent, follows `currentMonth`, `data-favorite-type="trend-iva"` kept.
-- [ ] 8.2 `summary.js` `renderIvaByOwner(summary, owners)` over `ivaByHolder`; `home.js` replaces `renderIvaChart` calls (`:104,:342`) and loads `API.owners.list()`. Update IVA chart tests.
+- [x] 8.1 RED `tests/ui/evolutivo6-iva-contract.test.js`: rows for every role owner, 0 when absent, follows `currentMonth`, `data-favorite-type="trend-iva"` kept.
+- [x] 8.2 `summary.js` `renderIvaByOwner(summary, owners)` over `ivaByHolder`; `home.js` replaces `renderIvaChart` calls (`:104,:342`) and loads `API.owners.list()`. Update IVA chart tests.
 
 ## W9: asset-kinds (commit: `feat(assets): user-defined asset kinds`)
 
