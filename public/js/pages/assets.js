@@ -333,6 +333,7 @@ const AssetsPage = {
       ? create('div', {}, [create('button', { className: 'btn btn-primary', type: 'button', textContent: 'Cerrar', onClick: () => Modal.hide() })])
       : create('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap' } }, [
         confirmBox,
+        ...(editing ? [create('button', { className: 'btn btn-danger', type: 'button', textContent: 'Eliminar', dataset: { assetDelete: 'true' }, onClick: () => this.confirmDelete(asset) })] : []),
         create('button', { className: 'btn btn-ghost', type: 'button', textContent: 'Cancelar', onClick: () => Modal.hide() }),
         saveButton
       ]);
@@ -413,6 +414,22 @@ const AssetsPage = {
     container.appendChild(section);
   },
 
+  // Danger confirmation first; nothing is sent until the user confirms. A 409 keeps the server reason in a dialog.
+  async confirmDelete(asset) {
+    const { confirmed } = await ConfirmDialog.open({ title: 'Eliminar bien', danger: true, confirmLabel: 'Eliminar bien', message: `Vas a eliminar el bien "${asset.name}". Esta acción no se puede deshacer. ¿Querés continuar?` });
+    if (!confirmed) return false;
+    try {
+      await API.assets.delete(asset.id);
+    } catch (error) {
+      await ConfirmDialog.open({ title: 'No se puede eliminar el bien', message: error.message, confirmLabel: 'Entendido', cancelLabel: 'Cerrar' });
+      return false;
+    }
+    Modal.hide();
+    showToast('Bien eliminado');
+    this.render();
+    return true;
+  },
+
   // The typed history timeline lives in assetHistory.js.
   showHistory(id) {
     return AssetHistory.open(id);
@@ -465,7 +482,8 @@ const AssetsPage = {
     const state = asset.type === 'immovable' ? (this.optionLabel(this.conditionOptions(), asset.condition) || this.usageLabel(asset.usageStatus)) : '';
     const actions = create('div', { className: 'ficha-actions', style: { display: 'flex', gap: '8px', flexWrap: 'wrap' } }, [
       create('button', { className: 'btn btn-secondary btn-sm', type: 'button', textContent: 'Editar', onClick: async () => { try { this.showAssetModal(await API.assets.get(asset.id)); } catch (error) { showToast(error.message, 'error'); } } }),
-      create('button', { className: 'btn btn-ghost btn-sm', type: 'button', textContent: 'Ver historial', onClick: () => this.showHistory(asset.id) })
+      create('button', { className: 'btn btn-ghost btn-sm', type: 'button', textContent: 'Ver historial', onClick: () => this.showHistory(asset.id) }),
+      create('button', { className: 'btn btn-danger btn-sm', type: 'button', textContent: 'Eliminar', dataset: { assetDelete: 'true' }, onClick: () => this.confirmDelete(asset) })
     ]);
     if (asset.type === 'immovable') actions.appendChild(this.rentalAccessButton(asset, { onDone: () => this.showDetails(asset.id) }));
     return create('header', { className: 'ficha-header', dataset: { fichaBlock: 'header' }, style: { display: 'grid', gap: '6px' } }, [

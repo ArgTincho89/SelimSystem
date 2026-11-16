@@ -373,4 +373,46 @@ router.patch('/:id/ownerships/:ownershipId', (req, res) => {
   res.json(db.update('assetOwnerships', ownership.id, { endDate }, userId));
 });
 
+// Collections that make an asset undeletable, grouped under the Spanish label shown in the 409 reason.
+const DELETE_REFERENCES = [
+  ['transactions', 'movimientos', item => item.assetId],
+  ['movementAllocations', 'movimientos', item => item.assetId],
+  ['obligations', 'obligaciones', item => item.assetId],
+  ['obligationResolutions', 'obligaciones', item => item.assetId],
+  ['rentalContracts', 'alquileres', item => item.assetId],
+  ['rentalDeclarations', 'alquileres', item => item.assetId],
+  ['documents', 'documentos', item => item.assetId],
+  ['wealthNotes', 'notas', item => (item.targetType === 'asset' ? item.targetId : null)],
+  ['recoverableExpenseClaims', 'gastos a recuperar', item => item.assetId],
+  ['creditCardInstallmentPlans', 'planes de cuotas', item => item.assetId]
+];
+// Rows owned by the asset itself: removed together with it.
+const DELETE_CASCADE = ['assetOwnerships', 'assetStatusHistory'];
+
+router.delete('/:id', (req, res) => {
+  const db = req.app.locals.db;
+  const userId = req.session.userId;
+  const asset = db.findById('assets', req.params.id, userId);
+  if (!asset) return res.status(404).json({ error: 'Bien no encontrado' });
+  const references = DELETE_REFERENCES
+    .map(([collection, label, assetOf]) => ({ collection, label, count: db.findAll(collection, userId).filter(item => assetOf(item) === asset.id).length }))
+    .filter(item => item.count > 0);
+  if (references.length) {
+    const labels = [...new Set(references.map(item => item.label))];
+    return res.status(409).json({ error: `No se puede eliminar el bien porque tiene ${labels.join(', ')} asociados`, references });
+  }
+  const touched = ['assets', ...DELETE_CASCADE];
+  const snapshots = touched.map(collection => [collection, db.findAll(collection, userId)]);
+  try {
+    snapshots.forEach(([collection, rows]) => {
+      db.replace(collection, userId, rows.filter(item => (collection === 'assets' ? item.id : item.assetId) !== asset.id));
+    });
+  } catch (error) {
+    snapshots.forEach(([collection, rows]) => { try { db.replace(collection, userId, rows); } catch { /* best effort */ } });
+    db.clearCache();
+    return res.status(500).json({ error: 'No se pudo eliminar el bien' });
+  }
+  res.json({ ok: true });
+});
+
 module.exports = router;
