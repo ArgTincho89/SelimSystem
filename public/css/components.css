@@ -95,6 +95,7 @@
 
 .form-control::placeholder {
   color: var(--text-muted);
+  font-size: var(--fit-font-size, inherit);
 }
 
 select.form-control {
@@ -971,6 +972,16 @@ body.desktop-mode .fab {
   padding: 4px 8px;
   min-height: 0;
   height: auto;
+}
+
+.periods-filter select.form-control {
+  padding-right: 26px;
+  background-position: right 8px center;
+}
+
+/* Placeholders of any input shrink with FitText (public/js/utils/fit-text.js) instead of being cut off. */
+input::placeholder {
+  font-size: var(--fit-font-size, inherit);
 }
 
 .periods-filters-actions {

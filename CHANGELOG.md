@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.13.3] - 2026-11-16
+
+### Changed
+- Los placeholders de los campos de texto y el texto de los selectores ya no se cortan: si no entran en el componente, la tipografía se achica hasta que entren.
+
+### Fixed
+- En los filtros de Períodos, el texto de los selectores ya no queda debajo de la flecha.
+
 ## [1.13.2] - 2026-11-16
 
 ### Changed
