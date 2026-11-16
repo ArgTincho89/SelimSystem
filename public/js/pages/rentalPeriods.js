@@ -194,16 +194,10 @@ const RentalPeriods = {
   },
 
   async unresolve(item, ctx) {
-    const { confirmed } = await ConfirmDialog.open({
-      title: 'Anular resolución', danger: true, confirmLabel: 'Anular resolución',
-      message: `Vas a anular la resolución de "${item.concept}". El vencimiento vuelve a quedar pendiente de resolver.\nEsta acción no se puede deshacer. ¿Querés continuar?`
-    });
-    if (!confirmed) return;
-    try {
-      await API.obligations.voidResolution(item.refs.obligationId, item.refs.occurrenceId);
-      showToast('Resolución anulada');
-      await ctx.reload({ tab: 'periodos' });
-    } catch (error) { showToast(error.message, 'error'); }
+    await UndoDialog.open({
+      type: 'obligation.resolution', obligationId: item.refs.obligationId, occurrenceId: item.refs.occurrenceId, title: 'Anular resolución', confirmLabel: 'Anular resolución',
+      message: `Vas a anular la resolución de "${item.concept}". El vencimiento vuelve a quedar pendiente de resolver.`
+    }, { onDone: () => ctx.reload({ tab: 'periodos' }) });
   },
 
   actionsCell(period, ctx) {
@@ -260,34 +254,14 @@ const RentalPeriods = {
     return root;
   },
 
-  // "Deshacer cobro" with inline confirmation: undoes every given collection (same effect as deleting its
-  // transaction). A month collected by modality is one group: undoing any part undoes all of it.
+  // "Deshacer cobro": opens the UndoDialog (required "Motivo") that undoes every given collection (same effect as
+  // deleting its transaction). A month collected by modality is one group: undoing any part undoes all of it.
   undoCollections(collectionIds, afterDone, note) {
     if (!collectionIds.length) return null;
-    const wrapper = create('span', { style: { display: 'inline-flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' } });
-    const start = create('button', { className: 'btn btn-sm', type: 'button', textContent: 'Deshacer cobro', dataset: { undoCollection: 'true' }, style: { border: '1px solid var(--danger)', color: 'var(--danger)', background: 'transparent' } });
-    start.addEventListener('click', () => {
-      wrapper.replaceChildren(
-        create('small', { textContent: note }),
-        create('button', { className: 'btn btn-danger btn-sm', type: 'button', textContent: 'Confirmar y deshacer', onClick: async () => {
-          try {
-            let reset = false;
-            const done = new Set();
-            for (const collectionId of collectionIds) {
-              if (done.has(collectionId)) continue;
-              const result = await API.rentals.reverseCollection(collectionId);
-              reset = Boolean(result.reconciliationReset) || reset;
-              [collectionId, ...(result.collectionIds || [])].forEach(id => done.add(id));
-            }
-            showToast(reset ? 'Cobro deshecho. La conciliación de la cuenta quedó pendiente de revisar' : 'Cobro deshecho');
-            await afterDone();
-          } catch (error) { showToast(error.message, 'error'); }
-        } }),
-        create('button', { className: 'btn btn-ghost btn-sm', type: 'button', textContent: 'Cancelar', onClick: () => wrapper.replaceChildren(start) })
-      );
+    return create('button', {
+      className: 'btn btn-sm', type: 'button', textContent: 'Deshacer cobro', dataset: { undoCollection: 'true' }, style: { border: '1px solid var(--danger)', color: 'var(--danger)', background: 'transparent' },
+      onClick: () => UndoDialog.open({ type: 'rental.collection', collectionIds, message: note }, { onDone: afterDone })
     });
-    wrapper.appendChild(start);
-    return wrapper;
   },
 
   // "Ver" a rent collection (read-only): per modality payment date, amount, IVA (locación), payment
@@ -615,10 +589,6 @@ const MonthlySheet = {
     if (actions.includes('pay')) add('Registrar pago', () => AssetHistory.payObligation(row, ctx.afterDone));
     if (actions.includes('resolve')) add('Resolver', () => AssetHistory.resolveObligation(row, ctx.afterDone), 'btn btn-secondary btn-sm');
     if (actions.includes('collect') && row.refs.monthKey) add('Registrar cobro', () => AssetsPage.showRentMonthModal(row.refs.assetId, row.refs.monthKey, ctx.afterDone));
-    if (actions.includes('undo-collect') && row.refs.collectionIds?.length) {
-      const undo = AssetsPage.undoCollections(row.refs.collectionIds, ctx.afterDone, 'Se deshacen los cobros de este mes y vuelve a quedar pendiente de cobro.');
-      if (undo) buttons.push(undo);
-    }
     AssetHistory.actionProviders.forEach(provider => buttons.push(...(provider(row, ctx) || [])));
     return buttons;
   },

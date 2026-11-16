@@ -9,7 +9,7 @@ describe('Evolutivo 4 Registrar pago contract', () => {
   const pay = source.slice(source.indexOf('  async pay(obligation, occurrence) {'), source.indexOf('  // Soft delete'));
 
   it('asks for the expense-like fields', () => {
-    ['Importe pagado', "'Cuenta'", 'Fecha de pago', "'Categoría'", 'Medio de pago (opcional)', 'Título (opcional)', 'Notas (opcional)', 'Comprobante (opcional)'].forEach(label => {
+    ['Importe pagado', "'Cuenta'", 'Fecha de pago', "'Categoría'", 'Medio de pago (opcional)', 'Título (opcional)', "'Notas'", 'Comprobante (opcional)'].forEach(label => {
       expect(pay).toContain(label);
     });
   });

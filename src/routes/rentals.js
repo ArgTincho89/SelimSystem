@@ -6,6 +6,7 @@ const incomeAttribution = require('../services/income-attribution');
 const rentals = require('../services/rentals');
 const rentCollections = require('../services/rent-collections');
 const rentSchedule = require('../services/rent-schedule');
+const { parseReason, REASON_ERROR } = require('../services/reasons');
 
 const router = express.Router();
 router.use(requireAuth);
@@ -296,8 +297,11 @@ router.get('/collections/:id/view', (req, res) => {
 router.post('/collections/:id/reverse', (req, res) => {
   const db = req.app.locals.db;
   const userId = req.session.userId;
-  const result = rentals.reverseCollection(db, userId, req.params.id, req.app.locals.documentStorage);
+  const reason = parseReason((req.body || {}).reason);
+  if (!reason) return res.status(400).json({ error: REASON_ERROR });
+  const result = rentals.reverseCollection(db, userId, req.params.id, req.app.locals.documentStorage, reason);
   if (result.error) return res.status(result.status || 409).json({ error: result.error });
+  res.locals.activityNote = reason;
   res.json(result);
 });
 

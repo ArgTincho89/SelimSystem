@@ -135,10 +135,10 @@ describe('Unified alerts API', () => {
     expect(types(pending)).toEqual(['tenant_obligation_pending']);
     expect(pending[0].message).toContain('debe enviar el comprobante de pago de Expensas de Departamento Palermo');
     const url = `/api/obligations/${obligation.id}/occurrences/${occurrence.id}/resolution`;
-    const created = await agent.post(url).send({ tenantEntityId: tenantId, period: day(3).slice(0, 7), amount: 85 });
+    const created = await agent.post(url).send({ tenantEntityId: tenantId, notes: 'Resuelto', period: day(3).slice(0, 7), amount: 85 });
     expect(created.status).toBe(201);
     expect(forObligation(await alerts(), obligation)).toHaveLength(0);
-    expect((await agent.delete(url)).status).toBe(200);
+    expect((await agent.delete(url).send({ reason: 'Prueba' })).status).toBe(200);
     pending = forObligation(await alerts(), obligation);
     expect(types(pending)).toEqual(['tenant_obligation_pending']);
   });
@@ -147,7 +147,7 @@ describe('Unified alerts API', () => {
     const { obligation, occurrence } = await createObligation({ title: 'ABL', responsibilityType: 'tenant', startDate: day(-5), reminderLeadDays: 5 });
     expect(types(forObligation(await alerts(), obligation))).toEqual(['tenant_obligation_pending']);
     const url = `/api/obligations/${obligation.id}/occurrences/${occurrence.id}/resolution`;
-    expect((await agent.post(url).send({ tenantEntityId: tenantId, period: day(-5).slice(0, 7), amount: 85 })).status).toBe(201);
+    expect((await agent.post(url).send({ tenantEntityId: tenantId, notes: 'Resuelto', period: day(-5).slice(0, 7), amount: 85 })).status).toBe(201);
     expect(forObligation(await alerts(), obligation)).toHaveLength(0);
   });
 
@@ -158,12 +158,12 @@ describe('Unified alerts API', () => {
     expect(types(forObligation(await alerts(), first.obligation))).toEqual(['obligation_due']);
     // Tenant resolved, owner unpaid: owner alert remains, no tenant alert.
     const urlA = `/api/obligations/${first.obligation.id}/occurrences/${first.occurrence.id}/resolution`;
-    expect((await agent.post(urlA).send({ tenantEntityId: tenantId, period: day(2).slice(0, 7), amount: 50 })).status).toBe(201);
+    expect((await agent.post(urlA).send({ tenantEntityId: tenantId, notes: 'Resuelto', period: day(2).slice(0, 7), amount: 50 })).status).toBe(201);
     expect(types(forObligation(await alerts(), first.obligation))).toEqual(['obligation_due']);
 
     // Owner paid, tenant unresolved: tenant alert only.
     const second = await createObligation({ ...shared, title: 'Compartida B', startDate: day(2), reminderLeadDays: 5 });
-    const pay = await agent.post(`/api/obligations/${second.obligation.id}/occurrences/${second.occurrence.id}/payments`).send({ amount: 50, idempotencyKey: 'alerts-shared-b' });
+    const pay = await agent.post(`/api/obligations/${second.obligation.id}/occurrences/${second.occurrence.id}/payments`).send({ amount: 50, notes: 'Pago de prueba', idempotencyKey: 'alerts-shared-b' });
     expect(pay.status).toBe(201);
     const list = forObligation(await alerts(), second.obligation);
     expect(types(list)).toContain('tenant_obligation_pending');
@@ -173,14 +173,14 @@ describe('Unified alerts API', () => {
 
   it('reports partial payments and missing receipts', async () => {
     const { obligation, occurrence } = await createObligation({ title: 'Seguro hogar', startDate: day(-2), reminderLeadDays: 3, estimatedAmount: 100 });
-    const pay = await agent.post(`/api/obligations/${obligation.id}/occurrences/${occurrence.id}/payments`).send({ amount: 40, idempotencyKey: 'alerts-partial' });
+    const pay = await agent.post(`/api/obligations/${obligation.id}/occurrences/${occurrence.id}/payments`).send({ amount: 40, notes: 'Pago de prueba', idempotencyKey: 'alerts-partial' });
     expect(pay.status).toBe(201);
     const partial = forObligation(await alerts(), obligation);
     expect(types(partial)).toEqual(['partial_payment']);
     expect(partial[0]).toMatchObject({ amount: 60, status: 'overdue' });
 
     const full = await createObligation({ title: 'Municipal', startDate: day(-1), reminderLeadDays: 3, estimatedAmount: 10 });
-    expect((await agent.post(`/api/obligations/${full.obligation.id}/occurrences/${full.occurrence.id}/payments`).send({ amount: 10, idempotencyKey: 'alerts-full' })).status).toBe(201);
+    expect((await agent.post(`/api/obligations/${full.obligation.id}/occurrences/${full.occurrence.id}/payments`).send({ amount: 10, notes: 'Pago de prueba', idempotencyKey: 'alerts-full' })).status).toBe(201);
     const missing = forObligation(await alerts('?type=document_pending'), full.obligation);
     expect(missing).toHaveLength(1);
     expect(missing[0].message).toMatch(/^Falta adjuntar el comprobante de pago de Municipal de \w+ correspondiente a Departamento Palermo\.$/);

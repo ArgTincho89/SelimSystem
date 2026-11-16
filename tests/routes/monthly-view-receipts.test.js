@@ -61,7 +61,7 @@ describe('Monthly view obligation receipts', () => {
   it('lists the payment and its receipts, including several files', async () => {
     const { obligation, occurrence } = await create();
     const paid = await agent.post(`/api/obligations/${obligation.id}/occurrences/${occurrence.id}/payments`)
-      .send({ amount: 100, accountId, idempotencyKey: 'receipt-key-abcdef', paymentMethod: 'transfer' });
+      .send({ amount: 100, accountId, notes: 'Pago de prueba', idempotencyKey: 'receipt-key-abcdef', paymentMethod: 'transfer' });
     expect(paid.status).toBe(201);
     const transactionId = paid.body.transaction.id;
     const first = await upload({ transactionId, occurrenceId: occurrence.id });
@@ -79,7 +79,7 @@ describe('Monthly view obligation receipts', () => {
     const { obligation, occurrence } = await create({ responsibilityType: 'tenant' });
     const doc = await upload({ occurrenceId: occurrence.id });
     const resolved = await agent.post(`/api/obligations/${obligation.id}/occurrences/${occurrence.id}/resolution`)
-      .send({ tenantEntityId: tenantId, period: month, amount: 100, documentIds: [doc.body.id], resolvedAt: today });
+      .send({ tenantEntityId: tenantId, notes: 'Resuelto', period: month, amount: 100, documentIds: [doc.body.id], resolvedAt: today });
     expect(resolved.status).toBe(201);
     const result = await row(occurrence);
     expect(result).toMatchObject({ payments: [], resolvedAt: today });
@@ -92,7 +92,7 @@ describe('Monthly view obligation receipts', () => {
     const text = JSON.stringify(before);
     expect(text).toContain(occurrence.id);
     await agent.post(`/api/obligations/${obligation.id}/occurrences/${occurrence.id}/resolution`)
-      .send({ tenantEntityId: tenantId, period: month, amount: 100 });
+      .send({ tenantEntityId: tenantId, notes: 'Resuelto', period: month, amount: 100 });
     expect(JSON.stringify((await agent.get('/api/alerts')).body)).not.toContain(occurrence.id);
   });
 });

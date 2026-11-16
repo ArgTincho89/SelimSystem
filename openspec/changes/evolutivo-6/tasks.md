@@ -41,28 +41,28 @@ Review budget is 800 lines (`review_budget_lines`); `size:exception` is recorded
 
 ## W1: quick-fixes (commit: `feat(ui): quick fixes for resolve tenants, rent alerts and provider form`)
 
-- [ ] 1.1 `public/js/pages/obligations.js` `showResolveModal`: tenants from `obligation.rentalContractId`, then asset active contract (`GET /rentals?assetId=`), then all tenants; preselect the first.
-- [ ] 1.2 `public/js/pages/rentalModal.js`: `rent_due` alerts get `alert-critical`; `cardActions(contract, { collect:false })` in Contratos (Registrar cobro stays in Resumen). CSS `.alert-critical` (red, bold).
-- [ ] 1.3 `public/js/pages/entities.js` `showForm`: always fetch `API.categories.list()` (expense); empty hint "Primero creá una categoría de gastos".
-- [ ] 1.4 `public/js/pages/settings.js`: hide "Hacer principal" when the account is principal; audit archive/delete on every account action surface.
-- [ ] 1.5 Tests: new `tests/ui/evolutivo6-quickfixes.test.js` (preselection, contract-only tenants, class, no collect in Contratos, hint, regression for principal); update `evolutivo3-s4`/`s4c` if affected.
+- [x] 1.1 `public/js/pages/obligations.js` `showResolveModal`: tenants from `obligation.rentalContractId`, then asset active contract (`GET /rentals?assetId=`), then all tenants; preselect the first.
+- [x] 1.2 `public/js/pages/rentalModal.js`: `rent_due` alerts get `alert-critical`; `cardActions(contract, { collect:false })` in Contratos (Registrar cobro stays in Resumen). CSS `.alert-critical` (red, bold).
+- [x] 1.3 `public/js/pages/entities.js` `showForm`: always fetch `API.categories.list()` (expense); empty hint "Primero creá una categoría de gastos".
+- [x] 1.4 `public/js/pages/settings.js`: hide "Hacer principal" when the account is principal; audit archive/delete on every account action surface.
+- [x] 1.5 Tests: new `tests/ui/evolutivo6-quickfixes.test.js` (preselection, contract-only tenants, class, no collect in Contratos, hint, regression for principal); update `evolutivo3-s4`/`s4c` if affected.
 
 ## W2: duplicate-guard (commit: `feat(ui): global guard against double clicks and duplicate writes`)
 
-- [ ] 2.1 RED `tests/ui/evolutivo6-guard.test.js`: same/different body dedupe, GET not deduped, new request after settle, busy button, reject restores `disabled`, `data-repeatable` opt-out.
-- [ ] 2.2 `public/js/api.js`: `inflight` Map for non-GET keyed by `method+url+JSON(body)`; `delete(url, body)`.
-- [ ] 2.3 `public/js/utils/dom.js`: `guard(el, event, handler)` for `create()` `on*` and `on()` (click/submit): busy state, `aria-busy`, restore in `finally`.
-- [ ] 2.4 CSS `[aria-busy]` styles. Fix any existing UI test broken by the guard.
+- [x] 2.1 RED `tests/ui/evolutivo6-guard.test.js`: same/different body dedupe, GET not deduped, new request after settle, busy button, reject restores `disabled`, `data-repeatable` opt-out.
+- [x] 2.2 `public/js/api.js`: `inflight` Map for non-GET keyed by `method+url+JSON(body)`; `delete(url, body)`.
+- [x] 2.3 `public/js/utils/dom.js`: `guard(el, event, handler)` for `create()` `on*` and `on()` (click/submit): busy state, `aria-busy`, restore in `finally`.
+- [x] 2.4 CSS `[aria-busy]` styles. Fix any existing UI test broken by the guard.
 
 ## W3: reversals-with-note (commit: `feat(obligations): mandatory notes and reasoned undo`)
 
-- [ ] 3.1 RED `tests/routes/evolutivo6-notes-reversal.test.js`: 400 "Las notas son obligatorias" on resolve (<=2000) and pay (<=1000); `DELETE .../resolution` `{reason}` 1-500 -> `voidReason`; revert reason required; `POST /rentals/collections/:id/reverse` `{reason}` -> `reversalReason` (collection and group); 409 on replays.
-- [ ] 3.2 `src/routes/obligations.js`, `src/services/obligations.js`, `src/services/obligation-payment-reversal.js`: validations and persistence of reasons.
-- [ ] 3.3 `src/routes/rentals.js`, `src/services/rentals.js`, `src/services/rent-collections.js`: `reverseCollection`/`reverseGroup` take `reason`.
-- [ ] 3.4 `src/services/asset-history.js`: expose `voidReason`/`reversalReason`.
-- [ ] 3.5 Create `public/js/components/undoDialog.js` (`UndoDialog.open(descriptor, { onDone })`, required Motivo 1-500, dispatch to 3 endpoints); register in `index.html`/`sw.js`.
-- [ ] 3.6 `assetHistory.js` single "Deshacer" for `revert`/`unresolve`/`undo-collect`, "Motivo" in detail; `obligations.js` `revertPayment` and required notes in resolve/pay; `rentalPeriods.js` `undoCollections` use `UndoDialog`.
-- [ ] 3.7 Tests: new `tests/ui/evolutivo6-undo-contract.test.js` (empty note blocks confirm). Update payloads in `evolutivo4-pay-contract`, `obligation-payment-*`, `obligation-resolutions`, `rentals-reverse`, `rental-batch-collections`, `evolutivo5-revert`, `evolutivo5-periods`, `evolutivo5-monthly-sheet`, `evolutivo3-s2`/`s4c`.
+- [x] 3.1 RED `tests/routes/evolutivo6-notes-reversal.test.js`: 400 "Las notas son obligatorias" on resolve (<=2000) and pay (<=1000); `DELETE .../resolution` `{reason}` 1-500 -> `voidReason`; revert reason required; `POST /rentals/collections/:id/reverse` `{reason}` -> `reversalReason` (collection and group); 409 on replays.
+- [x] 3.2 `src/routes/obligations.js`, `src/services/obligations.js`, `src/services/obligation-payment-reversal.js`: validations and persistence of reasons.
+- [x] 3.3 `src/routes/rentals.js`, `src/services/rentals.js`, `src/services/rent-collections.js`: `reverseCollection`/`reverseGroup` take `reason`.
+- [x] 3.4 `src/services/asset-history.js`: expose `voidReason`/`reversalReason`.
+- [x] 3.5 Create `public/js/components/undoDialog.js` (`UndoDialog.open(descriptor, { onDone })`, required Motivo 1-500, dispatch to 3 endpoints); register in `index.html`/`sw.js`.
+- [x] 3.6 `assetHistory.js` single "Deshacer" for `revert`/`unresolve`/`undo-collect`, "Motivo" in detail; `obligations.js` `revertPayment` and required notes in resolve/pay; `rentalPeriods.js` `undoCollections` use `UndoDialog`.
+- [x] 3.7 Tests: new `tests/ui/evolutivo6-undo-contract.test.js` (empty note blocks confirm). Update payloads in `evolutivo4-pay-contract`, `obligation-payment-*`, `obligation-resolutions`, `rentals-reverse`, `rental-batch-collections`, `evolutivo5-revert`, `evolutivo5-periods`, `evolutivo5-monthly-sheet`, `evolutivo3-s2`/`s4c`.
 
 ## W4: log-enrichment (commit: `feat(logs): descriptive messages and structured metadata`)
 

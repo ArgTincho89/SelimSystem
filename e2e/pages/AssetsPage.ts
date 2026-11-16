@@ -76,13 +76,14 @@ export class AssetsPage extends BasePage {
     await this.page.waitForSelector('.modal-overlay', { state: 'hidden', timeout: 10000 });
   }
 
-  /** Opens "Ver alquiler", goes to the "Períodos" tab and undoes the collected rent month with its inline confirmation. */
+  /** Opens "Ver alquiler", goes to the "Períodos" tab and undoes the collected rent month through the "Deshacer" dialog (required reason). */
   async undoCollectedMonth(assetName: string): Promise<void> {
     await this.page.locator('article.card', { hasText: assetName }).getByRole('button', { name: 'Ver alquiler', exact: true }).click();
     await this.modal.getByRole('tab', { name: 'Períodos' }).click();
     const month = this.modal.locator('[data-rent-month]', { hasText: 'Cobrado' }).first();
     await month.getByRole('button', { name: 'Deshacer cobro' }).click();
-    await month.getByRole('button', { name: 'Confirmar y deshacer' }).click();
+    await this.topModal.getByLabel('Motivo', { exact: true }).fill('Cobro cargado por error');
+    await this.topModal.locator('[data-undo-confirm]').click();
     await expect(this.modal.locator('[data-rent-month]', { hasText: 'Cobrado' })).toHaveCount(0);
     await this.modal.getByLabel('Cerrar').click();
   }
@@ -114,12 +115,12 @@ export class AssetsPage extends BasePage {
     await this.page.locator('.asset-history').waitFor({ state: 'visible' });
   }
 
-  /** History row > "Ver detalle" > "Revertir pago" > confirmation with an optional reason. */
+  /** History row > "Ver detalle" > "Deshacer" > dialog with the required "Motivo". */
   async revertPaymentFromHistory(concept: string, reason: string): Promise<void> {
     await this.page.locator('[data-history-row]', { hasText: concept }).first().getByRole('button', { name: 'Ver detalle' }).click();
-    await this.topModal.locator('[data-history-action="revert"]').first().click();
-    await this.topModal.getByLabel('Motivo (opcional)').fill(reason);
-    await this.topModal.locator('[data-confirm-action]').click();
+    await this.topModal.locator('[data-history-action="undo"]').first().click();
+    await this.topModal.getByLabel('Motivo', { exact: true }).fill(reason);
+    await this.topModal.locator('[data-undo-confirm]').click();
     await expect(this.page.locator('[data-history-row]', { hasText: 'Pago revertido' }).first()).toBeVisible();
   }
 

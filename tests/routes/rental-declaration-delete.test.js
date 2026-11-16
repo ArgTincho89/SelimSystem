@@ -45,7 +45,7 @@ describe('DELETE /api/rentals/declarations/:id, ?summary=1 and the safe edit of 
     expect(blocked.status).toBe(409);
     expect(blocked.body.error).toBe('No se puede eliminar este alquiler porque tiene cobros registrados. Deshacé los cobros primero.');
     expect(count('rentalDeclarations')).toBe(1);
-    expect((await f.agent.post(`/api/rentals/collections/${collected.body.id}/reverse`).send({})).status).toBe(200);
+    expect((await f.agent.post(`/api/rentals/collections/${collected.body.id}/reverse`).send({ reason: 'Prueba' })).status).toBe(200);
     const allowed = await remove();
     expect(allowed.status).toBe(200);
     expect(allowed.body.deleted).toBe(true);

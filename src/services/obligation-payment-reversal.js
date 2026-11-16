@@ -5,9 +5,9 @@
 const ledger = require('./account-ledger');
 const obligations = require('./obligations');
 const movementDependents = require('./movement-dependents');
+const { MAX_REASON, REASON_ERROR, parseReason } = require('./reasons');
 
 const REVERSALS = 'obligationPaymentReversals';
-const MAX_REASON = 500;
 const TOUCHED = ['transactions', 'documents', 'accounts', REVERSALS];
 
 const DEPENDENT_ERROR = 'No se puede revertir este pago porque tiene movimientos dependientes.';
@@ -55,11 +55,12 @@ function paymentDetail(db, userId, obligation, occurrence, transaction) {
 }
 
 /**
- * Reverts one payment. `reason` is optional (at most 500 characters). Atomic: on any failure the touched collections
+ * Reverts one payment. `reason` is required (1 to 500 characters, trimmed). Atomic: on any failure the touched collections
  * are restored from a snapshot. Returns `{ reversal, reconciliationReset }` or `{ error, status }`.
  */
 function revert(db, userId, { obligation, occurrence, transaction, reason }) {
-  if (reason !== undefined && reason !== null && (typeof reason !== 'string' || reason.trim().length > MAX_REASON)) return fail(`El motivo debe tener hasta ${MAX_REASON} caracteres`);
+  const reversalReason = parseReason(reason);
+  if (!reversalReason) return fail(REASON_ERROR);
   if (reversalOf(db, userId, { transactionId: transaction.id })) return fail(ALREADY_REVERTED, 409);
   if (isTenantSide(obligation, occurrence)) return fail(TENANT_ERROR, 409);
   if (movementDependents.dependentMovement(db, userId, transaction, { claims: true })) return fail(DEPENDENT_ERROR, 409);
@@ -73,7 +74,7 @@ function revert(db, userId, { obligation, occurrence, transaction, reason }) {
   try {
     const reversal = db.create(REVERSALS, {
       obligationId: obligation.id, occurrenceId: occurrence.id, transactionId: transaction.id, paymentId: transaction.paymentId || null,
-      reversedAt: new Date().toISOString(), reason: typeof reason === 'string' ? reason.trim() : '',
+      reversedAt: new Date().toISOString(), reason: reversalReason,
       idempotencyKeyHash: transaction.obligationIdempotencyKey || null, documentIds: documents.map(item => item.id),
       snapshot: {
         date: transaction.fecha, amount: ledger.fromMinorUnits(transaction.amountMinor ?? ledger.toMinorUnits(transaction.monto, currency), currency), currencyCode: currency,

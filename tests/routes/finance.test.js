@@ -105,7 +105,7 @@ describe('General finance associations and recoveries', () => {
     expect(obligation.status).toBe(201);
     const occurrence = obligation.body.occurrences.find(item => item.date === today);
     const payment = await agent.post(`/api/obligations/${obligation.body.id}/occurrences/${occurrence.id}/payments`).send({
-      amount: 20, accountId, categoryId, idempotencyKey: 'finance-obligation-payment'
+      amount: 20, accountId, categoryId, notes: 'Pago de prueba', idempotencyKey: 'finance-obligation-payment'
     });
     expect(payment.status).toBe(201);
     const transactionId = payment.body.transaction.id;

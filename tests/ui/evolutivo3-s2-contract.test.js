@@ -23,10 +23,10 @@ describe('Evolutivo 3 S2 rent collection UI contract', () => {
     expect(dialog.match(/const idempotencyKey =/g)).toHaveLength(1);
     expect(dialog.indexOf('const idempotencyKey =')).toBeLessThan(dialog.indexOf('onClick'));
   });
-  it('offers Deshacer cobro with inline confirmation and no window.confirm', () => {
+  it('offers Deshacer cobro through the UndoDialog (required reason) and no window.confirm', () => {
     const periods = read('js/pages/rentalPeriods.js');
     expect(periods).toContain('Deshacer cobro');
-    expect(periods).toContain('Confirmar y deshacer');
+    expect(periods).toContain('UndoDialog.open({ type: \'rental.collection\'');
     expect(periods).not.toContain('Anular cobro');
     expect(periods.slice(periods.indexOf('undoCollections('), periods.indexOf('async showCollectionView'))).not.toMatch(/[^.\w]confirm\(/);
     expect(read('js/api.js')).toContain('reverseCollection');

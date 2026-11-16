@@ -25,7 +25,7 @@ describe('Obligation payment context and owner/tenant ledger impact', () => {
     return { obligation: response.body, occurrence: response.body.occurrences[0] };
   };
   const context = (o, occ, who = agent) => who.get(`/api/obligations/${o.id}/occurrences/${occ.id}/payment-context`);
-  const pay = (o, occ, body = {}) => agent.post(`/api/obligations/${o.id}/occurrences/${occ.id}/payments`).send({ amount: 100, idempotencyKey: `key-${n += 1}-abcdefgh`, ...body });
+  const pay = (o, occ, body = {}) => agent.post(`/api/obligations/${o.id}/occurrences/${occ.id}/payments`).send({ amount: 100, notes: 'Pago de prueba', idempotencyKey: `key-${n += 1}-abcdefgh`, ...body });
   const summary = async () => (await agent.get(`/api/summary?month=${today.slice(0, 7)}`)).body;
 
   beforeAll(async () => {
@@ -132,7 +132,7 @@ describe('Obligation payment context and owner/tenant ledger impact', () => {
     const before = await summary();
     const { obligation, occurrence } = await create({ accountId, estimatedAmount: 250 });
     const key = 'replay-key-abcdefgh';
-    const body = { amount: 250, accountId, idempotencyKey: key, paymentMethod: 'transfer' };
+    const body = { amount: 250, accountId, notes: 'Pago de prueba', idempotencyKey: key, paymentMethod: 'transfer' };
     const paid = await agent.post(`/api/obligations/${obligation.id}/occurrences/${occurrence.id}/payments`).send(body);
     expect(paid.status).toBe(201);
     expect(paid.body.transaction.paymentMethod).toBe('transfer');
@@ -177,7 +177,7 @@ describe('Obligation payment context and owner/tenant ledger impact', () => {
     expect(assetId).toBeTruthy();
     const { obligation, occurrence } = await create({ assetId, responsibilityType: 'tenant' });
     const before = await summary();
-    const resolved = await agent.post(`/api/obligations/${obligation.id}/occurrences/${occurrence.id}/resolution`).send({ tenantEntityId: tenantId, period: today.slice(0, 7), amount: 100 });
+    const resolved = await agent.post(`/api/obligations/${obligation.id}/occurrences/${occurrence.id}/resolution`).send({ tenantEntityId: tenantId, notes: 'Resuelto', period: today.slice(0, 7), amount: 100 });
     expect(resolved.status).toBe(201);
     const after = await summary();
     expect(after.gastosNetos).toBe(before.gastosNetos);

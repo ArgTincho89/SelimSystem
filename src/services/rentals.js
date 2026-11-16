@@ -431,17 +431,17 @@ const NON_TRANSACTION_TARGETS = ['assetId', 'entityId', 'obligationId', 'contrac
  * dependent movement (refund, normalization, allocation) blocks the undo. `storage` is optional and
  * is used to delete stored receipt files.
  */
-function reverseCollection(db, userId, collectionId, storage = null) {
+function reverseCollection(db, userId, collectionId, storage = null, reason = null) {
   const collection = db.findById('rentCollections', collectionId, userId);
   if (!collection) {
     // A "Cobrar mes" group id undoes every modality of the month at once.
     const group = db.findById('rentCollectionGroups', collectionId, userId);
-    return group ? require('./rent-collections').reverseGroup(db, userId, group, storage) : { status: 404, error: 'Cobro no encontrado' };
+    return group ? require('./rent-collections').reverseGroup(db, userId, group, storage, reason) : { status: 404, error: 'Cobro no encontrado' };
   }
   if (collection.reversedAt) return { status: 409, error: 'Ese cobro ya fue deshecho' };
   const group = collection.groupId ? db.findById('rentCollectionGroups', collection.groupId, userId) : null;
   if (group) {
-    const result = require('./rent-collections').reverseGroup(db, userId, group, storage);
+    const result = require('./rent-collections').reverseGroup(db, userId, group, storage, reason);
     return result.error ? result : { ...result, collectionId: collection.id };
   }
   const transaction = db.findById('transactions', collection.transactionId, userId);
@@ -460,7 +460,7 @@ function reverseCollection(db, userId, collectionId, storage = null) {
   try {
     allocations.forEach(item => { db.remove('rentCollectionAllocations', item.id, userId); removedAllocations.push(item); });
     if (transaction) { db.remove('transactions', transaction.id, userId); removedTransaction = transaction; }
-    db.update('rentCollections', collection.id, { reversedAt: new Date().toISOString(), reversedTransactionId: transaction?.id || null, reversedOccurrenceIds: [...new Set(allocations.map(item => item.occurrenceId))] }, userId);
+    db.update('rentCollections', collection.id, { reversedAt: new Date().toISOString(), reversedTransactionId: transaction?.id || null, reversedOccurrenceIds: [...new Set(allocations.map(item => item.occurrenceId))], ...(reason ? { reversalReason: reason } : {}) }, userId);
     documents.forEach(item => {
       if (onlyTarget(item)) { db.remove('documents', item.id, userId); removedDocuments.push(item); }
       else db.update('documents', item.id, { transactionId: null, detachedFromCollectionId: collection.id }, userId);
@@ -473,7 +473,7 @@ function reverseCollection(db, userId, collectionId, storage = null) {
       if (removedTransaction && !db.findById('transactions', removedTransaction.id, userId)) db.create('transactions', removedTransaction, userId);
       removedDocuments.forEach(item => { if (!db.findById('documents', item.id, userId)) db.create('documents', item, userId); });
       documents.filter(item => !onlyTarget(item)).forEach(item => { if (db.findById('documents', item.id, userId)) db.update('documents', item.id, { transactionId: item.transactionId, detachedFromCollectionId: item.detachedFromCollectionId ?? null }, userId); });
-      if (db.findById('rentCollections', collection.id, userId)?.reversedAt) db.update('rentCollections', collection.id, { reversedAt: null, reversedTransactionId: null }, userId);
+      if (db.findById('rentCollections', collection.id, userId)?.reversedAt) db.update('rentCollections', collection.id, { reversedAt: null, reversedTransactionId: null, reversalReason: null }, userId);
       if (resetsReconciliation) db.update('accounts', account.id, { reconciled: true, includedMovementIds: account.includedMovementIds || [] }, userId);
     } catch { /* best effort restore */ }
     db.clearCache();

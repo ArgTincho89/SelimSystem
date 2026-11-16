@@ -78,7 +78,7 @@ describe('Obligations', () => {
   it('records partial payments exactly once, derives remaining balance, and protects linked movements', async () => {
     const obligation = await createObligation({ startDate: today, estimatedAmount: 100 });
     const occurrence = await occurrenceFor(obligation.id, today);
-    const payment = { amount: 40, accountId, categoryId, idempotencyKey: 'payment-key-0001' };
+    const payment = { amount: 40, accountId, categoryId, notes: 'Pago de prueba', idempotencyKey: 'payment-key-0001' };
     const first = await agent.post(`/api/obligations/${obligation.id}/occurrences/${occurrence.id}/payments`).send(payment);
     expect(first.status).toBe(201);
     const retry = await agent.post(`/api/obligations/${obligation.id}/occurrences/${occurrence.id}/payments`).send(payment);
@@ -101,14 +101,14 @@ describe('Obligations', () => {
     const obligation = await createObligation({ startDate: today, estimatedAmount: 10 });
     const occurrence = await occurrenceFor(obligation.id, today);
     const path = `/api/obligations/${obligation.id}/occurrences/${occurrence.id}/payments`;
-    expect((await agent.post(path).send({ amount: 1, accountId: 'missing', categoryId, idempotencyKey: 'validation-01' })).status).toBe(400);
-    expect((await agent.post(path).send({ amount: 1, accountId, categoryId: 'missing', idempotencyKey: 'validation-02' })).status).toBe(400);
-    expect((await agent.post(path).send({ amount: 11, accountId, categoryId, idempotencyKey: 'validation-03' })).status).toBe(400);
+    expect((await agent.post(path).send({ amount: 1, accountId: 'missing', categoryId, notes: 'Pago de prueba', idempotencyKey: 'validation-01' })).status).toBe(400);
+    expect((await agent.post(path).send({ amount: 1, accountId, categoryId: 'missing', notes: 'Pago de prueba', idempotencyKey: 'validation-02' })).status).toBe(400);
+    expect((await agent.post(path).send({ amount: 11, accountId, categoryId, notes: 'Pago de prueba', idempotencyKey: 'validation-03' })).status).toBe(400);
     const archivedAccount = (await agent.post('/api/accounts').send({ name: 'Archived account', currency: 'EUR' })).body;
     await agent.post(`/api/accounts/${archivedAccount.id}/archive`);
-    expect((await agent.post(path).send({ amount: 1, accountId: archivedAccount.id, categoryId, idempotencyKey: 'validation-04' })).status).toBe(400);
+    expect((await agent.post(path).send({ amount: 1, accountId: archivedAccount.id, categoryId, notes: 'Pago de prueba', idempotencyKey: 'validation-04' })).status).toBe(400);
     const usdAccount = (await agent.post('/api/accounts').send({ name: 'Dollar account', currency: 'USD' })).body;
-    expect((await agent.post(path).send({ amount: 1, accountId: usdAccount.id, categoryId, idempotencyKey: 'validation-05' })).status).toBe(400);
+    expect((await agent.post(path).send({ amount: 1, accountId: usdAccount.id, categoryId, notes: 'Pago de prueba', idempotencyKey: 'validation-05' })).status).toBe(400);
   });
 
   it('clears an unpersisted payment from cache when transaction persistence fails', async () => {
@@ -121,7 +121,7 @@ describe('Obligations', () => {
     };
     try {
       const failed = await agent.post(`/api/obligations/${obligation.id}/occurrences/${occurrence.id}/payments`).send({
-        amount: 10, accountId, categoryId, idempotencyKey: 'rollback-payment-01'
+        amount: 10, accountId, categoryId, notes: 'Pago de prueba', idempotencyKey: 'rollback-payment-01'
       });
       expect(failed.status).toBe(500);
     } finally {
@@ -134,7 +134,7 @@ describe('Obligations', () => {
     const obligation = await createObligation({ startDate: today, recurrenceFrequency: 'monthly', estimatedAmount: 30 });
     const initial = (await agent.get(`/api/obligations/${obligation.id}`)).body.occurrences;
     const paidOccurrence = initial.find(item => item.date === today);
-    const paid = await agent.post(`/api/obligations/${obligation.id}/occurrences/${paidOccurrence.id}/payments`).send({ amount: 30, accountId, categoryId, idempotencyKey: 'series-paid-0001' });
+    const paid = await agent.post(`/api/obligations/${obligation.id}/occurrences/${paidOccurrence.id}/payments`).send({ amount: 30, accountId, categoryId, notes: 'Pago de prueba', idempotencyKey: 'series-paid-0001' });
     expect(paid.status).toBe(201);
     const future = initial.find(item => item.date > today);
     expect(future).toBeTruthy();
@@ -173,7 +173,7 @@ describe('Obligations', () => {
 
     const paidObligation = await createObligation({ startDate: today });
     const paidOccurrence = await occurrenceFor(paidObligation.id, today);
-    const paidTransaction = await agent.post(`/api/obligations/${paidObligation.id}/occurrences/${paidOccurrence.id}/payments`).send({ amount: 100, accountId, categoryId, idempotencyKey: 'cancel-paid-0001' });
+    const paidTransaction = await agent.post(`/api/obligations/${paidObligation.id}/occurrences/${paidOccurrence.id}/payments`).send({ amount: 100, accountId, categoryId, notes: 'Pago de prueba', idempotencyKey: 'cancel-paid-0001' });
     expect((await agent.post(`/api/obligations/${paidObligation.id}/occurrences/${paidOccurrence.id}/cancel`).send({})).status).toBe(409);
     expect((await agent.delete(`/api/obligations/${paidObligation.id}`)).status).toBe(200);
     expect((await occurrenceFor(paidObligation.id, today)).status).toBe('paid');

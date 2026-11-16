@@ -2,6 +2,7 @@ const crypto = require('crypto');
 const { generateRecurringInstances, addDaysDateOnly } = require('../utils/recurring');
 const ledger = require('./account-ledger');
 const rentals = require('./rentals');
+const { parseReason, REASON_ERROR } = require('./reasons');
 
 const COLLECTION = 'obligations';
 const OCCURRENCES = 'obligationOccurrences';
@@ -474,6 +475,8 @@ function updateOccurrence(db, userId, obligation, occurrence, body, scope = 'thi
 
 const PERIOD_PATTERN = /^\d{4}-(0[1-9]|1[0-2])$/;
 
+const NOTES_REQUIRED = 'Las notas son obligatorias';
+
 function failure(error, status = 400) {
   return { error, status };
 }
@@ -515,7 +518,8 @@ function createResolution(db, userId, obligation, occurrence, body = {}) {
   const today = ledger.localDateForUser(db, userId);
   const resolvedAt = body.resolvedAt === undefined || body.resolvedAt === null || body.resolvedAt === '' ? today : body.resolvedAt;
   if (!validDate(resolvedAt)) return failure('La fecha de resolución no es válida');
-  if (body.notes !== undefined && body.notes !== null && (typeof body.notes !== 'string' || body.notes.length > 2000)) return failure('Las notas no son válidas');
+  if (typeof body.notes !== 'string' || !body.notes.trim()) return failure(NOTES_REQUIRED);
+  if (body.notes.trim().length > 2000) return failure('Las notas no son válidas');
   const documents = validateResolutionDocuments(db, userId, body.documentIds, occurrence.id, tenant.id);
   if (documents.error) return documents;
   const resolution = db.create(RESOLUTIONS, {
@@ -523,15 +527,17 @@ function createResolution(db, userId, obligation, occurrence, body = {}) {
     tenantEntityId: tenant.id, contractId, period: body.period,
     portion: responsibility.responsibilityType === 'tenant' ? 'full' : 'tenant_portion',
     amountMinor, currencyCode: occurrence.currencyCode, documentIds: documents.value,
-    resolvedAt, notes: typeof body.notes === 'string' ? body.notes.trim() : '', status: 'active'
+    resolvedAt, notes: body.notes.trim(), status: 'active'
   }, userId);
   return { resolution };
 }
 
-function voidResolution(db, userId, occurrence) {
+function voidResolution(db, userId, occurrence, reason) {
   const resolution = activeResolution(db, userId, occurrence.id);
   if (!resolution) return failure('La ocurrencia no tiene una resolución activa', 404);
-  return { resolution: db.update(RESOLUTIONS, resolution.id, { status: 'voided', voidedAt: new Date().toISOString() }, userId) };
+  const voidReason = parseReason(reason);
+  if (!voidReason) return failure(REASON_ERROR);
+  return { resolution: db.update(RESOLUTIONS, resolution.id, { status: 'voided', voidedAt: new Date().toISOString(), voidReason }, userId) };
 }
 
 function listResolutions(db, userId, filters = {}) {
@@ -612,7 +618,7 @@ function idempotencyDigest(key) {
 }
 
 module.exports = {
-  COLLECTION, OCCURRENCES, RESOLUTIONS, validDate, occurrenceView, dueStateFor, activeResolution, createResolution, voidResolution, listResolutions, occurrencesFor,
+  NOTES_REQUIRED, COLLECTION, OCCURRENCES, RESOLUTIONS, validDate, occurrenceView, dueStateFor, activeResolution, createResolution, voidResolution, listResolutions, occurrencesFor,
   validateDefinition, validateResponsibility, portionsFor, responsibilityFor, setResponsibility, RESPONSIBILITY_TYPES,
   reassignEndedTenantObligations, releasePendingRentalLinks, finalizePendingRentalLinks, expirePendingRentalLinks, runResponsibilityMaintenance, PENDING_LINK_MAX_AGE_MS, EXTERNAL_IDENTIFIER_TYPES, createObligation, updateOccurrence, paymentTransactions, getAlerts, idempotencyDigest, isScheduledOn, paymentContext, categoryChain
 };

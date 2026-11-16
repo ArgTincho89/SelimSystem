@@ -160,8 +160,8 @@ describe('Activity logs', () => {
     expect(collected.status).toBe(201);
     expect(count()).toBe(before + 1);
     expect((await logs()).items[0].message).toBe('Registraste el cobro del alquiler de Casa Centro, período enero 2025, febrero 2025');
-    await f.agent.post(`/api/rentals/collections/${collected.body.id}/reverse`);
-    expect((await logs()).items[0].message).toBe('Deshiciste el cobro del alquiler de Casa Centro, período enero 2025, febrero 2025, importe ARS 200000');
+    await f.agent.post(`/api/rentals/collections/${collected.body.id}/reverse`).send({ reason: 'Prueba' });
+    expect((await logs()).items[0].message).toBe('Deshiciste el cobro del alquiler de Casa Centro, período enero 2025, febrero 2025, importe ARS 200000, motivo: Prueba');
     expect(count()).toBe(before + 2);
   });
 

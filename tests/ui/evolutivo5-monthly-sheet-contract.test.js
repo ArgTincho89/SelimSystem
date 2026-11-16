@@ -20,10 +20,8 @@ describe('Evolutivo 5 monthly sheet modal contract', () => {
     const Modal = { push: jest.fn((title, body, options) => pushed.push({ title, body, options })), hide: jest.fn() };
     const showToast = jest.fn();
     const loaded = loadBrowser(['js/utils/format.js', 'js/components/dataTable.js', 'js/pages/assetHistory.js', 'js/pages/rentalPeriods.js'], ['MonthlySheet', 'AssetHistory', 'RentalPeriods'], { API, Modal, showToast });
-    const undo = loaded.context.document.createElement('button');
-    undo.textContent = 'Deshacer cobro';
-    loaded.context.AssetsPage = { showRentMonthModal: jest.fn(), undoCollections: jest.fn(() => undo) };
-    return { ...loaded, API, Modal, pushed, undo };
+    loaded.context.AssetsPage = { showRentMonthModal: jest.fn() };
+    return { ...loaded, API, Modal, pushed };
   };
   const byLabel = (root, label) => root.find(element => element.attributes && element.attributes['aria-label'] === label);
 
@@ -46,14 +44,14 @@ describe('Evolutivo 5 monthly sheet modal contract', () => {
     expect(pushed[0].body.findAll(element => element.dataset && element.dataset.sheetRow)).toHaveLength(5);
   });
 
-  it('offers the periods-tab actions per row ("Deshacer cobro", "Registrar pago", "Resolver")', async () => {
+  it('offers the periods-tab actions per row ("Deshacer", "Registrar pago", "Resolver")', async () => {
     const { MonthlySheet, pushed, AssetHistory } = setup();
     const payObligation = jest.spyOn(AssetHistory, 'payObligation').mockResolvedValue();
     const resolveObligation = jest.spyOn(AssetHistory, 'resolveObligation').mockResolvedValue();
     await MonthlySheet.open('a1', { from: '2026-10', to: '2026-11' });
     const sheet = pushed[0].body;
     const row = id => sheet.find(element => element.dataset && element.dataset.sheetRow === id);
-    expect(row('r1').textContent).toContain('Deshacer cobro');
+    expect(row('r1').textContent).toContain('Deshacer');
     expect(row('r2').textContent).toContain('Registrar pago');
     expect(row('r3').textContent).toContain('Resolver');
     row('r2').find(element => element.dataset && element.dataset.sheetAction === 'Registrar pago').click();

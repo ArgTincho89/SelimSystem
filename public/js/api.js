@@ -273,7 +273,7 @@ const API = {
     revertPayment(id, occurrenceId, paymentId, data = {}) { return API.post(`/obligations/${encodeURIComponent(id)}/occurrences/${encodeURIComponent(occurrenceId)}/payments/${encodeURIComponent(paymentId)}/revert`, data); },
     pay(id, occurrenceId, data) { return API.post(`/obligations/${encodeURIComponent(id)}/occurrences/${encodeURIComponent(occurrenceId)}/payments`, data); },
     createResolution(id, occurrenceId, data) { return API.post(`/obligations/${encodeURIComponent(id)}/occurrences/${encodeURIComponent(occurrenceId)}/resolution`, data); },
-    voidResolution(id, occurrenceId) { return API.delete(`/obligations/${encodeURIComponent(id)}/occurrences/${encodeURIComponent(occurrenceId)}/resolution`); },
+    voidResolution(id, occurrenceId, data) { return API.delete(`/obligations/${encodeURIComponent(id)}/occurrences/${encodeURIComponent(occurrenceId)}/resolution`, data); },
     listResolutions(filters = {}) { return API.get(`/obligations/resolutions?${new URLSearchParams(filters)}`); }
   },
 
@@ -311,7 +311,7 @@ const API = {
     schedule(assetId) { return API.get(`/rentals/schedule?assetId=${encodeURIComponent(assetId)}`); },
     collectMonth(data) { return API.post('/rentals/collections/month', data); },
     collectionView(id) { return API.get(`/rentals/collections/${encodeURIComponent(id)}/view`); },
-    reverseCollection(collectionId) { return API.post(`/rentals/collections/${encodeURIComponent(collectionId)}/reverse`, {}); },
+    reverseCollection(collectionId, data = {}) { return API.post(`/rentals/collections/${encodeURIComponent(collectionId)}/reverse`, data); },
     allocate(collectionId, data) { return API.post(`/rentals/collections/${encodeURIComponent(collectionId)}/allocations`, data); },
     declarations: {
       list(assetId) { return API.get(`/rentals/declarations${assetId ? `?assetId=${encodeURIComponent(assetId)}` : ''}`); },

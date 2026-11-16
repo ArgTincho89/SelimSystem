@@ -50,7 +50,7 @@ describe('Obligations: dueState and status=pending', () => {
   it('marks a fully paid occurrence as paid', async () => {
     const obligation = await create({ title: 'Pagable' });
     const occurrence = (await agent.get(`/api/obligations/${obligation.id}`)).body.occurrences[0];
-    const paid = await agent.post(`/api/obligations/${obligation.id}/occurrences/${occurrence.id}/payments`).send({ amount: 100, accountId, categoryId, idempotencyKey: 'due-state-pay-1' });
+    const paid = await agent.post(`/api/obligations/${obligation.id}/occurrences/${occurrence.id}/payments`).send({ amount: 100, accountId, categoryId, notes: 'Pago de prueba', idempotencyKey: 'due-state-pay-1' });
     expect(paid.status).toBe(201);
     expect(paid.body.occurrence.dueState).toBe('paid');
   });
@@ -68,7 +68,7 @@ describe('Obligations: dueState and status=pending', () => {
   it('excludes obligations whose occurrences are all paid and keeps the other filters', async () => {
     const obligation = await create({ title: 'Toda paga', startDate: today });
     const occurrence = (await agent.get(`/api/obligations/${obligation.id}`)).body.occurrences[0];
-    await agent.post(`/api/obligations/${obligation.id}/occurrences/${occurrence.id}/payments`).send({ amount: 100, accountId, categoryId, idempotencyKey: 'due-state-pay-2' });
+    await agent.post(`/api/obligations/${obligation.id}/occurrences/${occurrence.id}/payments`).send({ amount: 100, accountId, categoryId, notes: 'Pago de prueba', idempotencyKey: 'due-state-pay-2' });
     const pendingIds = (await agent.get('/api/obligations').query({ status: 'pending' })).body.map(item => item.id);
     expect(pendingIds).not.toContain(obligation.id);
     const paidIds = (await agent.get('/api/obligations').query({ status: 'paid' })).body.map(item => item.id);

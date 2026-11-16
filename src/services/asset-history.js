@@ -136,6 +136,10 @@ function buildObligationRows(ctx, obligation, range) {
     const itemReversals = reversals.filter(entry => entry.occurrenceId === item.id).map(entry => ({
       id: entry.id, reversedAt: entry.reversedAt || null, reason: entry.reason || '', ...(entry.snapshot || {})
     }));
+    // Annulled resolutions keep their reason ("Motivo") visible in the history.
+    ctx.voidedResolutions = ctx.voidedResolutions || db.findAll('obligationResolutions', userId).filter(entry => entry.status === 'voided');
+    const voidedResolutions = ctx.voidedResolutions.filter(entry => entry.occurrenceId === item.id)
+      .map(entry => ({ id: entry.id, resolvedAt: entry.resolvedAt, voidedAt: entry.voidedAt || null, voidReason: entry.voidReason || '' }));
     const actions = [];
     if (state !== 'cancelled') {
       if (!tenantSide && responsibilityType !== 'none' && balance > 0) actions.push('pay');
@@ -149,7 +153,7 @@ function buildObligationRows(ctx, obligation, range) {
       counterpart: providers.get(obligation.providerEntityId) || null, currencyCode: currency,
       expected, executed, balance, state, overdue: state === 'overdue' || (state === 'partial' && item.date < today),
       obligationType: obligation.type || 'other', obligationTitle: obligation.title,
-      payments, reversals: itemReversals, documents: base.documents.map(doc => ({ ...doc })),
+      payments, reversals: itemReversals, voidedResolutions, documents: base.documents.map(doc => ({ ...doc })),
       notes: notes.filter(note => (note.targetType === 'obligation' && note.targetId === obligation.id) || false).map(noteView),
       resolution: resolution ? { id: resolution.id, resolvedAt: resolution.resolvedAt, amount: majorOf(resolution.amountMinor, currency), notes: resolution.notes || '', documentIds: resolution.documentIds || [] } : null,
       refs: { obligationId: obligation.id, occurrenceId: item.id, assetId: obligation.assetId || null },
@@ -273,6 +277,7 @@ function buildEvents(ctx, contracts, views, range) {
     const row = eventRow(`reversal:rent:${collection.id}`, date, `Cobro de alquiler revertido (${MODALITY_LABEL[collection.modality] || 'alquiler'})`, { collectionId: collection.id, assetId: contracts[0]?.assetId || null });
     row.kind = 'reversal';
     row.state = 'reverted';
+    row.reversals = [{ id: collection.id, reversedAt: collection.reversedAt, reason: collection.reversalReason || '' }];
     row.currencyCode = collection.currencyCode;
     row.expected = majorOf(collection.amountMinor, collection.currencyCode);
     row.responsibility = 'tenant';

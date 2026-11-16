@@ -20,7 +20,7 @@ describe('Reverse a rent collection', () => {
     const collected = await f.collect(contract, ['2025-01-01']);
     expect(balance()).toBe(before + 100000);
     expect(await status(contract, '2025-01-01')).toBe('collected');
-    const res = await f.agent.post(`/api/rentals/collections/${collected.body.id}/reverse`);
+    const res = await f.agent.post(`/api/rentals/collections/${collected.body.id}/reverse`).send({ reason: 'Prueba' });
     expect(res.status).toBe(200);
     expect(res.body).toMatchObject({ ok: true, collectionId: collected.body.id, reopenedOccurrenceIds: [f.occurrenceId(contract, '2025-01-01')] });
     expect(await status(contract, '2025-01-01')).toBe('overdue');
@@ -35,7 +35,7 @@ describe('Reverse a rent collection', () => {
   it('reverses a multi-period collection and allows registering again', async () => {
     const contract = await f.createContract({ startDate: '2024-03-01', endDate: '2024-12-31' });
     const collected = await f.collect(contract, ['2024-03-01', '2024-04-01'], { idempotencyKey: 'multi-period-key-1' });
-    const res = await f.agent.post(`/api/rentals/collections/${collected.body.id}/reverse`);
+    const res = await f.agent.post(`/api/rentals/collections/${collected.body.id}/reverse`).send({ reason: 'Prueba' });
     expect(res.body.reopenedOccurrenceIds).toHaveLength(2);
     expect(await status(contract, '2024-03-01')).toBe('overdue');
     expect(await status(contract, '2024-04-01')).toBe('overdue');
@@ -50,11 +50,11 @@ describe('Reverse a rent collection', () => {
   it('rejects a double reverse, unknown ids, anonymous and other users', async () => {
     const contract = await f.createContract({ startDate: '2024-01-01', endDate: '2024-02-28' });
     const collected = await f.collect(contract, ['2024-01-01']);
-    expect((await f.other.post(`/api/rentals/collections/${collected.body.id}/reverse`)).status).toBe(404);
-    expect((await request(f.app).post(`/api/rentals/collections/${collected.body.id}/reverse`)).status).toBe(401);
-    expect((await f.agent.post(`/api/rentals/collections/${collected.body.id}/reverse`)).status).toBe(200);
-    expect((await f.agent.post(`/api/rentals/collections/${collected.body.id}/reverse`)).status).toBe(409);
-    expect((await f.agent.post('/api/rentals/collections/missing/reverse')).status).toBe(404);
+    expect((await f.other.post(`/api/rentals/collections/${collected.body.id}/reverse`).send({ reason: 'Prueba' })).status).toBe(404);
+    expect((await request(f.app).post(`/api/rentals/collections/${collected.body.id}/reverse`).send({ reason: 'Prueba' })).status).toBe(401);
+    expect((await f.agent.post(`/api/rentals/collections/${collected.body.id}/reverse`).send({ reason: 'Prueba' })).status).toBe(200);
+    expect((await f.agent.post(`/api/rentals/collections/${collected.body.id}/reverse`).send({ reason: 'Prueba' })).status).toBe(409);
+    expect((await f.agent.post('/api/rentals/collections/missing/reverse').send({ reason: 'Prueba' })).status).toBe(404);
   });
 
   it('undoes a collection on an account reconciled after the collection date and resets the reconciliation', async () => {
@@ -62,7 +62,7 @@ describe('Reverse a rent collection', () => {
     const contract = await f.createContract({ startDate: '2022-01-01', endDate: '2022-06-30' });
     const collected = await f.collect(contract, ['2022-01-01'], { accountId: reconciledId });
     await f.agent.post(`/api/accounts/${reconciledId}/reconcile`).send({ openingBalance: 0, openingDate: '2025-06-01', includedMovementIds: [] });
-    const res = await f.agent.post(`/api/rentals/collections/${collected.body.id}/reverse`);
+    const res = await f.agent.post(`/api/rentals/collections/${collected.body.id}/reverse`).send({ reason: 'Prueba' });
     expect(res.status).toBe(200);
     expect(res.body.reconciliationReset).toBe(true);
     expect(f.db.findById('transactions', collected.body.transactionId, f.userId)).toBeFalsy();
@@ -73,7 +73,7 @@ describe('Reverse a rent collection', () => {
     const contract = await f.createContract({ startDate: '2021-01-01', endDate: '2021-06-30' });
     const collected = await f.collect(contract, ['2021-01-01']);
     f.db.create('transactions', { userId: f.userId, tipo: 'refund', refundSourceId: collected.body.transactionId, monto: 1, amountMinor: 100, accountId: f.accountId, currencyCode: 'ARS', fecha: '2025-03-03', titulo: 'refund' }, f.userId);
-    const res = await f.agent.post(`/api/rentals/collections/${collected.body.id}/reverse`);
+    const res = await f.agent.post(`/api/rentals/collections/${collected.body.id}/reverse`).send({ reason: 'Prueba' });
     expect(res.status).toBe(409);
     expect(res.body.error).toContain('un reembolso (refund, 2025-03-03)');
     expect(f.db.findById('transactions', collected.body.transactionId, f.userId)).toBeTruthy();
@@ -83,7 +83,7 @@ describe('Reverse a rent collection', () => {
     const contract = await f.createContract({ startDate: '2020-01-01', endDate: '2020-06-30' });
     const collected = await f.collect(contract, ['2020-01-01']);
     const doc = f.db.create('documents', { userId: f.userId, assetId: f.assetId, transactionId: collected.body.transactionId, originalName: 'r.txt' }, f.userId);
-    await f.agent.post(`/api/rentals/collections/${collected.body.id}/reverse`);
+    await f.agent.post(`/api/rentals/collections/${collected.body.id}/reverse`).send({ reason: 'Prueba' });
     expect(f.db.findById('documents', doc.id, f.userId)).toMatchObject({ transactionId: null, detachedFromCollectionId: collected.body.id, assetId: f.assetId });
     expect(f.db.findById('rentCollections', collected.body.id, f.userId)).toBeTruthy();
     expect(f.db.findById('rentCollections', collected.body.id, f.userId)).toBeTruthy();
@@ -93,7 +93,7 @@ describe('Reverse a rent collection', () => {
     const contract = await f.createContract({ startDate: '2019-01-01', endDate: '2019-06-30' });
     const collected = await f.collect(contract, ['2019-01-01']);
     const spy = jest.spyOn(f.db, 'update').mockImplementation(() => { throw new Error('disk failure'); });
-    const res = await f.agent.post(`/api/rentals/collections/${collected.body.id}/reverse`);
+    const res = await f.agent.post(`/api/rentals/collections/${collected.body.id}/reverse`).send({ reason: 'Prueba' });
     spy.mockRestore();
     f.db.clearCache();
     expect(res.status).toBe(500);

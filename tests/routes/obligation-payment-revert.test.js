@@ -28,11 +28,11 @@ describe('Revert a registered obligation payment', () => {
   };
   const pay = async (obligation, occurrence, amount = 100, extra = {}) => {
     counter += 1;
-    const response = await agent.post(`/api/obligations/${obligation.id}/occurrences/${occurrence.id}/payments`).send({ amount, idempotencyKey: `revert-key-${counter}`, date: day(-2), ...extra });
+    const response = await agent.post(`/api/obligations/${obligation.id}/occurrences/${occurrence.id}/payments`).send({ amount, notes: 'Pago de prueba', idempotencyKey: `revert-key-${counter}`, date: day(-2), ...extra });
     expect(response.status).toBe(201);
     return response.body.transaction;
   };
-  const revert = (obligation, occurrence, transaction, body = {}, who = agent) => who.post(`/api/obligations/${obligation.id}/occurrences/${occurrence.id}/payments/${transaction.id}/revert`).send(body);
+  const revert = (obligation, occurrence, transaction, body = { reason: 'Prueba' }, who = agent) => who.post(`/api/obligations/${obligation.id}/occurrences/${occurrence.id}/payments/${transaction.id}/revert`).send(body);
   const occurrenceOf = async (obligation, occurrence) => (await agent.get(`/api/obligations/${obligation.id}`)).body.occurrences.find(item => item.id === occurrence.id);
   const alertsOf = async obligation => (await agent.get('/api/alerts')).body.filter(item => item.obligationId === obligation.id);
   const logs = () => db.findAll('activityLogs', userId);
@@ -127,7 +127,7 @@ describe('Revert a registered obligation payment', () => {
 
   it('rejects a second revert and replaying the original payment with the same key', async () => {
     const { obligation, occurrence } = await createObligation({ title: 'Replay' });
-    const body = { amount: 100, idempotencyKey: 'replay-key-1234', date: day(-2) };
+    const body = { amount: 100, notes: 'Pago de prueba', idempotencyKey: 'replay-key-1234', date: day(-2) };
     const created = await agent.post(`/api/obligations/${obligation.id}/occurrences/${occurrence.id}/payments`).send(body);
     expect(created.status).toBe(201);
     const transaction = created.body.transaction;
@@ -189,6 +189,7 @@ describe('Revert a registered obligation payment', () => {
     const transaction = await pay(obligation, occurrence);
     expect((await revert(obligation, occurrence, transaction, { reason: 'x'.repeat(501) })).status).toBe(400);
     expect((await revert(obligation, occurrence, transaction, { reason: 42 })).status).toBe(400);
+    expect((await revert(obligation, occurrence, transaction, {})).status).toBe(400);
     expect(db.findById('transactions', transaction.id, userId)).toBeTruthy();
     expect((await revert(obligation, occurrence, transaction)).status).toBe(200);
   });
