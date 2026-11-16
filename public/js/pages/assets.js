@@ -456,20 +456,9 @@ const AssetsPage = {
     return create('button', { className: 'btn btn-primary btn-sm', type: 'button', textContent: 'Declarar alquiler', dataset: { declareRental: asset.id }, onClick: () => this.openDeclaration(asset.id, { onDone: options.onDone || (() => this.render()) }) });
   },
 
-  // Opens the rental of the asset. The rental modal (tabs) owns the experience; the legacy ficha section is
-  // the fallback while the modal is not loaded.
+  // Opens the rental of the asset on its Resumen tab: the rental modal owns the whole rental experience.
   openRental(assetId, declarationId, options = {}) {
-    if (typeof RentalModal !== 'undefined') return RentalModal.open(declarationId, { assetId, tab: 'resumen', ...options });
-    return this.showRentalLegacy(assetId);
-  },
-
-  async showRentalLegacy(assetId) {
-    try {
-      const asset = await API.assets.get(assetId);
-      const body = create('div', { style: { maxHeight: '70vh', overflowY: 'auto' } });
-      await this.renderRentals(asset, body);
-      Modal.show(`Alquiler · ${asset.name}`, body, { width: '900px', footer: create('div', {}, [create('button', { className: 'btn btn-primary', type: 'button', textContent: 'Cerrar', onClick: () => Modal.hide() })]) });
-    } catch (error) { showToast(error.message, 'error'); }
+    return RentalModal.open(declarationId, { assetId, tab: 'resumen', ...options });
   },
 
   // Data of the asset: classification, type, characteristics, location, areas, cadastral id, construction
@@ -899,184 +888,6 @@ const AssetsPage = {
     container.appendChild(pending);
   },
 
-  // Current collection period (same rule as the server's rent schedule): from day 01 to 10 it is the
-  // current month; from day 11 on, the next month. Returns its last day (YYYY-MM-DD).
-  currentPeriodEnd(today = getToday()) {
-    const [year, month, day] = today.split('-').map(Number);
-    const period = day <= 10 ? new Date(Date.UTC(year, month - 1, 1)) : new Date(Date.UTC(year, month, 1));
-    return new Date(Date.UTC(period.getUTCFullYear(), period.getUTCMonth() + 1, 0)).toISOString().slice(0, 10);
-  },
-
-  // Months shown in "Contratos y alquileres": collected ones and those up to the current period (never
-  // the future installments of the whole contract).
-  visibleRentMonths(months) {
-    const periodEnd = this.currentPeriodEnd();
-    return months.filter(month => month.date <= periodEnd || month.parts.some(part => part.paidMinor > 0));
-  },
-
-  // "Próximos vencimientos" (rent and obligations of the current period) and "Pagos atrasados"
-  // (previous months still unpaid, in red), each with its "Cobrar mes" / "Pagar" action.
-  async renderSchedule(asset, container) {
-    const section = create('section', { style: { borderTop: '1px solid var(--border-color)', marginTop: '16px', paddingTop: '12px' }, dataset: { rentSchedule: asset.id } });
-    container.appendChild(section);
-    let schedule;
-    try { schedule = await API.rentals.schedule(asset.id); } catch (error) {
-      section.appendChild(create('small', { textContent: `No se pudieron cargar los vencimientos: ${error.message}` }));
-      return;
-    }
-    const upcoming = create('div', { style: { display: 'grid', gap: '6px' }, dataset: { scheduleUpcoming: 'true' } }, [
-      create('h4', { textContent: 'Próximos vencimientos' }),
-      create('small', { className: 'text-muted', textContent: `Período ${formatMonthLabel(schedule.period)} (del día 01 al 10 se muestra el mes en curso; desde el 11, el mes siguiente).` })
-    ]);
-    if (!schedule.upcoming.length) upcoming.appendChild(create('small', { textContent: 'No hay vencimientos pendientes en este período.' }));
-    schedule.upcoming.forEach(item => upcoming.appendChild(this.scheduleRow(asset, item, false)));
-    const overdue = create('div', { style: { display: 'grid', gap: '6px', marginTop: '12px' }, dataset: { scheduleOverdue: 'true' } }, [
-      create('h4', { textContent: 'Pagos atrasados', style: { color: 'var(--danger)' } })
-    ]);
-    if (!schedule.overdue.length) overdue.appendChild(create('small', { textContent: 'No hay pagos atrasados.' }));
-    schedule.overdue.forEach(item => overdue.appendChild(this.scheduleRow(asset, item, true)));
-    section.append(upcoming, overdue);
-  },
-
-  scheduleRow(asset, item, late) {
-    const text = item.kind === 'rent'
-      ? `${item.date} · Alquiler ${formatMonthLabel(item.period)} · ${item.parts.map(part => `${modalityLabel(part.modality) || 'Alquiler'} ${formatearMonedaConCodigo(part.remainingAmount, part.currencyCode)}`).join(' + ')}`
-      : `${item.date} · ${item.title} · ${formatearMonedaConCodigo(item.amount, item.currencyCode)}`;
-    const label = late
-      ? create('strong', { textContent: text, style: { color: 'var(--danger)', fontWeight: '700' } })
-      : create('span', { textContent: text });
-    const action = item.kind === 'rent'
-      ? create('button', { className: 'btn btn-secondary btn-sm', type: 'button', textContent: 'Cobrar mes', onClick: () => this.showRentMonthModal(asset.id, item.monthKey, () => this.showDetails(asset.id)) })
-      : create('button', { className: 'btn btn-secondary btn-sm', type: 'button', textContent: 'Pagar', onClick: () => this.payScheduledObligation(asset, item) });
-    return create('div', { className: 'card', style: { padding: '8px', display: 'flex', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }, dataset: { scheduleItem: item.id, late: String(late) } }, [label, action]);
-  },
-
-  // Same "Registrar pago" dialog as Obligaciones; returns to this property afterwards.
-  async payScheduledObligation(asset, item) {
-    try {
-      await ObligationsPage.loadLookups();
-      ObligationsPage.onChange = () => this.showDetails(asset.id);
-      await ObligationsPage.pay({ id: item.obligationId, categoryId: null }, { id: item.occurrenceId, remainingAmount: item.amount, actualDueAmount: item.amount, currencyCode: item.currencyCode });
-    } catch (error) { showToast(error.message, 'error'); }
-  },
-
-  async renderRentals(asset, container) {
-    await this.renderSchedule(asset, container);
-    const section = create('section', { style: { borderTop: '1px solid var(--border-color)', marginTop: '16px', paddingTop: '12px' } });
-    section.appendChild(create('h4', { textContent: 'Contratos y alquileres' }));
-    const contractList = create('div', { style: { display: 'grid', gap: '8px', marginTop: '8px' } });
-    const filter = this.select([['', 'Todos los períodos'], ['pending', 'Pendientes'], ['partially_collected', 'Parcialmente cobrados'], ['collected', 'Cobrados'], ['overdue', 'Vencidos'], ['cancelled', 'Cancelados']]);
-    filter.setAttribute('aria-label', 'Filtrar períodos de alquiler');
-    const active = asset.declaration && asset.declaration.status !== 'ended';
-    const declarationActions = create('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '8px' } }, [
-      create('button', { className: 'btn btn-primary btn-sm', type: 'button', textContent: active ? 'Editar alquiler' : 'Declarar alquiler', dataset: { declareRental: asset.id }, onClick: () => RentalDeclarationModal.show(this, asset) }),
-      active ? create('button', { className: 'btn btn-secondary btn-sm', type: 'button', textContent: 'Declarar nuevo alquiler', dataset: { declareNewRental: asset.id }, onClick: () => RentalDeclarationModal.show(this, asset, { newDeclaration: true }) }) : null,
-      active ? create('button', { className: 'btn btn-ghost btn-sm', type: 'button', textContent: 'Finalizar alquiler', onClick: () => this.endDeclaration(asset) }) : null
-    ].filter(Boolean));
-    const monthList = create('div', { style: { display: 'grid', gap: '6px', marginTop: '8px' }, dataset: { rentMonths: asset.id } });
-    section.append(create('h5', { textContent: 'Meses de alquiler', style: { margin: '8px 0 0' } }), monthList, filter, contractList, declarationActions);
-    container.appendChild(section);
-    API.rentals.months(asset.id).then(months => this.renderRentMonths(asset, monthList, this.visibleRentMonths(months))).catch(error => monthList.appendChild(create('small', { textContent: `No se pudieron cargar los meses: ${error.message}` })));
-    let contracts = [];
-    try {
-      contracts = await API.rentals.list({ assetId: asset.id });
-    } catch (error) {
-      contractList.appendChild(create('p', { textContent: `No se pudieron cargar los contratos: ${error.message}` }));
-      return;
-    }
-    const periodEnd = this.currentPeriodEnd();
-    const renderList = () => {
-      contractList.replaceChildren();
-      if (!contracts.length) {
-        contractList.appendChild(create('small', { textContent: 'Todavía no hay contratos asociados a este inmueble.' }));
-        return;
-      }
-      contracts.forEach(contract => {
-        const card = create('article', { className: 'card', style: { padding: '10px' } });
-        const heading = create('div', { style: { display: 'flex', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap', alignItems: 'center' } }, [
-          create('strong', { textContent: `${modalityLabel(contract.modality) || this.contractTypeLabel(contract.type)} · ${contract.tenants.map(item => item.name).join(', ')}` }),
-          create('span', { textContent: statusLabel(contract.status), className: 'badge' })
-        ]);
-        card.append(heading, create('small', { textContent: `${contract.startDate}${contract.endDate ? ` — ${contract.endDate}` : ' — sin fecha de fin'} · Alquiler inicial: ${contract.initialRent} ${contract.currencyCode} · vencimiento día ${contract.dueDay}`, style: { display: 'block', marginTop: '5px' } }));
-        const operations = create('div', { style: { display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '8px' } });
-        operations.append(
-          create('button', { className: 'btn btn-ghost btn-sm', type: 'button', textContent: 'Actualizar alquiler', onClick: () => this.showRentalConditionModal(asset, contract) }),
-          create('button', { className: 'btn btn-secondary btn-sm', type: 'button', textContent: 'Registrar cobro', onClick: () => this.showRentCollectionModal(asset, contract) }),
-          create('button', { className: 'btn btn-ghost btn-sm', type: 'button', textContent: 'Finalizar contrato', disabled: contract.status !== 'active', onClick: async () => {
-            try { await API.rentals.update(contract.id, { status: 'ended', endDate: contract.endDate || new Date().toISOString().slice(0, 10) }); await this.showDetails(asset.id); }
-            catch (error) { showToast(error.message, 'error'); }
-          } }),
-          create('button', { className: 'btn btn-ghost btn-sm', type: 'button', textContent: 'Documentos y notas', onClick: async () => {
-            const records = create('div', { style: { maxHeight: '65vh', overflowY: 'auto' } });
-            try { await WealthRecords.renderPanel(records, 'contract', contract.id); Modal.show('Contrato · documentos y notas', records); }
-            catch (error) { showToast(error.message, 'error'); }
-          } })
-        );
-        card.appendChild(operations);
-        const occurrenceList = create('div', { style: { display: 'grid', gap: '4px', marginTop: '8px' } });
-        // Future installments of the whole contract are not listed: only collected ones and those up to the current period.
-        const occurrences = contract.occurrences.filter(item => (!filter.value || item.status === filter.value) && (item.date <= periodEnd || item.paidMinor > 0));
-        if (!occurrences.length) occurrenceList.appendChild(create('small', { textContent: 'No hay períodos para este filtro.' }));
-        occurrences.forEach(item => {
-          const collected = item.status === 'collected';
-          const label = collected
-            ? create('span', { style: { display: 'flex', gap: '8px', alignItems: 'baseline' } }, [
-              create('span', { dataset: { rentDate: '' }, textContent: '' }),
-              this.collectedText(`${modalityLabel(item.modality) ? `${modalityLabel(item.modality)} ` : ''}${formatearMonedaConCodigo(item.paidAmount, item.currencyCode)}`)
-            ])
-            : create('span', { textContent: `${item.date} · ${modalityLabel(item.modality) ? `${modalityLabel(item.modality)} · ` : ''}${item.rentAmount} ${item.currencyCode} · ${this.rentStatusLabel(item.status)} · Pagado ${item.paidAmount}, pendiente ${item.remainingAmount}` });
-          occurrenceList.appendChild(create('div', { className: 'card', style: { padding: '8px', display: 'flex', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap' }, dataset: { rentOccurrence: item.id }, title: collected ? `Período ${item.period}` : '' }, [
-            label,
-            create('span', { style: { display: 'flex', gap: '6px' } }, [
-              item.remainingMinor > 0 && item.status !== 'cancelled' ? create('button', { className: 'btn btn-ghost btn-sm', type: 'button', textContent: 'Cobrar período', onClick: () => this.showRentCollectionModal(asset, contract, item.id) }) : null,
-              this.undoCollections([...new Set((item.allocations || []).map(entry => entry.collectionId).filter(Boolean))], () => this.showDetails(asset.id), 'El período vuelve a quedar pendiente de cobro.'),
-              item.paidMinor === 0 && item.status !== 'cancelled' ? create('button', { className: 'btn btn-ghost btn-sm', type: 'button', textContent: 'Cancelar período', onClick: async () => {
-                try { await API.rentals.cancelOccurrence(contract.id, item.id); await this.showDetails(asset.id); }
-                catch (error) { showToast(error.message, 'error'); }
-              } }) : null
-            ].filter(Boolean))
-          ]));
-        });
-        card.appendChild(occurrenceList);
-        const collectionHistory = create('details', { style: { marginTop: '8px' } }, [create('summary', { textContent: 'Cobros y saldos no aplicados' })]);
-        const balances = create('div', { style: { display: 'grid', gap: '4px', marginTop: '6px' } });
-        API.rentals.collections(contract.id).then(rows => {
-          if (!rows.length) balances.appendChild(create('small', { textContent: 'Todavía no hay cobros.' }));
-          rows.forEach(row => balances.appendChild(create('div', { className: 'card', style: { padding: '8px', display: 'flex', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap', alignItems: 'center' } }, [
-            create('span', { textContent: `${row.date} · aplicado a este contrato ${row.contractAllocatedAmount} ${row.currencyCode} · saldo global sin aplicar ${row.unappliedAmount} · ${row.method || 'medio no indicado'}` }),
-            create('span', { style: { display: 'flex', gap: '6px', flexWrap: 'wrap' } }, [
-              create('button', { className: 'btn btn-ghost btn-sm', type: 'button', textContent: 'Ver', onClick: () => this.showCollectionView(row.id, { stacked: true }) }),
-              this.undoCollections([row.id], () => this.showDetails(asset.id), 'Los períodos de este cobro vuelven a quedar pendientes de cobro.')
-            ])
-          ])));
-        }).catch(error => balances.appendChild(create('small', { textContent: `No se pudieron cargar los cobros: ${error.message}` })));
-        collectionHistory.appendChild(balances);
-        card.appendChild(collectionHistory);
-        const movementAttributions = create('details', { style: { marginTop: '8px' } }, [create('summary', { textContent: 'Otros movimientos atribuidos al contrato' })]);
-        const movementRows = create('div', { style: { display: 'grid', gap: '4px', marginTop: '6px' } });
-        API.finance.allocations({ contractId: contract.id }).then(allocations => {
-          if (!allocations.length) movementRows.appendChild(create('small', { textContent: 'No hay atribuciones adicionales.' }));
-          allocations.forEach(allocation => {
-            const row = create('div', { className: 'card', style: { padding: '8px', display: 'flex', justifyContent: 'space-between', gap: '8px', alignItems: 'center' } });
-            row.appendChild(create('span', { textContent: `${allocation.transaction.titulo} · ${allocation.transaction.fecha} · ${allocation.amount} ${allocation.currencyCode}` }));
-            row.appendChild(create('button', { className: 'btn btn-ghost btn-sm', type: 'button', textContent: 'Editar atribuciones', disabled: Boolean(allocation.transaction.rentCollectionId), onClick: () => TransactionForm.show(() => this.showDetails(asset.id), allocation.transaction) }));
-            movementRows.appendChild(row);
-          });
-        }).catch(error => movementRows.appendChild(create('small', { textContent: `No se pudieron cargar las atribuciones: ${error.message}` })));
-        movementAttributions.appendChild(movementRows);
-        card.appendChild(movementAttributions);
-        contractList.appendChild(card);
-      });
-    };
-    filter.addEventListener('change', renderList);
-    renderList();
-  },
-
-  // "Cobrado" followed by the amount, both in green bold (collected months and periods).
-  collectedText(amountText) {
-    return create('strong', { dataset: { collectedAmount: 'true' }, style: { color: 'var(--income-color)', fontWeight: '700' }, textContent: `Cobrado ${amountText}` });
-  },
-
   // "Finalizar alquiler": confirmation with the termination date. Today by default; an earlier date (or a
   // future one) declares an early termination and frees the following dates for a new rental.
   // `options.stacked` opens it on top of the current dialog (e.g. from the declaration overlap error).
@@ -1102,86 +913,6 @@ const AssetsPage = {
     (options.stacked ? Modal.push : Modal.show).call(Modal, 'Finalizar alquiler', body, { footer });
   },
 
-  // "Deshacer cobro" with inline confirmation: undoes every given collection (same effect as deleting its
-  // transaction). A month collected by modality is one group: undoing any part undoes all of it.
-  // The button is outlined in red to stand out.
-  undoCollections(collectionIds, afterDone, note) {
-    if (!collectionIds.length) return null;
-    const wrapper = create('span', { style: { display: 'inline-flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' } });
-    const start = create('button', { className: 'btn btn-sm', type: 'button', textContent: 'Deshacer cobro', dataset: { undoCollection: 'true' }, style: { border: '1px solid var(--danger)', color: 'var(--danger)', background: 'transparent' } });
-    start.addEventListener('click', () => {
-      wrapper.replaceChildren(
-        create('small', { textContent: note }),
-        create('button', { className: 'btn btn-danger btn-sm', type: 'button', textContent: 'Confirmar y deshacer', onClick: async () => {
-          try {
-            let reset = false;
-            const done = new Set();
-            for (const collectionId of collectionIds) {
-              if (done.has(collectionId)) continue;
-              const result = await API.rentals.reverseCollection(collectionId);
-              reset = Boolean(result.reconciliationReset) || reset;
-              [collectionId, ...(result.collectionIds || [])].forEach(id => done.add(id));
-            }
-            showToast(reset ? 'Cobro deshecho. La conciliación de la cuenta quedó pendiente de revisar' : 'Cobro deshecho');
-            await afterDone();
-          } catch (error) { showToast(error.message, 'error'); }
-        } }),
-        create('button', { className: 'btn btn-ghost btn-sm', type: 'button', textContent: 'Cancelar', onClick: () => wrapper.replaceChildren(start) })
-      );
-    });
-    wrapper.appendChild(start);
-    return wrapper;
-  },
-
-  // Month rows: one per declaration month with its status and the per-modality lines collapsed. A collected
-  // month leaves the date blank and shows "Cobrado" and the amount in green bold.
-  renderRentMonths(asset, container, months) {
-    container.replaceChildren();
-    if (!months.length) return container.appendChild(create('small', { textContent: 'Todavía no hay meses de alquiler.' }));
-    months.forEach(month => {
-      const collected = month.status === 'collected';
-      const totals = month.totals.map(row => (collected ? formatearMonedaConCodigo(row.paidAmount, row.currencyCode) : `${row.rentAmount} ${row.currencyCode}`)).join(' + ');
-      const summary = collected
-        ? create('summary', { title: `Mes ${month.date}` }, [create('span', { dataset: { rentDate: '' }, textContent: '' }), this.collectedText(totals)])
-        : create('summary', { textContent: `${month.date} · ${statusLabel(month.status)} · ${totals}` });
-      const parts = create('details', {}, [summary]);
-      month.parts.forEach(part => parts.appendChild(create('small', { style: { display: 'block' }, textContent: `${modalityLabel(part.modality) || 'Alquiler'} · período ${month.period} · ${part.rentAmount} ${part.currencyCode} · ${statusLabel(part.status)} · Pagado ${part.paidAmount}, pendiente ${part.remainingAmount}` })));
-      const actions = create('span', { style: { display: 'flex', gap: '6px', flexWrap: 'wrap' } }, [
-        month.parts.some(part => part.remainingMinor > 0) ? create('button', { className: 'btn btn-ghost btn-sm', type: 'button', textContent: 'Cobrar mes', onClick: () => this.showRentMonthModal(asset.id, month.key, () => this.showDetails(asset.id)) }) : null,
-        this.undoCollections(month.collectionIds, () => this.showDetails(asset.id), 'Se deshacen los cobros de este mes y vuelve a quedar pendiente de cobro.')
-      ].filter(Boolean));
-      container.appendChild(create('div', { className: 'card', style: { padding: '8px', display: 'flex', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap' }, dataset: { rentMonth: month.key, collected: String(collected) } }, [parts, actions]));
-    });
-  },
-
-  // "Ver" a rent collection (read-only): per modality payment date, amount, IVA (locación), payment
-  // method and destination account, plus totals and the rental/property/period. Legacy collections too.
-  async showCollectionView(id, options = {}) {
-    let detail;
-    try { detail = await API.rentals.collectionView(id); } catch (error) { showToast(error.message, 'error'); return; }
-    const money = (amount, currency) => formatearMonedaConCodigo(amount, currency);
-    const body = create('div', { style: { display: 'grid', gap: '8px', maxHeight: '65vh', overflowY: 'auto' }, dataset: { collectionView: detail.id } });
-    [['Inmueble', detail.asset?.name], ['Inquilino', detail.tenants.join(', ')], ['Período', detail.periods.map(formatMonthLabel).join(', ')]]
-      .forEach(([label, value]) => { if (value) body.appendChild(create('p', { style: { margin: '2px 0' }, textContent: `${label}: ${value}` })); });
-    if (detail.reversed) body.appendChild(create('p', { className: 'text-danger', textContent: 'Este cobro fue deshecho.' }));
-    detail.lines.forEach(line => {
-      const card = create('section', { className: 'card', style: { padding: '8px' }, dataset: { collectionLine: line.modality || 'sin-asignar' } });
-      card.appendChild(create('strong', { textContent: line.unapplied ? 'Sin asignar a un período' : (modalityLabel(line.modality) || 'Alquiler') }));
-      [
-        ['Fecha de cobro', line.date],
-        ['Importe', money(line.amount, line.currencyCode)],
-        ...(line.ivaAmount ? [['IVA', `${money(line.ivaAmount, line.currencyCode)} (${line.ivaPercent}% incluido)`], ['Neto', money(line.netAmount, line.currencyCode)]] : []),
-        ['Clasificación', line.clasificacion || 'Sin clasificar'],
-        ['Medio de cobro', line.method || 'No indicado'],
-        ['Cuenta de destino', line.accountName || 'Sin cuenta']
-      ].forEach(([label, value]) => card.appendChild(create('p', { style: { margin: '2px 0' }, textContent: `${label}: ${value}` })));
-      body.appendChild(card);
-    });
-    detail.totals.forEach(total => body.appendChild(create('p', { style: { fontWeight: '700', margin: '4px 0' }, dataset: { collectionTotal: total.currencyCode }, textContent: `Total ${total.currencyCode}: ${money(total.amount, total.currencyCode)}${total.ivaAmount ? ` · IVA incluido ${money(total.ivaAmount, total.currencyCode)}` : ''}` })));
-    const footer = create('div', {}, [create('button', { className: 'btn btn-primary', type: 'button', textContent: 'Cerrar', onClick: () => Modal.hide() })]);
-    (options.stacked ? Modal.push : Modal.show).call(Modal, 'Cobro de alquiler', body, { footer });
-  },
-
   contractTypeLabel(type) {
     return ({ residential: 'Residencial', commercial: 'Comercial', industrial: 'Industrial', temporary: 'Temporal', other: 'Otro' })[type] || type;
   },
@@ -1202,6 +933,23 @@ const AssetsPage = {
   },
 
   // Opens the "Declaración de alquiler" modal for an asset (fetches the fresh asset with its declaration).
+  // Collection dialogs live in rentalPeriods.js; these delegates keep the existing callers working.
+  showRentMonthModal(assetId, monthKey, onDone = null) {
+    return RentalPeriods.collectMonth(assetId, monthKey, onDone);
+  },
+
+  showRentCollectionModal(asset, contract, selectedOccurrenceId = null, onDone = null) {
+    return RentalPeriods.collectContract(asset, contract, selectedOccurrenceId, onDone);
+  },
+
+  showCollectionView(id, options = {}) {
+    return RentalPeriods.showCollectionView(id, options);
+  },
+
+  undoCollections(collectionIds, afterDone, note) {
+    return RentalPeriods.undoCollections(collectionIds, afterDone, note);
+  },
+
   async openDeclaration(assetId, options = {}) {
     try { await RentalDeclarationModal.show(this, await API.assets.get(assetId), options); }
     catch (error) { showToast(error.message, 'error'); }
@@ -1241,135 +989,4 @@ const AssetsPage = {
     Modal.show('Actualizar condición de alquiler', body, { footer });
   },
 
-  // "Cobrar mes" (Avisos, month rows and the property schedule): one line per modality with its own amount
-  // (prefilled from the contract), A/B classification (IVA shown for locación), payment date, payment method
-  // and destination account. Each line becomes its own income transaction; all of them are grouped in one
-  // collection, so "Deshacer cobro" undoes them together.
-  async showRentMonthModal(assetId, monthKey, onDone = null) {
-    try {
-      const [months, accounts, paymentMethods] = await Promise.all([API.rentals.months(assetId), API.accounts.list(), API.finance.paymentMethods().catch(() => [])]);
-      const month = (months || []).find(item => item.key === monthKey);
-      const open = month ? month.parts.filter(part => part.remainingMinor > 0) : [];
-      if (!open.length) { showToast('Ese mes ya no tiene saldo pendiente de cobro', 'error'); return; }
-      const body = create('div', { style: { maxHeight: '65vh', overflowY: 'auto', display: 'grid', gap: '10px' } });
-      body.appendChild(create('p', { textContent: `Mes ${month.date}: cada modalidad se registra como un ingreso propio en su cuenta. El mes figura como cobrado cuando se cobran todas sus modalidades.` }));
-      const methodList = create('datalist', { id: `rent-methods-${month.date}` });
-      [...new Set(['Transferencia', 'Efectivo', ...paymentMethods.map(item => item.name)])].forEach(name => methodList.appendChild(create('option', { value: name })));
-      body.appendChild(methodList);
-      const today = getToday();
-      const ivaOf = (gross, percent) => Math.round((gross - gross / (1 + percent / 100)) * 100) / 100;
-      const field = (label, control) => create('label', { className: 'form-group', style: { display: 'grid', gap: '4px', margin: 0 } }, [create('span', { textContent: label }), control]);
-      const lines = open.map(part => {
-        const label = modalityLabel(part.modality) || 'Alquiler';
-        const currency = part.currencyCode;
-        const eligible = accounts.filter(item => item.activo && item.currency === currency);
-        const amount = MoneyInput.create({ currency, value: part.remainingAmount, ariaLabel: `Importe ${label}` });
-        const kind = this.select([['A', 'A (declarado)'], ['B', 'B (sin facturar)']]);
-        kind.value = part.modality === 'locacion' ? 'A' : 'B';
-        kind.setAttribute('aria-label', `Clasificación ${label}`);
-        const iva = create('small', { className: 'text-muted', dataset: { rentLineIva: 'true' } });
-        const sync = () => {
-          const value = MoneyInput.value(amount);
-          iva.textContent = kind.value === 'A' && part.ivaPercent > 0 ? `IVA ${part.ivaPercent}% incluido${value > 0 ? `: ${formatearMonedaConCodigo(ivaOf(value, part.ivaPercent), currency)}` : ''}` : '';
-        };
-        kind.addEventListener('change', sync);
-        ['input', 'change', 'blur'].forEach(name => amount.addEventListener(name, sync));
-        sync();
-        const date = create('input', { className: 'form-control', type: 'date', value: today, max: today, 'aria-label': `Fecha de cobro (${label})` });
-        const method = create('input', { className: 'form-control', type: 'text', maxLength: 100, placeholder: 'Transferencia, efectivo…', list: methodList.id, 'aria-label': `Medio de cobro (${label})` });
-        const account = this.select([['', 'Seleccionar cuenta'], ...accountTreeOptions(eligible).map(({ account: item, label: text }) => [item.id, text])]);
-        account.setAttribute('aria-label', `Cuenta (${label})`);
-        account.value = (eligible.find(item => item.primary) || (eligible.length === 1 ? eligible[0] : null))?.id || '';
-        body.appendChild(create('fieldset', { className: 'card', style: { padding: '10px', display: 'grid', gap: '6px' }, dataset: { rentLine: part.modality || 'alquiler' } }, [
-          create('legend', { textContent: `${label} · pendiente ${formatearMonedaConCodigo(part.remainingAmount, currency)}` }),
-          field(`Importe (${currency})`, amount), field('Clasificación', kind), iva,
-          field('Fecha de cobro', date), field('Medio de cobro', method), field(`Cuenta de destino (${currency})`, account)
-        ]));
-        return { part, label, amount, kind, date, method, account };
-      });
-      const errorBox = create('p', { className: 'text-danger', role: 'alert', style: { display: 'none', margin: 0 } });
-      body.appendChild(errorBox);
-      const showError = message => { errorBox.textContent = message; errorBox.style.display = message ? '' : 'none'; };
-      const idempotencyKey = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}-rent-month`;
-      const submit = create('button', { className: 'btn btn-primary', type: 'button', textContent: 'Registrar cobro' });
-      submit.addEventListener('click', async () => {
-        showError('');
-        if (!MoneyInput.validateAll(lines.map(line => line.amount))) return;
-        const chosen = lines.filter(line => MoneyInput.value(line.amount) > 0);
-        if (!chosen.length) return showError('Ingresá el importe a cobrar');
-        const missing = chosen.find(line => !line.account.value);
-        if (missing) return showError(`${missing.label}: seleccioná la cuenta de destino`);
-        const payload = chosen.map(line => {
-          const methodText = line.method.value.trim();
-          const known = paymentMethods.find(item => item.name.toLowerCase() === methodText.toLowerCase());
-          return {
-            occurrenceId: line.part.occurrenceId, amount: MoneyInput.value(line.amount), accountId: line.account.value, date: line.date.value || today,
-            clasificacion: line.kind.value, method: methodText, ...(known ? { paymentMethodId: known.id } : {})
-          };
-        });
-        submit.disabled = true;
-        try {
-          await API.rentals.collectMonth({ idempotencyKey, lines: payload });
-          showToast('Cobro registrado en los ingresos reales');
-          Modal.hide();
-          if (onDone) await onDone();
-        } catch (error) { submit.disabled = false; showError(error.message); }
-      });
-      Modal.show(`Registrar cobro · mes ${month.date}`, body, { footer: create('div', {}, [submit]) });
-    } catch (error) { showToast(`No se pudo abrir el cobro: ${error.message}`, 'error'); }
-  },
-
-  // Multi-period collection for one contract (contract card). Avisos uses showRentMonthModal.
-  async showRentCollectionModal(asset, contract, selectedOccurrenceId = null, onDone = null) {
-    try {
-      const [fullContract, accounts] = await Promise.all([API.rentals.get(contract.id), API.accounts.list()]);
-      const currency = contract.currencyCode;
-      const idempotencyKey = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}-rent`;
-      const open = fullContract.occurrences.filter(item => item.remainingMinor > 0 && item.status !== 'cancelled');
-      const body = create('div', { style: { maxHeight: '65vh', overflowY: 'auto' } });
-      const rows = create('div', { style: { display: 'grid', gap: '6px' } });
-      const amountInputs = [];
-      open.forEach(occurrence => {
-        const checkbox = create('input', { type: 'checkbox', checked: occurrence.id === selectedOccurrenceId });
-        const amount = MoneyInput.create({ currency, value: occurrence.id === selectedOccurrenceId ? occurrence.remainingAmount : null, ariaLabel: `Importe ${occurrence.date}` });
-        rows.appendChild(create('label', { className: 'card', style: { padding: '8px', display: 'grid', gridTemplateColumns: 'auto 1fr minmax(90px, 150px)', gap: '8px', alignItems: 'center' } }, [
-          checkbox, create('span', { textContent: `${occurrence.date} · pendiente ${occurrence.remainingAmount} ${currency}` }), amount
-        ]));
-        amountInputs.push({ occurrence, checkbox, amount });
-      });
-      if (!open.length) rows.appendChild(create('small', { textContent: 'No hay períodos pendientes para asignar.' }));
-      body.append(create('p', { textContent: 'Selecciona uno o varios períodos y distribuye el cobro recibido. La parte no asignada quedará visible.' }), rows);
-      const total = MoneyInput.create({ currency, value: null, required: true, ariaLabel: `Importe total recibido (${currency})` });
-      body.append(create('label', { className: 'form-group' }, [create('span', { textContent: `Importe total recibido (${currency})` }), total]));
-      const eligible = accounts.filter(item => item.activo && item.currency === currency);
-      const account = this.select([['', 'Seleccionar cuenta'], ...accountTreeOptions(eligible).map(({ account: item, label }) => [item.id, label])]);
-      account.value = (eligible.find(item => item.primary) || (eligible.length === 1 ? eligible[0] : null))?.id || '';
-      body.append(create('label', { className: 'form-group' }, [create('span', { textContent: 'Cuenta (misma moneda del contrato)' }), account]));
-      const date = this.rentalField(body, 'Fecha de cobro', { type: 'date', value: new Date().toISOString().slice(0, 10) });
-      const method = this.rentalField(body, 'Medio de cobro (opcional)');
-      const ivaPercent = Number(fullContract.ivaPercent) || 0;
-      const classification = this.select([['', 'Sin clasificar'], ['A', ivaPercent > 0 ? `A (IVA ${ivaPercent}%)` : 'A'], ['B', 'B']]);
-      classification.value = ivaPercent > 0 ? 'A' : '';
-      body.append(create('label', { className: 'form-group' }, [create('span', { textContent: 'Clasificación' }), classification]));
-      const footer = create('div', {}, [create('button', { className: 'btn btn-primary', type: 'button', textContent: 'Registrar cobro', onClick: async () => {
-        if (!MoneyInput.validateAll([total, ...amountInputs.map(item => item.amount)])) return;
-        const totalValue = MoneyInput.value(total);
-        if (!(totalValue > 0)) return showToast('Ingresá el importe recibido', 'error');
-        const allocations = amountInputs.filter(item => item.checkbox.checked).map(item => ({ occurrenceId: item.occurrence.id, amount: MoneyInput.value(item.amount) }));
-        if (!allocations.length) return showToast('Selecciona al menos un período para asignar', 'error');
-        try {
-          await API.rentals.collect({
-            amount: totalValue, accountId: account.value, date: date.value,
-            method: method.value.trim(), allocations,
-            ...(classification.value ? { clasificacion: classification.value } : {}),
-            idempotencyKey
-          });
-          showToast('Cobro registrado en los ingresos reales');
-          Modal.hide();
-          await (onDone ? onDone() : this.showDetails(asset.id));
-        } catch (error) { showToast(error.message, 'error'); }
-      } })]);
-      Modal.show(`Registrar cobro · ${currency}`, body, { footer });
-    } catch (error) { showToast(`No se pudo abrir el cobro: ${error.message}`, 'error'); }
-  }
 };

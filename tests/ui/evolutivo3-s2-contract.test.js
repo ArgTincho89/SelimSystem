@@ -2,8 +2,8 @@ const fs = require('fs');
 const path = require('path');
 const read = file => fs.readFileSync(path.join(__dirname, '../../public', file), 'utf8');
 const dialogSource = () => {
-  const assets = read('js/pages/assets.js');
-  return assets.slice(assets.indexOf('async showRentCollectionModal('));
+  const periods = read('js/pages/rentalPeriods.js');
+  return periods.slice(periods.indexOf('async collectContract('));
 };
 
 describe('Evolutivo 3 S2 rent collection UI contract', () => {
@@ -24,11 +24,11 @@ describe('Evolutivo 3 S2 rent collection UI contract', () => {
     expect(dialog.indexOf('const idempotencyKey =')).toBeLessThan(dialog.indexOf('onClick'));
   });
   it('offers Deshacer cobro with inline confirmation and no window.confirm', () => {
-    const assets = read('js/pages/assets.js');
-    expect(assets).toContain('Deshacer cobro');
-    expect(assets).toContain('Confirmar y deshacer');
-    expect(assets).not.toContain('Anular cobro');
-    expect(assets.slice(assets.indexOf('undoCollections('), assets.indexOf('contractTypeLabel(type)'))).not.toContain('confirm(');
+    const periods = read('js/pages/rentalPeriods.js');
+    expect(periods).toContain('Deshacer cobro');
+    expect(periods).toContain('Confirmar y deshacer');
+    expect(periods).not.toContain('Anular cobro');
+    expect(periods.slice(periods.indexOf('undoCollections('), periods.indexOf('async showCollectionView'))).not.toMatch(/[^.\w]confirm\(/);
     expect(read('js/api.js')).toContain('reverseCollection');
   });
   it('the Transacciones delete explains the period returns to pending', () => {

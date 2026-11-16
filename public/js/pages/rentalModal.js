@@ -17,7 +17,7 @@ const RentalModal = {
       ctx.asset = await API.assets.get(ctx.assetId);
       ctx.year = ctx.overview.year;
     } catch (error) { showToast(error.message, 'error'); return null; }
-    ctx.reopen = (tab = null) => RentalModal.open(declarationId, { assetId: ctx.assetId, tab: tab || ctx.tabs?.current() || 'resumen', year: ctx.year, readOnly: ctx.readOnly });
+    ctx.reopen = (tab = null) => RentalModal.open(declarationId, { assetId: ctx.assetId, tab: tab || ctx.tabs?.current() || 'resumen', year: ctx.year, readOnly: ctx.readOnly, periodFilter: ctx.periodFilter });
     ctx.reload = async ({ tab } = {}) => {
       ctx.overview = await API.rentals.declarations.overview(declarationId, { year: ctx.year });
       this.renderHeader(ctx);
@@ -105,7 +105,7 @@ const RentalModal = {
   },
 
   async collect(ctx, monthKey) {
-    await AssetsPage.showRentMonthModal(ctx.assetId, monthKey, () => ctx.reopen());
+    await RentalPeriods.collectMonth(ctx.assetId, monthKey, () => ctx.reload());
   },
 
   // Resumen: general state, one card per active modality, collection progress and alerts (only when they apply).
@@ -179,7 +179,7 @@ const RentalModal = {
   async collectContract(ctx, contractId) {
     try {
       const contract = await API.rentals.get(contractId);
-      await AssetsPage.showRentCollectionModal(ctx.asset, contract, null, () => ctx.reopen());
+      await RentalPeriods.collectContract(ctx.asset, contract, null, () => ctx.reload());
     } catch (error) { showToast(error.message, 'error'); }
   },
 
@@ -264,12 +264,9 @@ const RentalModal = {
     return root;
   },
 
-  // Períodos (temporary, until the unified table lands): the existing rent schedule of the asset.
-  async renderPeriods(ctx) {
-    const root = create('div', { className: 'rental-periods' });
-    const asset = await API.assets.get(ctx.assetId);
-    await AssetsPage.renderRentals(asset, root);
-    return root;
+  // Períodos: the unified monthly table (one row per month: modalities, obligations, state and actions).
+  renderPeriods(ctx) {
+    return RentalPeriods.render(ctx);
   },
 
   // Documentos / Notas (temporary): the per-contract panels, one for each modality of the rental.

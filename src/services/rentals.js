@@ -300,6 +300,7 @@ function validateAllocations(db, userId, input, currencyCode, ignoreCollectionId
     const allocations = db.findAll('rentCollectionAllocations', userId).filter(item => item.occurrenceId === occurrence.id && item.collectionId !== ignoreCollectionId);
     const already = allocations.reduce((sum, item) => sum + item.amountMinor, 0);
     const extra = pending.get(occurrence.id) || 0;
+    if (already >= occurrence.rentMinor) return { error: 'No se puede registrar un cobro porque el período ya está cobrado.' };
     if (already + extra + amountMinor > occurrence.rentMinor) return { error: 'La asignación supera el saldo pendiente del período' };
     pending.set(occurrence.id, extra + amountMinor);
     if (entry.clasificacion !== undefined && entry.clasificacion !== null && !['A', 'B'].includes(entry.clasificacion)) return { error: 'La clasificación de cada asignación debe ser A o B' };

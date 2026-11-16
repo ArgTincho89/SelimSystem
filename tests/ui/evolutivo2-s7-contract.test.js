@@ -44,6 +44,11 @@ describe('Evolutivo 2 S7 obligations section UI contract', () => {
   it('never uses window.confirm', () => {
     expect(source).not.toContain('window.confirm');
     expect(source).not.toMatch(/\bconfirm\(/);
+    // The evolutivo-5 rental files use the shared ConfirmDialog or inline confirmations as well.
+    ['js/pages/assetHistory.js', 'js/pages/rentalModal.js', 'js/pages/rentalPeriods.js', 'js/components/dataTable.js', 'js/components/tabs.js', 'js/components/confirmDialog.js'].forEach(file => {
+      expect(read(file)).not.toContain('window.confirm');
+      expect(read(file)).not.toMatch(/(^|[^.\w])confirm\(/m);
+    });
   });
 
   it('submits the responsibilities through the composite form', () => {

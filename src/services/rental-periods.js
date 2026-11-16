@@ -3,6 +3,8 @@ const ledger = require('./account-ledger');
 const rentals = require('./rentals');
 const alerts = require('./alerts');
 const declarations = require('./rental-declarations');
+const assetHistory = require('./asset-history');
+const economicOverview = require('./economic-overview');
 
 /**
  * Read models of one rental (declaration). Everything is built over `alerts.readOnlyView`, so generated
@@ -241,4 +243,63 @@ function overview(db, userId, declaration, options = {}) {
   };
 }
 
-module.exports = { overview, rentPeriods, modalityCards, headerStatus, nextAdjustment, ENDING_SOON_DAYS, MODALITY_LABEL };
+const MAX_PERIOD_MONTHS = 36;
+
+/** Validates the `from`/`to` months (YYYY-MM) of the periods query; defaults to the current year. */
+function resolvePeriodRange(query, today) {
+  const year = today.slice(0, 4);
+  const from = query.from === undefined || query.from === '' ? `${year}-01` : query.from;
+  const to = query.to === undefined || query.to === '' ? `${year}-12` : query.to;
+  if (!economicOverview.validMonth(from) || !economicOverview.validMonth(to)) return { error: 'Los meses deben tener formato YYYY-MM', status: 400 };
+  if (from > to) return { error: 'El mes inicial no puede ser posterior al mes final', status: 400 };
+  if (economicOverview.monthsBetween(`${from}-01`, `${to}-01`).length > MAX_PERIOD_MONTHS) return { error: `El rango no puede superar los ${MAX_PERIOD_MONTHS} meses`, status: 400 };
+  return { value: { from, to } };
+}
+
+/**
+ * The unified monthly table of a rental: one period per month with every modality part, the owner and tenant
+ * obligation occurrences of the asset in that month (payments, reversals, resolution, receipts), registered
+ * collections, receipts, notes, unapplied balances and the actions available. Read-only.
+ */
+function periods(db, userId, declaration, query = {}) {
+  const ctx = assetHistory.makeContext(db, userId);
+  const { today, view } = ctx;
+  const resolved = resolvePeriodRange(query, today);
+  if (resolved.error) return resolved;
+  const { from, to } = resolved.value;
+  const range = { fromDate: `${from}-01`, toDate: economicOverview.monthRange(to).to };
+  const rent = rentPeriods(db, userId, declaration, { from: range.fromDate, to: range.toDate, today, view });
+  const obligationRows = db.findAll('obligations', userId).filter(obligation => obligation.assetId === declaration.assetId)
+    .flatMap(obligation => assetHistory.buildObligationRows(ctx, obligation, range));
+  const collectionsById = new Map(db.findAll('rentCollections', userId).filter(collection => !collection.reversedAt).map(collection => [collection.id, collection]));
+  const activeContracts = new Set(declarations.contractsOf(db, userId, declaration.id).filter(contract => contract.status === 'active').map(contract => contract.id));
+  const value = rent.map(period => {
+    const collectionIds = [...new Set(period.parts.flatMap(part => part.collectionIds))].filter(id => collectionsById.has(id));
+    const collections = collectionIds.map(id => collectionsById.get(id));
+    const transactionIds = new Set(collections.map(collection => collection.transactionId).filter(Boolean));
+    const occurrenceIds = new Set(period.parts.map(part => part.occurrenceId));
+    const unapplied = collections.map(collection => ({ collection, view: rentals.collectionView(db, userId, collection) })).filter(item => item.view.unappliedMinor > 0)
+      .map(item => ({ collectionId: item.collection.id, amount: item.view.unappliedAmount, currencyCode: item.collection.currencyCode, date: item.collection.date }));
+    const live = period.parts.filter(part => part.state !== 'cancelled');
+    const canAct = live.some(part => part.actionable);
+    const actions = [];
+    if (period.state !== 'collected' && period.state !== 'cancelled' && live.some(part => part.actionable && part.remaining > 0)) actions.push('collect');
+    if (collections.length) actions.push('undo-collect');
+    if (!collections.length && canAct && period.state !== 'cancelled') actions.push('cancel-period');
+    return {
+      ...period,
+      obligations: obligationRows.filter(row => row.date.slice(0, 7) === period.period),
+      collections: collections.map(collection => ({
+        id: collection.id, groupId: collection.groupId || null, date: collection.date, amount: ledger.fromMinorUnits(collection.amountMinor, collection.currencyCode), currencyCode: collection.currencyCode,
+        accountName: db.findById('accounts', collection.accountId, userId)?.nombre || '', paymentMethod: collection.method || '', modality: collection.modality || null, classification: collection.clasificacion || null
+      })),
+      unapplied,
+      documents: ctx.documents.filter(doc => transactionIds.has(doc.transactionId) || occurrenceIds.has(doc.rentOccurrenceId)).map(assetHistory.documentView),
+      notes: ctx.notes.filter(note => (note.targetType === 'rentOccurrence' && occurrenceIds.has(note.targetId)) || (note.targetType === 'rentCollection' && collectionIds.includes(note.targetId))).map(assetHistory.noteView),
+      actions, activeModalities: period.parts.filter(part => activeContracts.has(part.contractId)).length
+    };
+  });
+  return { value };
+}
+
+module.exports = { overview, periods, resolvePeriodRange, rentPeriods, modalityCards, headerStatus, nextAdjustment, ENDING_SOON_DAYS, MODALITY_LABEL };

@@ -293,6 +293,10 @@ const API = {
     declarations: {
       list(assetId) { return API.get(`/rentals/declarations${assetId ? `?assetId=${encodeURIComponent(assetId)}` : ''}`); },
       get(id) { return API.get(`/rentals/declarations/${encodeURIComponent(id)}`); },
+      periods(id, filters = {}) {
+        const query = new URLSearchParams(Object.entries(filters).filter(([, value]) => value !== '' && value != null));
+        return API.get(`/rentals/declarations/${encodeURIComponent(id)}/periods${query.toString() ? `?${query}` : ''}`);
+      },
       overview(id, filters = {}) {
         const query = new URLSearchParams(Object.entries(filters).filter(([, value]) => value !== '' && value != null));
         return API.get(`/rentals/declarations/${encodeURIComponent(id)}/overview${query.toString() ? `?${query}` : ''}`);

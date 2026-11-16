@@ -168,7 +168,7 @@ router.post('/:id/occurrences/:occurrenceId/cancel', (req, res) => {
   const contract = db.findById('rentalContracts', req.params.id, userId);
   const occurrence = db.findById('rentOccurrences', req.params.occurrenceId, userId);
   if (!contract || !occurrence || occurrence.contractId !== contract.id) return res.status(404).json({ error: 'Período de alquiler no encontrado' });
-  if (rentals.occurrenceView(db, userId, occurrence, ledger.localDateForUser(db, userId)).paidMinor > 0) return res.status(409).json({ error: 'Un período con cobros no se puede cancelar' });
+  if (rentals.occurrenceView(db, userId, occurrence, ledger.localDateForUser(db, userId)).paidMinor > 0) return res.status(409).json({ error: 'No se puede cancelar este período porque tiene cobros registrados.' });
   const updated = db.update('rentOccurrences', occurrence.id, { cancelled: true, cancelledAt: new Date().toISOString() }, userId);
   res.json(rentals.occurrenceView(db, userId, updated, ledger.localDateForUser(db, userId)));
 });

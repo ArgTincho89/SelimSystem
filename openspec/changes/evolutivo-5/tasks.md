@@ -59,11 +59,11 @@ Budget is 800 lines (review_budget_lines); `size:exception` is recorded. Mitigat
 
 ## W4: periods-tab (commit: `feat(rentals): periods tab and collection flows`)
 
-- [ ] 4.1 RED `tests/routes/rental-periods.test.js`: consolidated state, partial, `virtual:` ids with `actionable:false`, obligations with payments/reversals, no writes.
-- [ ] 4.2 `rental-periods.js` `periods`; route `GET .../periods?from&to`.
-- [ ] 4.3 Create `pages/rentalPeriods.js` and `components/dataTable.js`; move collection modals out of `assets.js`, remove obsolete sections; keep `[data-rent-month]`.
-- [ ] 4.4 Re-point `evolutivo3-s2`, `rental-batch-contract` (load `rentalPeriods.js` in vm), `evolutivo2-s7` (no `confirm(` in new files); add `tests/ui/evolutivo5-periods-contract.test.js`.
-- [ ] 4.5 e2e: `e2e/pages/AssetsPage.ts` `undoCollectedMonth` -> "Ver alquiler" -> tab "Períodos" -> `[data-rent-month]`; update feature steps.
+- [x] 4.1 RED `tests/routes/rental-periods.test.js`: consolidated state, partial, `virtual:` ids with `actionable:false`, obligations with payments/reversals, no writes.
+- [x] 4.2 `rental-periods.js` `periods`; route `GET .../periods?from&to`.
+- [x] 4.3 Create `pages/rentalPeriods.js` and `components/dataTable.js`; move collection modals out of `assets.js`, remove obsolete sections; keep `[data-rent-month]`.
+- [x] 4.4 Re-point `evolutivo3-s2`, `rental-batch-contract` (load `rentalPeriods.js` in vm), `evolutivo2-s7` (no `confirm(` in new files); add `tests/ui/evolutivo5-periods-contract.test.js`.
+- [x] 4.5 e2e: `e2e/pages/AssetsPage.ts` `undoCollectedMonth` -> "Ver alquiler" -> tab "Períodos" -> `[data-rent-month]`; update feature steps.
 
 ## W5: contracts-and-lifecycle (commit: `feat(rentals): adjustment preview and modality end`)
 

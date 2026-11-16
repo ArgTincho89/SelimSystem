@@ -5,7 +5,7 @@ const vm = require('vm');
 // A tiny DOM for the UI contract tests (the Jest environment is `node`, there is no jsdom). It implements
 // only what the shared helpers (`create`, `on`) and the components under test use.
 class FakeTextNode {
-  constructor(text) { this.nodeType = 3; this.textContent = String(text); }
+  constructor(text) { this.nodeType = 3; this.textContent = String(text); this.dataset = {}; this.attributes = {}; this.className = ''; this.tagName = '#text'; }
 }
 
 class FakeElement {

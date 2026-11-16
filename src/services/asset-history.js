@@ -345,4 +345,15 @@ function build(db, userId, asset, query = {}) {
   };
 }
 
-module.exports = { build, resolveRange, MAX_RANGE_MONTHS };
+/** Shared lookups of the read models (documents, providers, notes, payment reversals) over a read-only view. */
+function makeContext(db, userId) {
+  return {
+    db, userId, view: alerts.readOnlyView(db), today: ledger.localDateForUser(db, userId),
+    documents: db.findAll('documents', userId),
+    providers: new Map(db.findAll('legalOwners', userId).map(owner => [owner.id, owner.name])),
+    notes: db.findAll('wealthNotes', userId),
+    reversals: db.findAll('obligationPaymentReversals', userId)
+  };
+}
+
+module.exports = { build, resolveRange, makeContext, buildObligationRows, noteView, documentView, MAX_RANGE_MONTHS };

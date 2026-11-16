@@ -57,51 +57,43 @@ describe('Rental batch UI', () => {
     });
   });
 
-  describe('collection period rule in Contratos y alquileres', () => {
-    const loadAssets = () => {
-      const context = { getToday: () => '2026-05-15' };
+  describe('unified periods table (replaces "Contratos y alquileres" months and the schedule)', () => {
+    const loadPeriods = () => {
+      const context = { getToday: () => '2026-05-15', localStorage: { getItem: () => null } };
       vm.createContext(context);
-      vm.runInContext(`${read('js/pages/assets.js')}\nthis.AssetsPage = AssetsPage;`, context);
-      return context.AssetsPage;
+      vm.runInContext(`${read('js/utils/format.js')}\n${read('js/pages/rentalPeriods.js')}\nthis.RentalPeriods = RentalPeriods;`, context);
+      return context.RentalPeriods;
     };
+    const period = (key, state, extra = {}) => ({ period: key, state, parts: [{ modality: 'locacion', currencyCode: 'ARS', expected: 100, state }], obligations: [], ...extra });
 
-    it('uses the current month up to day 10 and the next month afterwards', () => {
-      const page = loadAssets();
-      expect(page.currentPeriodEnd('2026-05-10')).toBe('2026-05-31');
-      expect(page.currentPeriodEnd('2026-05-11')).toBe('2026-06-30');
-      expect(page.currentPeriodEnd('2026-12-20')).toBe('2027-01-31');
-    });
-
-    it('hides future installments unless they were already collected', () => {
-      const page = loadAssets();
-      const months = [
-        { key: 'm5', date: '2026-05-01', parts: [{ paidMinor: 0 }] },
-        { key: 'm6', date: '2026-06-01', parts: [{ paidMinor: 0 }] },
-        { key: 'm7', date: '2026-07-01', parts: [{ paidMinor: 0 }] },
-        { key: 'm8', date: '2026-08-01', parts: [{ paidMinor: 1000 }] }
-      ];
-      expect(page.visibleRentMonths(months).map(month => month.key)).toEqual(['m5', 'm6', 'm8']);
+    it('shows one row per month and filters by state, modality and month', () => {
+      const page = loadPeriods();
+      const rows = [period('2026-04', 'collected'), period('2026-05', 'overdue'), period('2026-06', 'pending')];
+      expect(page.applyFilters(rows, {}).map(item => item.period)).toEqual(['2026-04', '2026-05', '2026-06']);
+      expect(page.applyFilters(rows, { status: 'overdue' }).map(item => item.period)).toEqual(['2026-05']);
+      expect(page.applyFilters(rows, { month: '06' }).map(item => item.period)).toEqual(['2026-06']);
+      expect(page.applyFilters(rows, { modality: 'comodato' })).toEqual([]);
     });
   });
 
   describe('contracts', () => {
     const assets = read('js/pages/assets.js');
+    const periods = read('js/pages/rentalPeriods.js');
 
-    it('renders Próximos vencimientos and red Pagos atrasados with their actions', () => {
-      expect(assets).toContain("textContent: 'Próximos vencimientos'");
-      expect(assets).toContain("textContent: 'Pagos atrasados', style: { color: 'var(--danger)' }");
-      expect(assets).toContain('API.rentals.schedule(asset.id)');
-      expect(assets).toContain('scheduleItem: item.id');
+    it('no longer renders the separate Próximos vencimientos / Pagos atrasados lists (the Períodos tab unifies them)', () => {
+      ['Pagos atrasados', 'Meses de alquiler', 'Contratos y alquileres', 'scheduleItem'].forEach(text => expect(assets + periods).not.toContain(text));
+      expect(periods).not.toContain('Próximos vencimientos');
+      expect(periods).toContain("caption: 'Períodos del alquiler'");
     });
 
-    it('shows collected months as green bold "Cobrado" and "Deshacer cobro" outlined in red', () => {
-      expect(assets).toContain('textContent: `Cobrado ${amountText}`');
-      expect(assets).toContain("color: 'var(--income-color)', fontWeight: '700'");
-      expect(assets).toContain("textContent: 'Deshacer cobro', dataset: { undoCollection: 'true' }, style: { border: '1px solid var(--danger)'");
+    it('shows collected months with the "Cobrado" status badge and "Deshacer cobro" outlined in red', () => {
+      expect(periods).toContain("textContent: 'Deshacer cobro', dataset: { undoCollection: 'true' }, style: { border: '1px solid var(--danger)'");
+      expect(periods).toContain('statusBadge(state)');
     });
 
     it('opens the read-only collection detail ("Ver") from contracts and from the home transaction dialog', () => {
-      expect(assets).toContain('async showCollectionView(id, options = {})');
+      expect(periods).toContain('async showCollectionView(id, options = {})');
+      expect(assets).toContain('return RentalPeriods.showCollectionView(id, options);');
       expect(read('js/api.js')).toContain('collectionView(id)');
       expect(read('js/pages/home.js')).toContain('AssetsPage.showCollectionView(tx.rentCollectionId, { stacked: true })');
     });

@@ -43,6 +43,15 @@ router.get('/:id/overview', (req, res) => {
   res.json(result.value);
 });
 
+// One row per month: modalities, owner and tenant obligations, collections, receipts and notes. Read-only.
+router.get('/:id/periods', (req, res) => {
+  const declaration = findDeclaration(req, res);
+  if (!declaration) return;
+  const result = rentalPeriods.periods(req.app.locals.db, req.session.userId, declaration, { from: req.query.from, to: req.query.to });
+  if (result.error) return res.status(result.status || 400).json({ error: result.error });
+  res.json(result.value);
+});
+
 function failed(res, result) {
   return res.status(result.status).json({ error: result.error, ...(result.conflict ? { conflict: result.conflict } : {}) });
 }
