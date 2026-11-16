@@ -415,8 +415,21 @@ const ObligationsPage = {
     await this.runAction(() => API.obligations.updateOccurrence(obligation.id, occurrence.id, { actualDueAmount: amount, scope }));
   },
 
+  // Tenants offered by the resolve modal: those of the obligation's contract, else of the asset's active contract,
+  // else every tenant. The first one is preselected.
+  async resolveTenants(obligation) {
+    const allTenants = this.owners.filter(owner => (owner.roles || []).includes('tenant'));
+    let contract = null;
+    if (obligation.rentalContractId) {
+      try { contract = await API.rentals.get(obligation.rentalContractId); } catch { contract = null; }
+    }
+    if (!contract && obligation.assetId) contract = await this.activeContractFor(obligation.assetId);
+    const fromContract = contract ? allTenants.filter(owner => (contract.tenantIds || []).includes(owner.id)) : [];
+    return fromContract.length ? fromContract : allTenants;
+  },
+
   async showResolveModal(obligation, occurrence) {
-    const tenants = this.owners.filter(owner => (owner.roles || []).includes('tenant'));
+    const tenants = await this.resolveTenants(obligation);
     if (!tenants.length) { alert('Primero registrá un inquilino en Entidades.'); return; }
     const form = create('form', { style: { display: 'grid', gap: '10px', maxHeight: '70vh', overflowY: 'auto' } });
     const tenant = this.select(tenants.map(owner => [owner.id, owner.name]), tenants[0].id);

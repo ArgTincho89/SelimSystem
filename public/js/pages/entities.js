@@ -17,7 +17,7 @@ const EntitiesPage = {
   async renderPanel(panel, role) {
     panel.replaceChildren(create('div', { className: 'loading', textContent: 'Cargando...' }));
     try {
-      const [entities, categories] = await Promise.all([API.owners.list(), role === 'provider' ? API.categories.list() : Promise.resolve([])]);
+      const [entities, categories] = await Promise.all([API.owners.list(), API.categories.list().catch(() => [])]);
       this.categories = categories;
       this.entities = entities.filter(entity => (entity.roles || ['owner']).includes(role));
       this.renderList(panel, role);
@@ -68,8 +68,11 @@ const EntitiesPage = {
     }
   },
 
-  showForm(panel, role, entity = null) {
+  async showForm(panel, role, entity = null) {
     const editing = Boolean(entity);
+    // Expense categories always load when the form opens, whatever the panel role; a failure is shown, never silent.
+    let categoriesError = null;
+    try { this.categories = await API.categories.list(); } catch (error) { categoriesError = error.message; this.categories = []; }
     const form = create('div', { style: { maxHeight: '65vh', overflowY: 'auto' } });
     const kind = create('select', { className: 'form-control' });
     [['person', 'Persona'], ['entity', 'Organización']].forEach(([value, label]) => kind.appendChild(create('option', { value, textContent: label })));
@@ -101,6 +104,10 @@ const EntitiesPage = {
       roles.appendChild(create('label', { style: { display: 'flex', gap: '8px', alignItems: 'center' } }, [checkbox, document.createTextNode(label)]));
     });
     const categoryGroup = create('div', { className: 'form-group' }, [create('label', { textContent: 'Categoría de gasto (obligatoria para organizaciones proveedoras)' }), category]);
+    const categoryHint = categoriesError
+      ? `No se pudieron cargar las categorías: ${categoriesError}`
+      : (this.categories.length ? '' : 'Primero creá una categoría de gastos en Configuración → Categorías.');
+    if (categoryHint) categoryGroup.appendChild(create('small', { className: 'text-muted', role: categoriesError ? 'alert' : 'status', dataset: { categoryHint: categoriesError ? 'error' : 'empty' }, textContent: categoryHint }));
     form.append(categoryGroup, roles);
     const notes = this.addField(form, 'Notas generales', entity?.notes || '', 'textarea');
     const sync = () => {
