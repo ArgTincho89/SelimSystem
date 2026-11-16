@@ -52,7 +52,7 @@ function openMonthPicker(currentMonth, onChange, options, part) {
 function createMonthSelector(currentMonth, onChange, options = {}) {
   const container = create('div', { className: 'month-nav' });
 
-  const btnPrev = create('button', { innerHTML: '&lt;', title: 'Mes anterior' });
+  const btnPrev = create('button', { innerHTML: '&lt;', title: 'Mes anterior', dataset: { repeatable: '' } });
   const label = (options.formatMonthLabel || formatMonth)(currentMonth);
   const monthLabel = create('h2', {});
   const parts = splitMonthLabel(label, currentMonth.slice(0, 4));
@@ -73,7 +73,7 @@ function createMonthSelector(currentMonth, onChange, options = {}) {
   } else {
     monthLabel.textContent = label;
   }
-  const btnNext = create('button', { innerHTML: '&gt;', title: 'Mes siguiente' });
+  const btnNext = create('button', { innerHTML: '&gt;', title: 'Mes siguiente', dataset: { repeatable: '' } });
 
   if (!options.allowFuture) {
     const today = getCurrentMonth();

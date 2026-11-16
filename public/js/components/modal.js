@@ -18,6 +18,8 @@ const Modal = {
   },
 
   open(title, content, options) {
+    // A handler waiting on this dialog must not keep its button locked (see guard in utils/dom.js).
+    if (typeof releaseGuards === 'function') releaseGuards();
     const root = $('#modal-root');
     const depth = this.layers.length;
     const titleId = depth ? `modal-title-${depth}` : 'modal-title';

@@ -1112,3 +1112,11 @@ input::placeholder {
   border-color: var(--accent);
   color: var(--bg-primary);
 }
+
+/* Duplicate-action guard: a control with a pending action is dimmed and shows the progress cursor. */
+button[aria-busy="true"],
+.btn[aria-busy="true"],
+a[aria-busy="true"] {
+  opacity: 0.6;
+  cursor: progress;
+}

@@ -1,5 +1,19 @@
 const API = {
-  async request(method, url, body) {
+  // Writes in flight, keyed by method + url + body: an identical write issued while the first one is pending
+  // shares its promise, so a double click never sends two requests. GET is never deduplicated.
+  inflight: new Map(),
+
+  request(method, url, body) {
+    if (method === 'GET') return this.send(method, url, body);
+    const key = `${method} ${url} ${JSON.stringify(body === undefined ? null : body)}`;
+    if (this.inflight.has(key)) return this.inflight.get(key);
+    const pending = this.send(method, url, body);
+    const tracked = pending.finally(() => { if (this.inflight.get(key) === tracked) this.inflight.delete(key); });
+    this.inflight.set(key, tracked);
+    return tracked;
+  },
+
+  async send(method, url, body) {
     const opts = {
       method,
       headers: { 'Content-Type': 'application/json' },
@@ -21,7 +35,7 @@ const API = {
   post(url, body) { return this.request('POST', url, body); },
   put(url, body) { return this.request('PUT', url, body); },
   patch(url, body) { return this.request('PATCH', url, body); },
-  delete(url) { return this.request('DELETE', url); },
+  delete(url, body) { return this.request('DELETE', url, body); },
 
   auth: {
     me() { return API.get('/auth/me'); },
