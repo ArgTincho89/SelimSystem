@@ -5,18 +5,20 @@ const root = path.join(__dirname, '../..');
 const read = file => fs.readFileSync(path.join(root, file), 'utf8');
 
 describe('Evolutivo 4 release contract', () => {
-  it('ships service worker cache v41 and precaches the Logs page', () => {
+  it('ships service worker cache v41 or later and precaches the Logs page', () => {
     const sw = read('public/sw.js');
-    expect(sw).toContain("CACHE_NAME = 'selimsystem-v41'");
+    expect(Number(sw.match(/CACHE_NAME = 'selimsystem-v(\d+)'/)[1])).toBeGreaterThanOrEqual(41);
     expect(sw).toContain("'/js/pages/logs.js'");
     expect(read('public/index.html')).toContain('/js/pages/logs.js');
   });
 
-  it('bumps the package version to 1.12.0 in package.json and the lockfile', () => {
-    expect(JSON.parse(read('package.json')).version).toBe('1.12.0');
+  it('keeps package.json and the lockfile in the same version, 1.12.0 or later', () => {
+    const version = JSON.parse(read('package.json')).version;
+    const [major, minor] = version.split('.').map(Number);
+    expect(major > 1 || minor >= 12).toBe(true);
     const lock = JSON.parse(read('package-lock.json'));
-    expect(lock.version).toBe('1.12.0');
-    expect(lock.packages[''].version).toBe('1.12.0');
+    expect(lock.version).toBe(version);
+    expect(lock.packages[''].version).toBe(version);
   });
 
   it('documents the release at the top of the changelog', () => {

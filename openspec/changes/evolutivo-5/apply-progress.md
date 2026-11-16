@@ -1,6 +1,6 @@
-# Apply progress: Evolutivo 5 (batch 1 of 2: W1-W6 done; W7-W12 pending)
+# Apply progress: Evolutivo 5 (batch 1 W1-W6 and batch 2 W7-W12 done; only the orchestrator push/PR task 12.7 remains)
 
-Mode: Standard (strict_tdd off). Delivery: single PR with `size:exception`, one commit per work unit, branch `evolutivo-5`. Commits carry no Co-Authored-By or AI attribution. Nothing pushed, no deploy, `CACHE_NAME` untouched (W12 bumps it once to v42).
+Mode: Standard (strict_tdd off). Delivery: single PR with `size:exception`, one commit per work unit, branch `evolutivo-5`. Commits carry no Co-Authored-By or AI attribution. Nothing pushed, no deploy. `CACHE_NAME` bumped once, in W12 (v42).
 
 ## Status per unit
 
@@ -12,8 +12,14 @@ Mode: Standard (strict_tdd off). Delivery: single PR with `size:exception`, one 
 | W4 periods-tab | done | e5d9b46 | 123 suites / 1026 tests |
 | W5 contracts-and-lifecycle | done | c2d6f39 | 126 suites / 1052 tests |
 | W6 rental-deletion-history | done | `git log --grep "delete rental and rental history"` (the amend changes its SHA) | 128 suites / 1072 tests |
+| W7 documents-and-notes | done | 0551c2e | 131 suites / 1094 tests |
+| W8 monthly-sheet | done | b44e2b1 | tests/ui 41 suites / 303 tests (frontend-only unit; backend untouched since W7) |
+| W9 alerts-responsibility | done | c416be9 | 134 suites / 1117 tests |
+| W10 payment-reversal | done | 5a06acd | 137 suites / 1146 tests |
+| W11 feedback-and-a11y | done | 651ac85 | tests/ui 44 suites / 330 tests (frontend-only unit; backend untouched since W10) |
+| W12 release | done | see `git log` (`chore(release): evolutivo-5 version 1.13.0 ...`) | 139 suites / 1162 tests, `tsc --noEmit` in `e2e/` clean |
 
-All tasks 1.1-6.3 are `[x]` in `tasks.md`. W7-W12 are untouched.
+All tasks 1.1-12.6 are `[x]` in `tasks.md`. Task 12.7 (push and PR) is intentionally left unchecked for the orchestrator.
 
 ## Work Unit Evidence
 
@@ -25,6 +31,12 @@ All tasks 1.1-6.3 are `[x]` in `tasks.md`. W7-W12 are untouched.
 | W4 | `... tests/routes/rental-periods.test.js tests/ui/evolutivo5-periods-contract.test.js` green (8 + 16) | Supertest periods | `rentalPeriods.js`, `dataTable.js`, `confirmDialog.js`, collection delegates in `assets.js` |
 | W5 | `... tests/routes/rental-condition-preview.test.js tests/routes/rental-modality-end.test.js tests/ui/evolutivo5-contracts-contract.test.js` green (7 + 9 + 10) | Supertest preview/end/end-preview, rollback via spy | `rentals.js` (`planCondition`), `rental-declarations.js` (`endModality`), `rentalModal.js` |
 | W6 | `... tests/routes/rental-declaration-delete.test.js tests/ui/evolutivo5-rental-history-contract.test.js` green (9 + 11) | Supertest delete cascade, atomic rollback, summary list, safe edit | `remove`/`summary`/`purge` in `rental-declarations.js`, `RentalModal.showHistory/deleteRental` |
+| W7 | `npx jest --runTestsByPath tests/routes/documents-declaration.test.js tests/routes/notes-crud.test.js tests/ui/evolutivo5-docs-notes-contract.test.js` green (6 + 6 + 10) | Supertest upload/list/delete (file removed through the storage), notes CRUD, rental aggregation | `documents.js`, `wealth-notes.js`, `wealth-records.js`, Documentos/Notas tabs of `rentalModal.js` |
+| W8 | `... tests/ui/evolutivo5-monthly-sheet-contract.test.js tests/ui/evolutivo-s7-contract.test.js` green (10 + 3) | vm run of `MonthlySheet.open` with the history API stubbed (range, filters, totals, actions) | `MonthlySheet` in `rentalPeriods.js`, `renderMonthlyView` in `assets.js` |
+| W9 | `... tests/routes/alerts-responsibility.test.js tests/ui/evolutivo5-alerts-contract.test.js tests/routes/alerts.test.js` green (6 + 7 + 12) | Supertest `GET /alerts?responsibility=` (classification, filter, 400) | `alerts.js` service/route/page, `pages.css` block |
+| W10 | `... tests/services/movement-dependents.test.js tests/routes/obligation-payment-revert.test.js tests/ui/evolutivo5-revert-contract.test.js` green (5 + 15 + 9) | Supertest revert (balance, month summary, alerts, dependents, replay, reconciliation, atomic rollback, history); e2e feature written, not run | `obligation-payment-reversal.js`, `movement-dependents.js`, revert routes in `obligations.js`, entry points in five pages |
+| W11 | `... tests/ui/evolutivo5-feedback-contract.test.js` green (11) | N/A: UI source/vm contract (no runtime boundary) | `feedback.js`, CSS block in `components.css`, ConfirmDialog adoption in `obligations.js`/`transactionForm.js` |
+| W12 | `... tests/ui/evolutivo5-release-contract.test.js` green (5) | Full suite (139 suites / 1162 tests) and `tsc --noEmit` of `e2e` | version, `sw.js` v42, `CHANGELOG.md`, `Documento funcional.md` |
 
 E2E: `npx tsc --noEmit -p e2e` is clean. The e2e scenarios were updated but NOT run (no Playwright run in this environment).
 
@@ -60,12 +72,43 @@ Frontend
 10. Cancel-period message changed to "No se puede cancelar este período porque tiene cobros registrados." (was "Un período con cobros no se puede cancelar").
 11. The optional "Historial" tab of the rental modal was not implemented (spec says optional); the status history stays in the ficha.
 
+### Batch 2 deviations
+
+12. `ROUTES` for the activity log are in `src/services/activity-log.js`; the design said `middleware/activity-log.js`. The middleware only gained the optional `activityNote`.
+13. Documents: uploads from the Documentos tab let the user choose "Todo el alquiler" (`declarationId`, default) or one modality contract, reconciling the design (declarationId) and the spec (selected modality contract). The list uses `includeRelated=1` (an additive option also on `GET /documents`).
+14. The monthly sheet keeps the `renderMonthlyView` entry in the ficha but it only renders a "Ver ficha mensual" button; the old inline table and its `API.assets.monthlyView` use were removed from the ficha (the API client method stays). `evolutivo-s7` and `evolutivo2-s10` contract tests were re-pointed.
+15. A tenant-side `document_pending` alert is unreachable in practice (a tenant-only occurrence never reaches `paid`); the mapping exists in code and is covered through the shared (owner) case only.
+16. `Revertir pago` in Avisos fetches the occurrence and asks which payment when there are several; the history, Períodos and Inicio entry points act on one concrete payment.
+17. The revert dialog for a payment with dependents is informational only (no confirm), showing "No se puede revertir este pago porque tiene movimientos dependientes." plus the cause.
+18. W11 adopted `Feedback` in wealth-records, alerts, assetHistory, rentalPeriods and the ficha empty rental; `tabs.js` keeps its own loading/error markup (its tests load it standalone). `ConfirmDialog` replaced the remaining `confirm(` calls in `obligations.js` and `transactionForm.js`; `prompt(` calls elsewhere are untouched (out of scope).
+19. Unit-level full-suite runs: W8 and W11 only changed frontend files and tests, so those two units ran `tests/ui` (full UI suites) instead of the 9-minute full run; the full suite ran at W7, W9, W10 and W12.
+20. Release test `evolutivo4-release-contract` was relaxed (cache version >= 41, package and lock versions equal and >= 1.12.0).
+
 ## Contracts batch 2 must honor (decided here)
 
 - Payment reversal tombstone collection `obligationPaymentReversals` is already READ by the history and periods builders. Required shape: `{ obligationId, occurrenceId, reversedAt (ISO), reason, snapshot: { date (YYYY-MM-DD), amount (major units), currencyCode, ... } }`. Rows then show `reversals[]` under the occurrence and a `kind: 'reversal'`, `state: 'reverted'` row dated `snapshot.date` (falls back to `reversedAt`). If W10 uses other field names, update `reversalRows`/`buildObligationRows` in `asset-history.js`.
 - Documents: the rental delete cascade already treats `declarationId` as a rental target (rental-only documents with only `contractId`/`rentOccurrenceId`/`declarationId` are removed, others detached) and notes of target type `declaration`, `contract` and `rentOccurrence` are removed. W7 only has to add the `declarationId` document target and the `declaration` note target.
 - History/periods `actions` for obligations do not include `revert` yet; W10 should append it (and reuse `AssetHistory.actionProviders` for the history detail).
 - Alerts page keeps calling `AssetsPage.showRentMonthModal(...)` (delegate).
+
+## Batch 2 names and contracts (W7-W12)
+
+Backend
+- `documents.js`: `declarationId` target (validated, derives the asset), `uploadedBy` on create, `uploadedByName` in responses, `DELETE /documents/:id` (removes the file, drops the id from `obligationResolutions.documentIds`), `GET /documents?declarationId=&includeRelated=1` (contracts and periods too).
+- `wealth-notes.js`: `declaration` target, `title` (<=120), `PUT/DELETE /notes/:id`, `from/to` (400 "El rango de fechas no es válido"), `includeRelated=1` (contracts, periods, collections).
+- `alerts.js`: every alert has `responsibility` (`owner|tenant`), `?responsibility=` filter (400 "El responsable no es válido"); `document_pending` follows its obligation (shared and owner map to owner).
+- `movement-dependents.js`: `dependentMovement(db,u,tx,{claims})` and `buildIndex`; `rentals.reverseCollection` delegates with `claims:false`.
+- `obligation-payment-reversal.js`: `revert`, `paymentDetail`, `reversalOf`. Tombstone collection `obligationPaymentReversals` = `{obligationId, occurrenceId, transactionId, paymentId, reversedAt, reason, idempotencyKeyHash, documentIds, snapshot:{date, amount, currencyCode, title, notes, obligationTitle, occurrenceDate, accountId, accountName, paymentMethod, transaction}}` (matches the shape batch 1 already read). Receipts keep existing and get `transactionId:null, revertedPaymentId`.
+- Routes: `GET /obligations/:id/occurrences/:occId/payments/:paymentId` (unlogged) and `POST .../revert {reason?}`; payment POST with a tombstoned key hash returns 409 "Ese pago fue revertido; registrá uno nuevo".
+- `asset-history.js`: payments carry `revertible`/`revertBlockedReason`, owner rows with a revertible payment get `actions: ['revert']`, reversal rows list the receipts (`documents`).
+- Activity log: `ROUTES` lives in `src/services/activity-log.js` (not the middleware). New: `document.delete`, `note.update`, `note.delete`, `obligation.payment-revert`. The middleware appends `res.locals.activityNote` (the reversal reason, <=120 chars) to the entry label; bodies are still never read.
+
+Frontend
+- `components/feedback.js` (`Feedback.loading/empty/error`, `Feedback.MESSAGES`); `tests/helpers/fake-dom.js` `loadBrowser` now preloads it.
+- `wealth-records.js`: `renderDocuments`/`renderNotes` (config driven), `renderPanel` wires both to one target; pure helpers `filterDocuments`, `sortNotes`, `noteHeading`.
+- `MonthlySheet.open(assetId, {from,to})` in `rentalPeriods.js`; actions reuse `AssetHistory.actionProviders` (the revert provider is registered at the end of `assetHistory.js`).
+- `ObligationsPage.revertPayment({obligationId, occurrenceId, transactionId}, onDone)` and `revertFromOccurrence(obligation, occurrence, onDone)`; `AssetHistory.revertButtons(row, afterDone)`.
+- Entry points: Obligaciones vencimientos, asset history detail and monthly sheet, Períodos obligations, Avisos (`document_pending` only), Inicio transaction detail.
 
 ## Issues found
 
@@ -75,4 +118,6 @@ Frontend
 
 ## Remaining (batch 2)
 
-- [ ] W7 documents-and-notes, W8 monthly-sheet, W9 alerts-responsibility, W10 payment-reversal, W11 feedback-and-a11y, W12 release.
+- [x] W7 documents-and-notes, W8 monthly-sheet, W9 alerts-responsibility, W10 payment-reversal, W11 feedback-and-a11y, W12 release.
+- [ ] 12.7 push `evolutivo-5` and open the PR to `master` with the `size:exception` note (orchestrator task; no deploy).
+- E2E scenarios (revert payment, history year/month, end modality) are written but NOT run (no Playwright run here); `npx tsc --noEmit` in `e2e/` is clean.

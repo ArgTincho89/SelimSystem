@@ -111,10 +111,10 @@ Budget is 800 lines (review_budget_lines); `size:exception` is recorded. Mitigat
 
 ## W12: release (commit: `chore(release): evolutivo-5 version 1.13.0, changelog and cache bump`)
 
-- [ ] 12.1 `public/sw.js` `CACHE_NAME` -> `selimsystem-v42`; verify every new script (`assetHistory.js`, `rentalModal.js`, `rentalPeriods.js`, `tabs.js`, `feedback.js`, `dataTable.js`) in `index.html` and `STATIC_ASSETS`.
-- [ ] 12.2 Relax `tests/ui/evolutivo4-release-contract.test.js`; add `tests/ui/evolutivo5-release-contract.test.js` (v42, 1.13.0).
-- [ ] 12.3 `package.json` and `package-lock.json` -> `1.13.0`; `CHANGELOG.md` `## [1.13.0]` (Added/Changed, Spanish).
-- [ ] 12.4 Update `Documento funcional.md` for the new UI (history, rental modal, alerts, revert).
-- [ ] 12.5 Full suite: `npx jest --forceExit --runTestsByPath $(git ls-files 'tests/*.test.js' 'tests/**/*.test.js')` plus untracked new tests; fix regressions.
-- [ ] 12.6 e2e type check (`npx tsc --noEmit -p e2e`).
+- [x] 12.1 `public/sw.js` `CACHE_NAME` -> `selimsystem-v42`; verify every new script (`assetHistory.js`, `rentalModal.js`, `rentalPeriods.js`, `tabs.js`, `feedback.js`, `dataTable.js`) in `index.html` and `STATIC_ASSETS`.
+- [x] 12.2 Relax `tests/ui/evolutivo4-release-contract.test.js`; add `tests/ui/evolutivo5-release-contract.test.js` (v42, 1.13.0).
+- [x] 12.3 `package.json` and `package-lock.json` -> `1.13.0`; `CHANGELOG.md` `## [1.13.0]` (Added/Changed, Spanish).
+- [x] 12.4 Update `Documento funcional.md` for the new UI (history, rental modal, alerts, revert).
+- [x] 12.5 Full suite: `npx jest --forceExit --runTestsByPath $(git ls-files 'tests/*.test.js' 'tests/**/*.test.js')` plus untracked new tests; fix regressions.
+- [x] 12.6 e2e type check (`npx tsc --noEmit -p e2e`).
 - [ ] 12.7 Orchestrator: push `evolutivo-5`, open PR to `master` with the `size:exception` note. No deploy.

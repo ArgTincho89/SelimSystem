@@ -1,12 +1,12 @@
 # SelimSystem — Documento funcional
 
-**Versión del producto:** 1.12.0
+**Versión del producto:** 1.13.0
 **Entorno productivo:** https://selimsystem.fly.dev
 **Fecha del documento:** 16/11/2026
 
 Este documento describe qué hace SelimSystem, cómo se usa cada pantalla y qué reglas de negocio aplica la aplicación. Está pensado para personas usuarias y responsables del negocio que necesitan entender el producto sin leer el código. Los detalles técnicos se limitan a la sección 16.
 
-Todo lo descrito se verificó contra el código actual de la aplicación (versión 1.12.0). Cuando una capacidad existe solo en el servidor y no tiene pantalla, se indica de forma explícita.
+Todo lo descrito se verificó contra el código actual de la aplicación (versión 1.13.0). Cuando una capacidad existe solo en el servidor y no tiene pantalla, se indica de forma explícita.
 
 ---
 
@@ -96,23 +96,27 @@ Inicio
  └─ "+" / "Nueva transacción" → Formulario de transacción (Gasto, Ingreso, Reembolso, Transferencia)
 
 Avisos
+ ├─ A cargo de titulares / A cargo de inquilinos (dos grupos, con filtro "Responsable")
  └─ Acciones por aviso: Registrar pago, Resolver, Adjuntar comprobante, Registrar cobro,
-    Contabilizar cuota, Ver obligación, Ver bien, Ver cuentas
+    Contabilizar cuota, Revertir pago (documentos pendientes), Ver obligación, Ver bien, Ver cuentas
 
 Categorías → Nueva / Editar / Agregar subcategoría / Eliminar
 
 Bienes
  ├─ + Nuevo bien
  ├─ Ver (solo lectura) → Ver declaración de alquiler
- ├─ Ver historial → detalle del registro → visor de comprobante (con zoom)
- ├─ Ficha (y "Alquileres") → ficha completa del bien
+ ├─ Ver historial → año y mes → detalle del registro → visor de comprobante (con zoom) | Revertir pago
+ ├─ Ficha → ficha rediseñada (datos, obligaciones, tarjeta de alquiler, documentos y notas, economía)
+ │   ├─ Ver alquiler → ventana del alquiler con pestañas: Resumen, Períodos, Contratos, Documentos, Notas
+ │   ├─ Ver historial de alquileres → Ver (solo lectura) | Editar | Eliminar
+ │   └─ Ver ficha mensual → ventana secundaria con tabla y filtros
  ├─ Editar
  └─ Declarar alquiler / Editar alquiler → Declaración de alquiler (→ Nueva obligación apilada)
 
 Obligaciones
  ├─ + Nueva obligación
  └─ Por obligación: Registrar pago, Editar, Eliminar, Nota, Adjuntar documento, Ver notas y documentos
-    Por vencimiento: Editar, Registrar pago, Cancelar, Resolver, Adjuntar comprobante, Anular resolución
+    Por vencimiento: Editar, Registrar pago, Revertir pago, Cancelar, Resolver, Adjuntar comprobante, Anular resolución
 
 Perfil
  ├─ Logs (pantalla propia)
@@ -286,8 +290,10 @@ En la experiencia **Escritorio**, cada gráfico tiene una estrella (☆/★) par
 ### 7.1 Elementos
 
 - Título con la cantidad de avisos pendientes.
-- **Filtros:** tipo de aviso y bien.
-- Avisos agrupados por tipo, ordenados por fecha. Cada tarjeta muestra título, fecha (o "Vencido · fecha" en rojo) y un mensaje en lenguaje claro.
+- **Filtros:** tipo de aviso, **Responsable** (titular o inquilino) y bien.
+- Dos grupos principales, cada uno con su título y contador: **A cargo de titulares** y **A cargo de inquilinos**. Un grupo sin avisos muestra un mensaje ("No hay obligaciones a cargo del inquilino."). El grupo se identifica por el texto del título, no solo por el color.
+- Dentro de cada grupo, los avisos se agrupan por tipo y se ordenan por fecha. Cada tarjeta muestra título, fecha (o "Vencido · fecha" en rojo) y un mensaje en lenguaje claro.
+- Todo aviso tiene un responsable: son del **inquilino** los avisos de comprobantes pendientes de inquilinos, alquileres pendientes de cobro, contratos por vencer y ajustes de alquiler; el resto son del **titular**. Un aviso de documento pendiente sigue al responsable de su obligación.
 
 ### 7.2 Tipos de aviso
 
@@ -301,7 +307,7 @@ En la experiencia **Escritorio**, cada gráfico tiene una estrella (☆/★) par
 | **Cuotas de tarjeta** | Cuota programada vencida o dentro de sus días de aviso (por defecto 5). | Contabilizar cuota, Ver transacciones |
 | **Contratos por vencer** | Contrato de alquiler que vence en los próximos 30 días. | Ver bien |
 | **Ajustes de alquiler** | Ajuste de alquiler en los próximos 30 días. | Ver bien |
-| **Documentos pendientes** | Vencimiento pagado en los últimos 60 días sin comprobante adjunto. | Adjuntar comprobante, Ver obligación |
+| **Documentos pendientes** | Vencimiento pagado en los últimos 60 días sin comprobante adjunto. | Adjuntar comprobante, Revertir pago, Ver obligación |
 | **Saldo insuficiente en cuentas** | El pronóstico de una cuenta conciliada indica que no alcanza para un pago próximo. | Ver cuentas |
 
 Reglas generales: se consideran avisos hasta 90 días hacia adelante y se muestran como máximo 200. Los vencimientos cancelados o resueltos no generan avisos.
@@ -313,6 +319,7 @@ Reglas generales: se consideran avisos hasta 90 días hacia adelante y se muestr
 - **Adjuntar comprobante:** permite elegir un archivo (PDF, PNG, JPG, WebP o texto) que queda vinculado al vencimiento.
 - **Registrar cobro:** abre **Cobrar mes** solo para el mes seleccionado (ver 10.4).
 - **Contabilizar cuota:** pide el importe (precargado con el previsto) y lo registra como gasto.
+- **Revertir pago:** solo en avisos de documentos pendientes (ver 11.7).
 
 ---
 
@@ -345,10 +352,10 @@ Reglas generales: se consideran avisos hasta 90 días hacia adelante y se muestr
 | Botón | Qué hace |
 |---|---|
 | **Ver** | Abre el formulario del bien en modo solo lectura. En inmuebles alquilados ofrece **Ver declaración de alquiler**. |
-| **Ver historial** | Historial de obligaciones del bien (ver 9.3). |
-| **Ficha** | Ficha completa del bien (ver 9.4). |
+| **Ver historial** | Historial tipado del bien por año y mes (ver 9.3). |
+| **Ficha** | Ficha rediseñada del bien (ver 9.4). |
 | **Editar** | Formulario editable. |
-| **Alquileres** (inmuebles) | Abre la ficha, donde está la sección de alquileres. |
+| **Ver alquiler** (inmuebles con alquiler vigente) | Abre la ventana del alquiler (ver 10.5). |
 | **Declarar alquiler / Editar alquiler** (inmuebles) | Abre la declaración de alquiler (ver 10). |
 
 ### 9.2 Alta y edición de un bien
@@ -374,27 +381,27 @@ Reglas generales: se consideran avisos hasta 90 días hacia adelante y se muestr
 
 La condición de alquilado **no** se pide al crear el bien: se declara después (ver 10).
 
-### 9.3 Ver historial (historial de obligaciones)
+### 9.3 Ver historial (historial del bien)
 
 1. Pulsar **Ver historial** en un bien.
-2. Elegir en **Mes** un mes concreto o **Todos los meses** (desde la creación del bien o su obligación más antigua, hasta el mes actual, con un máximo de 120 meses).
-3. Los registros se agrupan **por mes** y dentro de cada mes **por tipo de obligación**. Cada fila muestra la obligación, el proveedor, la fecha y el estado (Pagado, Pendiente, Vencido).
-4. Al pulsar un registro se ve su detalle: tipo, proveedor, vencimiento, importe, pagado, estado, **pagos** (fecha, importe, cuenta, medio, título y notas) y **comprobantes**.
+2. Elegir el **Año** y, aparte, el **Mes** (o **Todo el año**). **Hoy** vuelve al mes actual. El listado se actualiza sin cerrar la ventana.
+3. Cada fila de la tabla muestra fecha, concepto, tipo (obligación, alquiler, ajuste, evento o reversión), responsable (titular o inquilino), proveedor o inquilino, importe esperado, ejecutado, saldo, estado y acción. Cuando se ve un año, los registros se agrupan por mes. El estado se informa con texto e ícono, no solo con color (Pendiente, Vencido, Parcial, Pagado, Cobrado, Resuelto, Revertido, Cancelado).
+4. **Ver detalle** abre el registro: tipo, fecha, concepto, bien, responsable, importes, estado, **pagos o cobros** (fecha, importe, cuenta, medio, título y notas), pagos revertidos, **comprobantes** y **notas**. Desde el detalle se puede **Registrar pago**, **Resolver**, **Registrar cobro**, **Deshacer cobro**, **Adjuntar comprobante**, **Agregar nota** y **Revertir pago**, según el estado del registro.
 5. Al pulsar un comprobante se abre el **visor**: imágenes con **Alejar**, **Acercar** y **100%**; PDF y texto en un marco integrado; botones **Abrir** y **Descargar**. Los formatos no admitidos solo se pueden descargar.
+6. Si no hay registros, aparece "No hay movimientos en este período.".
 
 ### 9.4 Ficha del bien
 
-Ventana con toda la información del bien:
+Ventana rediseñada con estos bloques:
 
-- Datos del bien y notas.
-- **Ficha del bien:** titulares vigentes, inquilino actual, alquiler cobrado este mes, costo de mantenimiento de los últimos 12 meses, pendientes (comprobantes faltantes o del inquilino), obligaciones con su responsable y próximo vencimiento, documentos y notas.
-- **Gastos recuperables e importes pendientes:** permite **Registrar gasto recuperable** (un gasto ya registrado que debe reintegrar, por ejemplo, el inquilino) y luego **Registrar reintegro**, que crea un ingreso real en la cuenta elegida. Incluye los **movimientos atribuidos** al bien.
-- **Análisis económico del bien:** por mes, año o rango de fechas; solo cuenta movimientos reales contabilizados y atribuidos al bien. Muestra por moneda ingresos, gastos, reembolsos y resultado neto, la evolución mensual y acumulada, los movimientos reales y, aparte, lo **pendiente, fuera de resultados reales**.
-- **Ficha mensual:** tabla de los últimos 12 meses con concepto, responsable, esperado, pagado o cobrado, estado y comprobante.
-- **Historial de titularidad** (titular, porcentaje y período).
-- **Contratos y alquileres** (inmuebles; ver 10.5).
-- **Historial de estados**.
-- **Documentos y Notas:** carga de documentos (PDF, PNG, JPEG, WebP o texto; máximo 20 MiB) con **Ver** y **Descargar**, y notas con fecha.
+- **Encabezado** con el nombre y los datos principales del bien, y accesos a **Ver historial** y **Ver ficha mensual**.
+- **Datos del bien** y notas.
+- **Obligaciones del bien** con su responsable, próximo vencimiento y acciones (**Registrar pago**, **Resolver**).
+- **Tarjeta de alquiler** (inmuebles): resumen del alquiler vigente con **Ver alquiler** (abre la ventana del alquiler, ver 10.5), **Ver historial de alquileres** y la declaración o edición del alquiler. Sin alquiler vigente muestra "Este inmueble no tiene un alquiler activo." con la acción para declararlo.
+- **Documentos y notas del bien:** documentos (PDF, PNG, JPEG, WebP o texto; máximo 20 MiB) con filtros por nombre, tipo y fecha, **Ver**, **Descargar** y **Eliminar** (con confirmación); notas con fecha, título opcional, filtro por rango de fechas, orden, **Editar** y **Eliminar** (con confirmación).
+- **Economía del bien:** ficha del bien (titulares vigentes, inquilino actual, alquiler cobrado este mes, costo de mantenimiento de los últimos 12 meses, pendientes), **gastos recuperables e importes pendientes** (**Registrar gasto recuperable** y **Registrar reintegro**), **análisis económico** por mes, año o rango (solo movimientos reales; lo pendiente se muestra aparte) y la **ficha mensual**.
+- **Ficha mensual:** el botón **Ver ficha mensual** abre una ventana secundaria ancha (no se muestra dentro de la ficha). Permite elegir año o rango de meses (hasta 36; la pantalla lo indica) y filtrar por tipo (alquiler u obligación), responsable, estado, modalidad y texto o proveedor. La tabla tiene las columnas Período, Concepto, Responsable, Esperado, Ejecutado, Estado, Comprobante y Acción, con los importes por moneda sin conversión y los totales de lo visible. Las acciones son las de la pestaña Períodos. En el celular cada fila se muestra como tarjeta desplegable. Sin resultados: "No hay movimientos en este período.".
+- **Historial de titularidad** (titular, porcentaje y período) y **historial de estados**.
 
 ### 9.5 Reglas de bienes
 
@@ -450,13 +457,20 @@ Se abre desde **Avisos** (Registrar cobro), desde los meses de alquiler o desde 
 
 Desde la tarjeta de un contrato también existe **Registrar cobro** multi-período: se marcan uno o varios períodos, se reparte el importe total recibido y la parte no asignada queda visible.
 
-### 10.5 Contratos y alquileres (en la ficha)
+### 10.5 Ventana del alquiler ("Ver alquiler")
 
-- **Meses de alquiler:** un renglón por mes con estado e importe. Un mes cobrado muestra "Cobrado" y el importe en verde y negrita; los meses con saldo ofrecen **Cobrar mes**.
-- **Próximos vencimientos** y **Pagos atrasados** (en rojo): del día 1 al 10 se muestra el mes en curso; desde el día 11, el mes siguiente. Botones **Cobrar mes** (alquiler) y **Pagar** (obligaciones).
-- Por contrato: modalidad, inquilinos, estado, fechas, alquiler inicial y día de vencimiento, con **Actualizar alquiler**, **Registrar cobro**, **Finalizar contrato** y **Documentos y notas**.
-- **Actualizar alquiler:** registra un ajuste (importe manual, porcentaje o índice) con fecha efectiva igual a un vencimiento del contrato, no retroactivo, sin períodos cobrados afectados.
-- Filtro de períodos: pendientes, parcialmente cobrados, cobrados, vencidos, cancelados. **Cancelar período** solo si no tiene cobros.
+Se abre desde la tarjeta de alquiler de la ficha (y desde los avisos de alquiler). Es una ventana ancha con un **encabezado fijo** y cinco pestañas (en el celular ocupa toda la pantalla y las pestañas se desplazan horizontalmente).
+
+- **Encabezado:** estado del alquiler (Activo, Por vencer, Por comenzar o Finalizado, con texto e ícono), inquilinos, vigencia, monto mensual vigente por moneda, próximo cobro, próximo vencimiento y las acciones **Editar alquiler**, **Actualizar alquiler** y **Finalizar alquiler**.
+- **Resumen:** una tarjeta por modalidad (estado, vigencia, monto original y vigente, clasificación, IVA, ajuste y próximo ajuste), el progreso de cobros (esperados, cobrados, parciales, vencidos, pendientes y cancelados) y las alertas del alquiler con su acción.
+- **Períodos:** una fila por mes con el vencimiento, una columna por modalidad, las obligaciones del titular y del inquilino de ese mes, el total por moneda, el estado consolidado y las acciones **Registrar cobro**, **Deshacer cobro** (con confirmación), **Cancelar período** (con confirmación; solo sin cobros) y **Ver detalle**. Filtros por año, mes, estado, tipo, responsable, modalidad, proveedor y texto. Las obligaciones del mes ofrecen **Registrar pago**, **Resolver**, **Anular resolución** y **Revertir pago**. Sin períodos que coincidan: "No hay períodos pendientes de cobro." u otro mensaje con **Limpiar filtros**.
+- **Contratos:** una tarjeta por modalidad con su vigencia, importes, clasificación y ajuste. **Actualizar alquiler** registra un ajuste (importe manual, porcentaje o índice) eligiendo entre los próximos vencimientos y muestra antes una vista previa ("Desde <mes>, el alquiler pasa de X a Y. Se actualizarán N períodos futuros no cobrados."); los períodos ya cobrados no se modifican. **Finalizar contrato** termina solo esa modalidad (pide la fecha y una confirmación que lista los períodos que se cancelan); si el contrato ya estaba finalizado, el servidor responde "No se puede finalizar este contrato porque ya está finalizado.".
+- **Documentos:** ver 10.8.
+- **Notas:** ver 10.8.
+
+Reglas:
+- Un período con cobros no se puede cancelar ("No se puede cancelar este período porque tiene cobros registrados.") y un período ya cobrado no admite otro cobro ("No se puede registrar un cobro porque el período ya está cobrado.").
+- Los importes se muestran por moneda, sin conversión.
 
 ### 10.6 Deshacer un cobro
 
@@ -470,6 +484,17 @@ Para corregir un cobro mal registrado (cuenta, clasificación o importe equivoca
 - Un cobro de alquiler **no se edita**: se deshace y se registra de nuevo.
 - Si la cuenta estaba conciliada, la conciliación se reinicia y se avisa ("La conciliación de la cuenta quedó pendiente de revisar").
 - Solo bloquea el deshacer un movimiento dependiente (por ejemplo, un reembolso o una conversión vinculados).
+
+### 10.7 Histórico de alquileres, edición y eliminación
+
+- **Ver historial de alquileres** (tarjeta de alquiler de la ficha) lista todos los alquileres del inmueble con su vigencia, inquilinos, modalidades y estado. **Ver** abre el alquiler en solo lectura (el vigente abre la ventana normal).
+- Un alquiler **finalizado** puede **editarse** solo si no tiene cobros, documentos, notas ni obligaciones vinculadas; si las tiene, la pantalla lo explica.
+- Un alquiler finalizado puede **eliminarse** con una confirmación fuerte que muestra el impacto (períodos, documentos, notas y obligaciones vinculadas). El servidor lo rechaza mientras el alquiler esté vigente ("Finalizá el alquiler antes de eliminarlo") o tenga cobros sin deshacer ("No se puede eliminar este alquiler porque tiene cobros registrados. Deshacé los cobros primero."). Al eliminar se borran sus períodos, contratos, notas y documentos exclusivos del alquiler; los demás documentos quedan desvinculados, las obligaciones vinculadas pasan a no tener contrato y queda un registro de auditoría. Los cobros ya deshechos se conservan.
+
+### 10.8 Documentos y notas del alquiler
+
+- **Documentos:** lista los documentos del alquiler, de sus contratos y de sus períodos, con fecha de carga y, si existe, quién los cargó. Se pueden cargar (a todo el alquiler o a una modalidad), **Ver**, **Descargar** y **Eliminar** (con confirmación; se borra el archivo y se quita de las resoluciones que lo listaban). Filtros por nombre, tipo y fecha. Vacío: "No hay documentos cargados." con la acción de cargar.
+- **Notas:** con fecha, título opcional (hasta 120 caracteres) y texto, por ejemplo "16/11/2026 · Título de la nota". Se pueden crear, **Editar** y **Eliminar** (con confirmación), filtrar por rango de fechas y ordenar por fecha. Sin resultados: "No hay notas en este rango de fechas.".
 
 ---
 
@@ -535,7 +560,7 @@ Cada fila indica también "Pagado X/Y moneda" y, si la obligación es compartida
 | Nivel | Acción | Efecto |
 |---|---|---|
 | Tarjeta | **Registrar pago** | Paga el vencimiento impago más antiguo que se muestra. |
-| Tarjeta | **Editar** | Edita la obligación. |
+| Tarjeta | **Editar** | Edita la obligación. Si ya tiene pagos pide una confirmación. |
 | Tarjeta | **Eliminar** | Pide confirmación. La obligación deja de mostrarse y se cancelan sus vencimientos sin pagos ni resolución; el historial de pagos se conserva. |
 | Tarjeta | **Nota**, **Adjuntar documento**, **Ver notas y documentos** | Notas y archivos de la obligación. |
 | Tarjeta | **Movimientos atribuidos** | Transacciones atribuidas a la obligación. |
@@ -544,7 +569,8 @@ Cada fila indica también "Pagado X/Y moneda" y, si la obligación es compartida
 | Vencimiento | **Cancelar** | Solo si no tiene pagos ni resolución. |
 | Vencimiento | **Resolver** / **Resolver (pagó el inquilino)** | Ver 11.6. |
 | Vencimiento | **Adjuntar comprobante** | Disponible cuando hay pagos o una resolución. |
-| Vencimiento | **Anular resolución** | El vencimiento vuelve a figurar como pendiente. |
+| Vencimiento | **Anular resolución** | Pide confirmación. El vencimiento vuelve a figurar como pendiente. |
+| Vencimiento | **Revertir pago** | Anula un pago registrado (ver 11.7). Un botón por pago. |
 
 ### 11.5 Registrar pago (paso a paso)
 
@@ -571,6 +597,21 @@ Cuando una obligación está a cargo del inquilino, el propietario no paga: el i
 3. Pulsar **Registrar resolución**.
 
 La resolución **no crea ningún movimiento**: no cambia saldos, ingresos, gastos ni ahorro. Queda constancia en el historial del bien. En obligaciones compartidas, la parte del propietario se paga con **Registrar pago** y la del inquilino se resuelve; el aviso del inquilino aparece cuando la parte del propietario ya está saldada.
+
+### 11.7 Revertir un pago
+
+Para corregir un pago registrado por error sin perder la trazabilidad.
+
+1. Pulsar **Revertir pago** en el vencimiento (Obligaciones), en el detalle del registro del historial del bien, en las obligaciones de la pestaña Períodos del alquiler, en un aviso de **Documentos pendientes** o en el detalle de la transacción de Inicio.
+2. Se abre una confirmación con la fecha, el importe, la cuenta, el medio de pago, la obligación, el vencimiento y el comprobante, un **Motivo** opcional (hasta 500 caracteres) y el texto: "Estás por revertir un pago registrado. Se anulará el gasto asociado y el vencimiento volverá a pendiente. Esta acción no se puede deshacer. ¿Querés continuar?". No se envía nada hasta confirmar.
+3. Al confirmar, el gasto se elimina: el importe vuelve al saldo de la cuenta, bajan los gastos del mes, se recalcula el ahorro y el vencimiento vuelve a Pendiente, Vencido o Parcial (si quedan otros pagos).
+
+**Reglas**
+- Se revierte un pago por vez, solo de obligaciones a cargo del titular (las del inquilino se corrigen con **Anular resolución**).
+- Un pago con movimientos dependientes (reembolso, normalización de transferencia, atribución de movimiento, gasto recuperable o recupero) no se puede revertir: "No se puede revertir este pago porque tiene movimientos dependientes.".
+- Un pago ya revertido se rechaza ("Ese pago ya fue revertido") y repetir la solicitud original de pago no lo vuelve a crear ("Ese pago fue revertido; registrá uno nuevo").
+- Si la cuenta estaba conciliada, la conciliación se reinicia y se avisa.
+- El pago queda como registro **Revertido** en el historial del bien y en el detalle del período, con su motivo y su comprobante (los comprobantes se conservan). Queda un registro específico en Logs ("Revertiste un pago de la obligación ...") con el motivo.
 
 ---
 
@@ -694,7 +735,7 @@ Un reembolso reduce el gasto de su categoría y el gasto total; nunca suma a ing
 
 | Movimiento | Restricción |
 |---|---|
-| Pago de una obligación | No se puede editar ni eliminar. Se corrige con un movimiento compensatorio. |
+| Pago de una obligación | No se puede editar ni eliminar. Se corrige con **Revertir pago** y se registra uno nuevo. |
 | Cobro de alquiler | No se edita: se usa **Deshacer cobro**. |
 | Movimiento con atribuciones o reintegros | No se puede cambiar su importe, tipo, cuenta o moneda, ni eliminar. |
 | Ingreso que sostiene una conversión | Hay que revertir antes la conversión. |
@@ -736,19 +777,19 @@ Los campos de dinero muestran formato monetario local (por ejemplo, "211.392,00"
 
 ## 17. Limitaciones conocidas
 
-Todas verificadas en el código de la versión 1.12.0:
+Todas verificadas en el código de la versión 1.13.0:
 
 1. **Metas sin pantalla:** el servidor permite crear, listar y borrar metas (ahorro, límite por categoría y límite general), pero no existe ninguna pantalla para gestionarlas y su progreso no se muestra en Inicio.
 2. **Sin pantallas de Resumen ni Estadísticas propias:** la analítica está integrada en Inicio. El ritmo de gasto (burn rate) y las tendencias multi-mes existen en el servidor, pero en pantalla solo se usa la serie de IVA de los últimos 6 meses.
 3. **Compras en cuotas difíciles de iniciar:** solo aparecen con un medio de pago de tipo tarjeta de crédito, pero la pantalla crea los medios de pago reutilizables siempre con tipo "otro".
 4. **Moneda principal fija desde la interfaz:** la analítica de Inicio usa la moneda principal (ARS por defecto) y no hay una opción en pantalla para cambiarla.
-5. **Pagos de obligaciones inmutables:** no se pueden editar ni eliminar (Inicio muestra el botón "Eliminar", pero el servidor rechaza la acción).
+5. **Pagos de obligaciones inmutables:** no se pueden editar ni eliminar (Inicio muestra el botón "Eliminar", pero el servidor rechaza la acción y el mensaje remite a **Revertir pago**).
 6. **Bienes sin baja:** no existe una opción para eliminar un bien.
 7. **Sin copia de seguridad automática:** existe una tarea semanal de respaldo en el código, pero no se activa al iniciar el servidor.
 8. **Sin notificaciones externas:** los avisos son solo internos; el recordatorio diario por correo está implementado pero no se usa.
 9. **Usuarios nuevos sin categorías:** existe una lista de categorías sugeridas, pero no se carga al registrarse.
 10. **Datos solo con conexión:** sin red no se pueden ver ni registrar datos.
-11. **Novedades del acceso desactualizadas:** el desplegable de versión muestra el número 1.12.0, pero su lista de novedades termina en 1.11.17.
+11. **Novedades del acceso desactualizadas:** el desplegable de versión muestra el número 1.13.0, pero su lista de novedades termina en 1.11.17.
 12. **Texto heredado:** la declaración de alquiler sin inquilinos sugiere cargarlos "en Personas"; hoy se cargan en Configuración > Inquilino.
 13. **Edición de vencimiento por texto:** al editar el importe de un vencimiento, el alcance se elige escribiendo "this" o "future" en un cuadro de texto.
 

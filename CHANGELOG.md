@@ -1,5 +1,27 @@
 # Changelog
 
+## [1.13.0] - 2026-11-16
+
+### Added
+- Historial del bien tipado (obligaciones, alquileres, ajustes, eventos y reversiones) con selector de año y de mes, detalle de cada registro y estados con texto e ícono.
+- Ficha del bien rediseñada: encabezado, obligaciones, tarjeta de alquiler, documentos y notas, y economía del bien.
+- Ventana del alquiler con pestañas Resumen, Períodos, Contratos, Documentos y Notas, y un encabezado fijo con el estado, la vigencia y las acciones del alquiler.
+- Pestaña Períodos: una fila por mes con las modalidades, las obligaciones del titular y del inquilino, el total por moneda, el estado consolidado y las acciones de cobro.
+- Vista previa de "Actualizar alquiler" (los períodos ya cobrados no se modifican) y "Finalizar contrato" de una sola modalidad.
+- Histórico de alquileres del inmueble, edición segura de un alquiler finalizado y eliminación con confirmación e impacto.
+- Documentos y notas del alquiler: eliminar documentos, editar y eliminar notas, título de la nota, filtros por nombre, tipo y fechas, y quién cargó cada documento.
+- Ficha mensual como ventana secundaria con filtros, totales por moneda y las mismas acciones que Períodos.
+- Avisos separados en "A cargo de titulares" y "A cargo de inquilinos", con filtro por responsable.
+- "Revertir pago" para corregir un pago de obligación (con motivo opcional, comprobantes conservados y registro en Logs), disponible en cinco lugares.
+- Estados de carga, vacío y error compartidos, y una pasada de diseño adaptable para celulares.
+
+### Changed
+- Los ajustes de alquiler omiten los períodos ya cobrados.
+- Finalizar un contrato de una modalidad liquida el alquiler y no usa más la edición del contrato.
+- Eliminar un alquiler con cobros sin deshacer queda bloqueado.
+- Las confirmaciones de eliminar obligación, anular resolución, eliminar medio de pago y editar una obligación con pagos usan la ventana de confirmación compartida.
+- Los mensajes de error de los pagos de obligaciones remiten a "Revertir pago".
+
 ## [1.12.0] - 2026-11-15
 
 ### Added
