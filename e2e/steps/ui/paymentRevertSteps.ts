@@ -34,8 +34,8 @@ When('reverto el pago de la obligación {string} con el motivo {string}', async 
   await new AssetsPage(this.page!).revertPaymentFromHistory(title, reason);
 });
 
-When('elijo el año anterior y todo el año en el historial', async function (this: SelimSystemWorld) {
-  await new AssetsPage(this.page!).chooseHistoryPreviousYear();
+When('elijo el año actual y todo el año en el historial', async function (this: SelimSystemWorld) {
+  await new AssetsPage(this.page!).chooseHistoryCurrentYearAll();
 });
 
 Then('el historial del inmueble muestra {string} como {string}', async function (this: SelimSystemWorld, title: string, state: string) {

@@ -123,8 +123,8 @@ export class AssetsPage extends BasePage {
     await expect(this.page.locator('[data-history-row]', { hasText: 'Pago revertido' }).first()).toBeVisible();
   }
 
-  async chooseHistoryPreviousYear(): Promise<void> {
-    const year = String(new Date().getFullYear() - 1);
+  async chooseHistoryCurrentYearAll(): Promise<void> {
+    const year = String(new Date().getFullYear());
     const history = this.page.locator('.asset-history');
     await history.getByLabel('Mes', { exact: true }).selectOption('all');
     await history.getByLabel('Año', { exact: true }).selectOption(year);

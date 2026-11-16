@@ -16,5 +16,5 @@ Característica: Revertir un pago de obligación y consultar el historial del bi
 
   Escenario: Elegir año y mes en el historial
     Cuando abro el historial del inmueble "Casa Pagos"
-    Y elijo el año anterior y todo el año en el historial
-    Entonces el historial indica "No hay movimientos en este período."
+    Y elijo el año actual y todo el año en el historial
+    Entonces el historial del inmueble muestra "Impuesto municipal" como "Pagado"
