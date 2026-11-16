@@ -21,7 +21,7 @@ describe('Evolutivo 2 S5 asset form UI contract', () => {
     ['Características', 'Ubicación', 'Superficie cubierta (m²)', 'Superficie libre (m²)', 'Identificación catastral', 'Fecha de construcción'].forEach(label => {
       expect(modal).toContain(`'${label}'`);
     });
-    expect(source).toContain("[['departamento', 'Departamento'], ['casa', 'Casa'], ['galpon', 'Galpón'], ['lote', 'Lote']]");
+    expect(source).toContain("[['departamento', 'Departamento'], ['casa', 'Casa'], ['galpon', 'Galpón'], ['lote', 'Lote'], ...(this.kinds || [])");
     expect(source).toContain("[['rented', 'Alquilado'], ['not_rented', 'No alquilado'], ['usufruct', 'Usufructo']]");
     expect(modal).not.toContain("'Condición'");
     expect(modal).not.toContain('fields.condition');

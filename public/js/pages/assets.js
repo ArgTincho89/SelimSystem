@@ -2,6 +2,16 @@ const AssetsPage = {
   assets: [],
   owners: [],
   rentalAlerts: [],
+  kinds: [],
+
+  async loadKinds() {
+    try {
+      this.kinds = API.assetKinds ? await API.assetKinds.list() : [];
+    } catch {
+      this.kinds = this.kinds || [];
+    }
+    return this.kinds;
+  },
 
   async render(filters = {}) {
     const content = $('#page-content');
@@ -9,7 +19,7 @@ const AssetsPage = {
     content.style.paddingBottom = '';
     content.innerHTML = '<div class="loading">Cargando bienes...</div>';
     try {
-      const [assets, owners, rentalAlerts] = await Promise.all([API.assets.list(filters), API.owners.list(), API.rentals.alerts()]);
+      const [assets, owners, rentalAlerts] = await Promise.all([API.assets.list(filters), API.owners.list(), API.rentals.alerts(), this.loadKinds()]);
       this.assets = assets;
       this.owners = owners;
       this.rentalAlerts = rentalAlerts;
@@ -120,7 +130,7 @@ const AssetsPage = {
   },
 
   propertyKindOptions() {
-    return [['departamento', 'Departamento'], ['casa', 'Casa'], ['galpon', 'Galpón'], ['lote', 'Lote']];
+    return [['departamento', 'Departamento'], ['casa', 'Casa'], ['galpon', 'Galpón'], ['lote', 'Lote'], ...(this.kinds || []).map(kind => [kind.key, kind.name])];
   },
 
   conditionOptions() {
@@ -271,7 +281,26 @@ const AssetsPage = {
         fields.color = this.addField(kindFields, 'Color', { value: same ? asset.color || '' : '' });
       } else {
         const group = create('div', { className: 'form-group' }, [create('label', { textContent: 'Tipo' })]);
-        fields.propertyKind = this.select([['', 'Seleccionar tipo'], ...this.propertyKindOptions()], same ? asset.propertyKind || '' : '');
+        const addKindValue = '__add-kind__';
+        const kindOptions = () => [['', 'Seleccionar tipo'], ...this.propertyKindOptions(), [addKindValue, 'Agregar tipo…']];
+        fields.propertyKind = this.select(kindOptions(), same ? asset.propertyKind || '' : '');
+        let previousKind = fields.propertyKind.value;
+        fields.propertyKind.addEventListener('change', async () => {
+          if (fields.propertyKind.value !== addKindValue) { previousKind = fields.propertyKind.value; return; }
+          const name = (prompt('Nombre del nuevo tipo de bien') || '').trim();
+          if (!name) { fields.propertyKind.value = previousKind; return; }
+          try {
+            const kind = await API.assetKinds.create(name);
+            this.kinds = [...(this.kinds || []), kind];
+            fields.propertyKind.replaceChildren();
+            kindOptions().forEach(([value, text]) => fields.propertyKind.appendChild(create('option', { value, textContent: text })));
+            fields.propertyKind.value = kind.key;
+            previousKind = kind.key;
+          } catch (error) {
+            fields.propertyKind.value = previousKind;
+            showToast(error.message, 'error');
+          }
+        });
         group.appendChild(fields.propertyKind);
         kindFields.appendChild(group);
         fields.characteristics = this.addField(kindFields, 'Características', { value: same ? asset.characteristics || '' : '', multiline: true });
@@ -314,7 +343,7 @@ const AssetsPage = {
         payload.vehicleType = fields.vehicleType.value;
         ['brand', 'plate', 'mileage', 'color'].forEach(key => { payload[key] = fields[key].value.trim(); });
       } else {
-        if (!fields.propertyKind.value) return showToast('El tipo de inmueble es obligatorio', 'error');
+        if (!fields.propertyKind.value || fields.propertyKind.value === '__add-kind__') return showToast('El tipo de inmueble es obligatorio', 'error');
         payload.propertyKind = fields.propertyKind.value;
         payload.characteristics = fields.characteristics.value.trim();
         payload.location = fields.location.value.trim();

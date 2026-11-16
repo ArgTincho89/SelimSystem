@@ -7,6 +7,7 @@ const { ageFor } = require('../services/asset-age');
 const ledger = require('../services/account-ledger');
 const assetHistory = require('../services/asset-history');
 const rentalDeclarations = require('../services/rental-declarations');
+const assetKinds = require('../services/asset-kinds');
 const { validateOwnershipSet } =require('../utils/ownership-overlap');
 
 const router = express.Router();
@@ -73,7 +74,7 @@ function nonNegativeInt(value, max) {
 
 function validateImmovableFields(body, existing, usageStatus, db, userId) {
   const propertyKind = pick(body, existing, 'propertyKind', null);
-  if (propertyKind !== null && propertyKind !== '' && !PROPERTY_KINDS.has(propertyKind)) return { error: 'El tipo de inmueble no es válido' };
+  if (propertyKind !== null && propertyKind !== '' && !assetKinds.isValidKey(db, userId, propertyKind)) return { error: 'El tipo de inmueble no es válido' };
   const characteristics = pick(body, existing, 'characteristics', '');
   if (!boundedString(characteristics, 2000)) return { error: 'Las características no son válidas' };
   const value = { propertyKind: propertyKind || null, characteristics: (characteristics || '').trim() };

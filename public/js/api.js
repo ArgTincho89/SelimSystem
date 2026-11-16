@@ -176,6 +176,11 @@ const API = {
     closeOwnership(id, ownershipId, endDate) { return API.patch(`/assets/${id}/ownerships/${ownershipId}`, { endDate }); }
   },
 
+  assetKinds: {
+    list() { return API.get('/asset-kinds'); },
+    create(name) { return API.post('/asset-kinds', { name }); }
+  },
+
   owners: {
     list() { return API.get('/owners'); },
     create(data) { return API.post('/owners', data); },

@@ -45,6 +45,8 @@ const ROUTES = [
   r('PATCH', '/assets/:id/ownerships/:ownershipId', 'asset.ownership-update', 'Modificaste una titularidad del bien', 'modificar una titularidad de un bien', 'asset', { id: 'id', join: '' }),
   r('POST', '/assets', 'asset.create', 'Creaste el bien', 'crear un bien', 'asset', { join: '' }),
   r('PUT', '/assets/:id', 'asset.update', 'Modificaste el bien', 'modificar un bien', 'asset', { id: 'id', join: '' }),
+  r('POST', '/asset-kinds', 'asset-kind.create', 'Creaste el tipo de bien', 'crear un tipo de bien', null, { join: '' }),
+  r('DELETE', '/assets/:id', 'asset.delete', 'Eliminaste el bien', 'eliminar un bien', 'asset', { id: 'id', join: '' }),
   r('POST', '/owners', 'owner.create', 'Agregaste a', 'agregar una persona o entidad', 'owner', { join: '' }),
   r('PUT', '/owners/:id', 'owner.update', 'Modificaste los datos de', 'modificar los datos de una persona o entidad', 'owner', { id: 'id', join: '' }),
   r('DELETE', '/owners/:id', 'owner.delete', 'Eliminaste a', 'eliminar una persona o entidad', 'owner', { id: 'id', join: '' }),
