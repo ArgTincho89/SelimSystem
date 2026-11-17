@@ -221,7 +221,7 @@ const TransactionForm = {
       const option = create('option', { value: item.id });
       const label = `${item.titulo} · ${item.fecha} · ${formatearMoneda(item.monto, item.currencyCode || 'EUR')}`;
       option.dataset.publicValue = label;
-      option.textContent = localStorage.getItem('pate_hide_income') === 'true' ? `${item.titulo} · ${item.fecha} · ••••••` : label;
+      option.textContent = localStorage.getItem('pate_hide_home_stats') === 'true' ? `${item.titulo} · ${item.fecha} · ••••••` : label;
       refundSourceSelect.appendChild(option);
     });
     refundSourceSelect.value = transaction?.refundSourceId || '';

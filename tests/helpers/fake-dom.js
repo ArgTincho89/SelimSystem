@@ -31,7 +31,9 @@ class FakeElement {
         if (on) names.add(name); else names.delete(name);
         element.className = [...names].join(' ');
       },
-      contains: name => element.className.split(' ').includes(name)
+      contains: name => element.className.split(' ').includes(name),
+      add: (...names) => names.forEach(name => element.classList.toggle(name, true)),
+      remove: (...names) => names.forEach(name => element.classList.toggle(name, false))
     };
   }
 

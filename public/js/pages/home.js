@@ -67,7 +67,7 @@ const HomePage = {
     }, { allowFuture: true });
     transactionPane.appendChild(monthNav);
 
-    const incomeHidden = localStorage.getItem('pate_hide_income') === 'true';
+    const incomeHidden = this.isHidden('home');
 
     const statsRow = create('div', { className: 'stats-row home-stats' });
 
@@ -132,8 +132,8 @@ const HomePage = {
         title: incomeHidden ? 'Mostrar ingresos' : 'Ocultar ingresos'
       });
       on(eyeBtn, 'click', () => {
-        const nowHidden = localStorage.getItem('pate_hide_income') !== 'true';
-        this.applyPrivacy(nowHidden);
+        const nowHidden = !this.isHidden('home');
+        this.applyStatsPrivacy(nowHidden);
         sensitiveValues.forEach(value => value.classList.toggle('income-blurred', nowHidden));
         eyeBtn.innerHTML = nowHidden ? SVG_EYE_CLOSED : SVG_EYE_OPEN;
         eyeBtn.title = nowHidden ? 'Mostrar ingresos' : 'Ocultar ingresos';
@@ -169,7 +169,7 @@ const HomePage = {
             const privateLabel = `${tx.titulo}, importe oculto`;
             const item = create('div', {
               className: 'transaction-item', role: 'button', tabindex: '0',
-              'aria-label': localStorage.getItem('pate_hide_income') === 'true' ? privateLabel : publicLabel
+              'aria-label': this.isHidden('home') ? privateLabel : publicLabel
             });
             item.dataset.publicAriaLabel = publicLabel;
             item.dataset.privateAriaLabel = privateLabel;
@@ -244,7 +244,7 @@ const HomePage = {
     content.innerHTML = '';
     content.appendChild(create('h1', { className: 'visually-hidden', textContent: 'Inicio' }));
 
-    let hidden = localStorage.getItem('pate_hide_income') === 'true';
+    let hidden = this.isHidden('home');
     const overview = options.overview || { currencies: [], movements: [], transfers: [], pending: { obligations: [], rents: [] } };
     const activeSavings = overview.currencies?.find(total => total.currency === overview.activeCurrency)?.savings || 0;
     const values = {
@@ -286,8 +286,8 @@ const HomePage = {
       'aria-pressed': String(hidden)
     });
     on(eyeButton, 'click', () => {
-      const shouldHide = localStorage.getItem('pate_hide_income') !== 'true';
-      this.applyPrivacy(shouldHide);
+      const shouldHide = !this.isHidden('home');
+      this.applyStatsPrivacy(shouldHide);
       hidden = shouldHide;
       eyeButton.innerHTML = shouldHide ? eyeClosed : eyeOpen;
       eyeButton.title = shouldHide ? 'Mostrar métricas principales' : 'Ocultar métricas principales';
@@ -577,7 +577,7 @@ const HomePage = {
           className: 'transaction-item desktop-transaction-item',
           role: 'button',
           tabindex: '0',
-          'aria-label': localStorage.getItem('pate_hide_income') === 'true' ? privateLabel : publicLabel
+          'aria-label': this.isHidden('home') ? privateLabel : publicLabel
         });
         item.dataset.publicAriaLabel = publicLabel;
         item.dataset.privateAriaLabel = privateLabel;
@@ -829,12 +829,12 @@ const HomePage = {
     heading.appendChild(create('h2', { textContent: 'Cuentas', style: { fontSize: 'var(--font-md)', margin: 0 } }));
     const privacyButton = create('button', {
       className: 'btn btn-sm btn-ghost account-privacy-toggle', type: 'button',
-      textContent: localStorage.getItem('pate_hide_income') === 'true' ? 'Mostrar importes' : 'Ocultar importes',
-      'aria-pressed': String(localStorage.getItem('pate_hide_income') === 'true'),
-      'aria-label': localStorage.getItem('pate_hide_income') === 'true' ? 'Importes ocultos' : 'Importes visibles'
+      textContent: this.isHidden('accounts') ? 'Mostrar importes' : 'Ocultar importes',
+      'aria-pressed': String(this.isHidden('accounts')),
+      'aria-label': this.isHidden('accounts') ? 'Importes ocultos' : 'Importes visibles'
     });
     on(privacyButton, 'click', () => {
-      const hidden = localStorage.getItem('pate_hide_income') !== 'true';
+      const hidden = !this.isHidden('accounts');
       this.applyPrivacy(hidden);
       privacyButton.textContent = hidden ? 'Mostrar importes' : 'Ocultar importes';
       privacyButton.setAttribute('aria-pressed', String(hidden));
@@ -853,9 +853,9 @@ const HomePage = {
       card.appendChild(cardHeader);
       const balance = create('p', { className: 'account-card-balance sensitive-value' });
       if (account.balanceStatus === 'verified') {
-        this.markSensitive(balance, formatearMoneda(account.balance, account.currency));
+        this.markSensitive(balance, formatearMoneda(account.balance, account.currency), 'accounts');
       } else {
-        this.markSensitive(balance, '—');
+        this.markSensitive(balance, '—', 'accounts');
         balance.title = 'Saldo sin conciliar';
       }
       card.appendChild(balance);
@@ -868,17 +868,41 @@ const HomePage = {
     return section;
   },
 
-  markSensitive(element, value = element.textContent) {
-    element.classList.add('sensitive-value');
-    element.dataset.publicValue = value;
-    element.textContent = localStorage.getItem('pate_hide_income') === 'true' ? '••••••' : value;
+  // Two independent privacy scopes: 'accounts' (account balances, shared with Configuración > "Ocultar importes")
+  // and 'home' (the Ingresos/Gastos/Ahorro cards and the movement amounts, toggled only from Inicio).
+  PRIVACY_KEYS: { accounts: 'pate_hide_income', home: 'pate_hide_home_stats' },
+
+  isHidden(scope) {
+    try { return localStorage.getItem(this.PRIVACY_KEYS[scope]) === 'true'; } catch { return false; }
   },
 
-  applyPrivacy(hidden) {
-    localStorage.setItem('pate_hide_income', String(hidden));
-    $$('[data-public-value]').forEach(element => {
+  storePrivacy(scope, hidden) {
+    try { localStorage.setItem(this.PRIVACY_KEYS[scope], String(hidden)); } catch { /* private mode: the toggle still applies on screen */ }
+  },
+
+  markSensitive(element, value = element.textContent, scope = 'home') {
+    element.classList.add('sensitive-value');
+    element.dataset.publicValue = value;
+    element.dataset.privacyScope = scope;
+    element.textContent = this.isHidden(scope) ? '••••••' : value;
+  },
+
+  maskScope(scope, hidden) {
+    $$(`[data-privacy-scope="${scope}"]`).forEach(element => {
       element.textContent = hidden ? '••••••' : element.dataset.publicValue;
     });
+  },
+
+  // Account balances only (the "Ocultar importes" of the Cuentas block and of Configuración).
+  applyPrivacy(hidden) {
+    this.storePrivacy('accounts', hidden);
+    this.maskScope('accounts', hidden);
+  },
+
+  // Home summary cards and movement amounts only (the eye toggle of Inicio).
+  applyStatsPrivacy(hidden) {
+    this.storePrivacy('home', hidden);
+    this.maskScope('home', hidden);
     $$('[data-private-aria-label]').forEach(element => {
       element.setAttribute('aria-label', hidden ? element.dataset.privateAriaLabel : element.dataset.publicAriaLabel);
     });
