@@ -11,42 +11,65 @@ function splitMonthLabel(label, year) {
   return { monthText, separator: before.slice(monthText.length), year, after: label.slice(index + year.length) };
 }
 
-// Years offered by the year picker: a window around the selected year, never past the current year
-// unless future months are allowed.
-function monthPickerYears(selectedYear, currentYear, allowFuture) {
-  const last = allowFuture ? Math.max(selectedYear, currentYear) + 2 : currentYear;
-  const first = Math.min(selectedYear, currentYear) - 6;
+// Years offered by the year list: a wide window (YEAR_PICKER_SPAN years each way) around the selected year,
+// never past the current year unless future months are allowed. Ascending, so scrolling down goes forward in time.
+const YEAR_PICKER_SPAN = 50;
+
+function monthPickerYears(selectedYear, currentYear, allowFuture, span = YEAR_PICKER_SPAN) {
+  const last = allowFuture ? Math.max(selectedYear, currentYear) + span : Math.max(selectedYear, currentYear);
+  const first = Math.min(selectedYear, currentYear) - span;
   const years = [];
-  for (let year = last; year >= first; year -= 1) years.push(year);
+  for (let year = first; year <= last; year += 1) years.push(year);
   return years;
+}
+
+// Scroll offset that centers the option at `index` inside a list of fixed-height rows.
+function centeredScrollTop(index, rowHeight, viewportHeight) {
+  return Math.max(0, Math.round(index * rowHeight - (viewportHeight - rowHeight) / 2));
 }
 
 function openMonthPicker(currentMonth, onChange, options, part) {
   const [year, month] = currentMonth.split('-').map(Number);
   const today = getCurrentMonth();
   const isFuture = value => !options.allowFuture && value > today;
-  const grid = create('div', { className: 'month-picker-grid', role: 'listbox', 'aria-label': part === 'month' ? 'Mes' : 'Año' });
   const choose = value => { Modal.hide(); if (value !== currentMonth) onChange(value); };
-  if (part === 'month') {
-    MONTH_PICKER_NAMES.forEach((name, index) => {
-      const value = `${year}-${String(index + 1).padStart(2, '0')}`;
-      grid.appendChild(create('button', {
-        type: 'button', className: `btn btn-secondary month-picker-option${index + 1 === month ? ' selected' : ''}`,
-        role: 'option', 'aria-selected': String(index + 1 === month), textContent: name, disabled: isFuture(value), onClick: () => choose(value)
-      }));
+  if (part === 'year') return openYearList(year, month, today, isFuture, options, choose);
+  const grid = create('div', { className: 'month-picker-grid', role: 'listbox', 'aria-label': 'Mes' });
+  MONTH_PICKER_NAMES.forEach((name, index) => {
+    const value = `${year}-${String(index + 1).padStart(2, '0')}`;
+    grid.appendChild(create('button', {
+      type: 'button', className: `btn btn-secondary month-picker-option${index + 1 === month ? ' selected' : ''}`,
+      role: 'option', 'aria-selected': String(index + 1 === month), textContent: name, disabled: isFuture(value), onClick: () => choose(value)
+    }));
+  });
+  // Wide enough for "Septiembre" in three columns: nothing truncates and there is no horizontal scroll.
+  Modal.show('Elegir mes', grid, { width: '440px' });
+}
+
+// Year picker: a scrollable drop-down list opened on the selected year, free to scroll up or down to any year.
+function openYearList(year, month, today, isFuture, options, choose) {
+  const ROW_HEIGHT = 44;
+  const list = create('div', { className: 'year-picker-list', role: 'listbox', 'aria-label': 'Año', tabindex: '0' });
+  let selected = null;
+  const years = monthPickerYears(year, Number(today.slice(0, 4)), options.allowFuture);
+  years.forEach(option => {
+    // Keep the month when changing the year; clamp to the current month when the future is not allowed.
+    let value = `${option}-${String(month).padStart(2, '0')}`;
+    if (isFuture(value)) value = today;
+    const button = create('button', {
+      type: 'button', className: `year-picker-option${option === year ? ' selected' : ''}`, dataset: { year: String(option) },
+      role: 'option', 'aria-selected': String(option === year), textContent: String(option), onClick: () => choose(value)
     });
-  } else {
-    monthPickerYears(year, Number(today.slice(0, 4)), options.allowFuture).forEach(option => {
-      // Keep the month when changing the year; clamp to the current month when the future is not allowed.
-      let value = `${option}-${String(month).padStart(2, '0')}`;
-      if (isFuture(value)) value = today;
-      grid.appendChild(create('button', {
-        type: 'button', className: `btn btn-secondary month-picker-option${option === year ? ' selected' : ''}`,
-        role: 'option', 'aria-selected': String(option === year), textContent: String(option), onClick: () => choose(value)
-      }));
-    });
-  }
-  Modal.show(part === 'month' ? 'Elegir mes' : 'Elegir año', grid, { width: '360px' });
+    if (option === year) selected = button;
+    list.appendChild(button);
+  });
+  Modal.show('Elegir año', list, { width: '320px' });
+  const center = () => {
+    list.scrollTop = centeredScrollTop(years.indexOf(year), selected?.offsetHeight || ROW_HEIGHT, list.clientHeight || ROW_HEIGHT * 7);
+    if (selected && typeof selected.focus === 'function') selected.focus({ preventScroll: true });
+  };
+  if (typeof requestAnimationFrame === 'function') requestAnimationFrame(center); else center();
+  return list;
 }
 
 function createMonthSelector(currentMonth, onChange, options = {}) {
@@ -90,4 +113,4 @@ function createMonthSelector(currentMonth, onChange, options = {}) {
   return container;
 }
 
-if (typeof module !== 'undefined') module.exports = { splitMonthLabel, monthPickerYears };
+if (typeof module !== 'undefined') module.exports = { splitMonthLabel, monthPickerYears, centeredScrollTop, YEAR_PICKER_SPAN };
