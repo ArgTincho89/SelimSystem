@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.16.0] - 2026-11-17
+
+### Added
+- Registrar cobro: pagos parciales. Si el importe es inferior al total pendiente se pregunta si es un pago parcial; el período queda "Parcialmente cancelado" y muestra el saldo pendiente en Períodos, en el historial del bien y en la ventana del alquiler.
+- Registrar cobro: medio de cobro "Cheque" con "Días" obligatorio; el ingreso se registra en la fecha de cobro del cheque.
+- Avisos: "Cheques por cobrar" cuando faltan 7 días o menos para cobrar un cheque (o ya venció), con bien, inquilino, período e importe, y la acción "Marcar como cobrado" (se puede deshacer desde Logs).
+- Comprobantes en cada registro de pago o ingreso: Registrar cobro, Registrar pago y Resolver de obligaciones, y el formulario de ingresos y gastos. El detalle del movimiento permite "Adjuntar comprobante".
+- Visor de documentos: "Ver documento" abre el archivo en una ventana con "Acercar", "Alejar" y "Restablecer", y "Descargar" en todos los objetos con un documento adjunto.
+- Logs: mensajes descriptivos para cobros parciales, cobros con cheque, cheques cobrados y comprobantes adjuntados.
+
+### Changed
+- "Ocultar importes" de Configuración oculta solo los saldos de las cuentas; las tarjetas de Ingresos, Gastos y Ahorro de Inicio responden solo al ojo de Inicio.
+- Selector de mes: la ventana se ajusta a su contenido sin cortar nombres ni desplazarse en horizontal, y el año se elige en una lista desplegable con desplazamiento centrada en el año elegido.
+- Al eliminar un movimiento se eliminan los comprobantes que solo le pertenecían.
+
+### Fixed
+- Los períodos de alquiler cobrados en parte se muestran como "Parcialmente cancelado" en lugar de "Parcial".
+
 ## [1.15.0] - 2026-11-16
 
 ### Added
