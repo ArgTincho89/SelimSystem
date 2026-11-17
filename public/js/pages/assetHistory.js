@@ -137,7 +137,7 @@ const AssetHistory = {
 
   badge(state, row = {}) {
     if (!state) return null;
-    const info = statusBadge(state, { overdue: row.overdue });
+    const info = statusBadge(row.kind === 'rent' ? rentStatus(state) : state, { overdue: row.overdue });
     return create('span', { className: `status-badge ${info.className}`, dataset: { status: state }, textContent: `${info.icon} ${info.label}` });
   },
 
@@ -161,7 +161,7 @@ const AssetHistory = {
     }
     const badge = this.badge(row.state, row);
     if (badge) line('Estado', badge);
-    (row.parts || []).forEach(part => line(part.modalityLabel, `${this.amountText(part.amount, part.currencyCode)} · ${part.classification} · ${statusLabel(part.state)}`));
+    (row.parts || []).forEach(part => line(part.modalityLabel, `${this.amountText(part.amount, part.currencyCode)} · ${part.classification} · ${row.kind === 'rent' ? rentStatusLabel(part.state) : statusLabel(part.state)}`));
     if (row.previousAmount !== undefined) line('Importe anterior', this.amountText(row.previousAmount, row.currencyCode));
     panel.appendChild(create('strong', { textContent: row.kind === 'rent' ? 'Cobros registrados' : 'Pagos registrados' }));
     if (!row.payments.length) panel.appendChild(create('span', { className: 'text-muted', textContent: row.kind === 'rent' ? 'Sin cobros registrados.' : 'Sin pagos registrados.' }));

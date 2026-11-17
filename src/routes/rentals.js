@@ -7,6 +7,7 @@ const rentals = require('../services/rentals');
 const rentCollections = require('../services/rent-collections');
 const rentSchedule = require('../services/rent-schedule');
 const { parseReason, REASON_ERROR } = require('../services/reasons');
+const activityLog = require('../services/activity-log');
 
 const router = express.Router();
 router.use(requireAuth);
@@ -288,13 +289,53 @@ router.post('/collections/month', (req, res) => {
   const userId = req.session.userId;
   const result = rentCollections.createMonthCollection(db, userId, req.body || {});
   if (result.error) return res.status(result.status).json({ error: result.error });
-  if (!result.value.replayed) {
+  const balance = rentCollections.pendingAfter(db, userId, result.value);
+  const value = { ...result.value, ...balance };
+  if (!value.replayed) {
     res.locals.activityMeta = {
-      facts: { amounts: (result.value.totals || []).map(row => ({ amount: row.amount, currencyCode: row.currencyCode })) },
-      undo: { type: 'rental.collection', collectionId: result.value.id }
+      action: balance.partial ? 'rental.collection-partial' : null,
+      facts: { amounts: (value.totals || []).map(row => ({ amount: row.amount, currencyCode: row.currencyCode })), details: collectionDetails(value, balance) },
+      undo: { type: 'rental.collection', collectionId: value.id }
     };
   }
-  res.status(result.value.replayed ? 200 : 201).json(result.value);
+  res.status(value.replayed ? 200 : 201).json(value);
+});
+
+// Log fragments of a month collection: the pending balance of a partial payment and every cheque's collection date.
+function collectionDetails(detail, balance) {
+  const money = row => `${row.currencyCode} ${activityLog.formatAmount(row.amount)}`;
+  const details = [];
+  if (balance.partial) details.push(`saldo pendiente ${balance.pending.map(money).join(' + ')}`);
+  const cheques = new Map();
+  detail.lines.filter(line => line.cheque).forEach(line => cheques.set(line.collectionId, line.cheque));
+  cheques.forEach(cheque => details.push(`cheque a ${cheque.days} días, se cobra el ${cheque.dueDate.split('-').reverse().join('/')}`));
+  return details;
+}
+
+// "Marcar cheque como cobrado" and its undo (with a required reason). Only touches the cheque state:
+// the income was already recorded on the cheque's collection date.
+router.post('/collections/:id/cheque-cashed', (req, res) => {
+  const db = req.app.locals.db;
+  const userId = req.session.userId;
+  const result = rentCollections.setChequeCashed(db, userId, req.params.id, true);
+  if (result.error) return res.status(result.status).json({ error: result.error });
+  const collections = result.value.collections;
+  res.locals.activityMeta = {
+    facts: { amounts: collections.map(item => ({ amount: item.amount, currencyCode: item.currencyCode })) },
+    undo: { type: 'rental.cheque', collectionId: result.value.id }
+  };
+  res.json({ id: result.value.id, collectionIds: result.value.collectionIds, cashedAt: result.value.cashedAt });
+});
+
+router.post('/collections/:id/cheque-cashed/undo', (req, res) => {
+  const db = req.app.locals.db;
+  const userId = req.session.userId;
+  const reason = parseReason((req.body || {}).reason);
+  if (!reason) return res.status(400).json({ error: REASON_ERROR });
+  const result = rentCollections.setChequeCashed(db, userId, req.params.id, false);
+  if (result.error) return res.status(result.status).json({ error: result.error });
+  res.locals.activityNote = reason;
+  res.json({ id: result.value.id, collectionIds: result.value.collectionIds, cashedAt: null });
 });
 
 // "Ver": read-only detail of a collection (group, child collection or transaction id; legacy collections too).

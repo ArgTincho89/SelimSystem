@@ -291,7 +291,8 @@ function periods(db, userId, declaration, query = {}) {
       obligations: obligationRows.filter(row => row.date.slice(0, 7) === period.period),
       collections: collections.map(collection => ({
         id: collection.id, groupId: collection.groupId || null, date: collection.date, amount: ledger.fromMinorUnits(collection.amountMinor, collection.currencyCode), currencyCode: collection.currencyCode,
-        accountName: db.findById('accounts', collection.accountId, userId)?.nombre || '', paymentMethod: collection.method || '', modality: collection.modality || null, classification: collection.clasificacion || null
+        accountName: db.findById('accounts', collection.accountId, userId)?.nombre || '', paymentMethod: collection.method || '', modality: collection.modality || null, classification: collection.clasificacion || null,
+        receivedDate: collection.receivedDate || null, cheque: collection.cheque || null
       })),
       unapplied,
       documents: ctx.documents.filter(doc => transactionIds.has(doc.transactionId) || occurrenceIds.has(doc.rentOccurrenceId)).map(assetHistory.documentView),

@@ -3,13 +3,16 @@ const ledger = require('./account-ledger');
 const obligations = require('./obligations');
 const rentals = require('./rentals');
 const installments = require('./credit-card-installments');
+const rentCollections = require('./rent-collections');
 
 const ALERT_TYPES = [
   'obligation_due', 'obligation_overdue', 'partial_payment', 'tenant_obligation_pending', 'rent_due',
-  'contract_expiry', 'rent_adjustment_due', 'card_installment_due', 'account_forecast', 'document_pending'
+  'contract_expiry', 'rent_adjustment_due', 'card_installment_due', 'account_forecast', 'document_pending', 'cheque_due'
 ];
 // Alerts the tenant answers for (the rent side). Everything else affects the owner's own finances.
-const TENANT_TYPES = new Set(['tenant_obligation_pending', 'rent_due', 'contract_expiry', 'rent_adjustment_due']);
+const TENANT_TYPES = new Set(['tenant_obligation_pending', 'rent_due', 'contract_expiry', 'rent_adjustment_due', 'cheque_due']);
+// A cheque received for a rent is announced this many days before its collection date (and stays until cashed).
+const CHEQUE_LEAD_DAYS = 7;
 const RESPONSIBILITIES = ['owner', 'tenant'];
 const DEFAULT_HORIZON_DAYS = 90;
 const DEFAULT_LIMIT = 200;
@@ -190,6 +193,26 @@ function build(db, userId, today, filters) {
     push({ ...alert, tenantEntityId: tenant }, tenantIds);
   });
 
+  // Rent cheques close to (or past) their collection date that are not marked as cashed yet.
+  rentCollections.chequeAlerts(db, userId, { today, leadDays: CHEQUE_LEAD_DAYS }).forEach(item => {
+    const asset = assetName(item.assetId);
+    const tenantNames = item.tenantIds.map(ownerName).filter(Boolean);
+    const period = item.period ? `${monthName(item.period)} ${item.period.slice(0, 4)}` : '';
+    const modality = item.modality && RENT_MODALITY[item.modality] ? ` (${RENT_MODALITY[item.modality]})` : '';
+    const daysAway = dateOnlyDaysBetween(today, item.date);
+    const when = item.overdue
+      ? `debía cobrarse el ${longDate(item.date)}. Marcalo como cobrado cuando se acredite.`
+      : `se cobra el ${longDate(item.date)}. ${daysAway === 0 ? 'Es hoy.' : countdown(daysAway)}`;
+    push({
+      id: `cheque:${item.collectionId}`, type: 'cheque_due', date: item.date, status: item.overdue ? 'overdue' : 'pending',
+      title: `Cheque a cobrar${asset ? ` · ${asset}` : ''}`,
+      message: `El cheque${tenantNames.length ? ` de ${tenantNames.join(', ')}` : ''} por ${money(item.amount, item.currencyCode)} del alquiler${period ? ` de ${period}` : ''}${modality}${asset ? ` del ${asset}` : ''} ${when}`,
+      assetId: item.assetId, collectionId: item.collectionId, groupId: item.groupId, declarationId: item.declarationId,
+      tenantEntityId: item.tenantIds[0] || null, tenantNames, period: item.period, modality: item.modality,
+      amount: item.amount, currencyCode: item.currencyCode, receivedDate: item.receivedDate, chequeDays: item.days
+    }, item.tenantIds);
+  });
+
   const plans = new Map(db.findAll(installments.PLANS, userId).filter(plan => plan.status === 'active').map(plan => [plan.id, plan]));
   db.findAll(installments.OCCURRENCES, userId).filter(occurrence => occurrence.status === 'scheduled' && plans.has(occurrence.planId)).forEach(occurrence => {
     const plan = plans.get(occurrence.planId);
@@ -243,4 +266,4 @@ function list(db, userId, filters = {}) {
     .map(({ _holders, ...alert }) => ({ ...alert, daysUntil: dateOnlyDaysBetween(today, alert.date) }));
 }
 
-module.exports = { ALERT_TYPES, RESPONSIBILITIES, DEFAULT_HORIZON_DAYS, DEFAULT_LIMIT, list, readOnlyView };
+module.exports = { CHEQUE_LEAD_DAYS, ALERT_TYPES, RESPONSIBILITIES, DEFAULT_HORIZON_DAYS, DEFAULT_LIMIT, list, readOnlyView };

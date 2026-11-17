@@ -14,7 +14,7 @@ describe('Evolutivo 3 S1 format helpers', () => {
   const { statusLabel, currencyDigits, orderAccountsAsTree } = loadFormat();
 
   it.each([
-    ['pending', 'Pendiente'], ['overdue', 'Vencido'], ['partially_collected', 'Parcial'], ['partial', 'Parcial'],
+    ['pending', 'Pendiente'], ['overdue', 'Vencido'], ['partially_collected', 'Parcialmente cancelado'], ['partial', 'Parcial'],
     ['collected', 'Cobrado'], ['paid', 'Pagado'], ['resolved', 'Resuelto'], ['cancelled', 'Cancelado'],
     ['expected', 'Pendiente'], ['confirmed', 'Pendiente'], ['posted', 'Contabilizado'], ['active', 'Activo'],
     ['ended', 'Finalizado'], ['draft', 'Borrador'], ['expiring', 'Por vencer'], ['scheduled', 'Programado'], ['reversed', 'Anulado']

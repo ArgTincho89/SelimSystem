@@ -325,6 +325,8 @@ const API = {
     collectMonth(data) { return API.post('/rentals/collections/month', data); },
     collectionView(id) { return API.get(`/rentals/collections/${encodeURIComponent(id)}/view`); },
     reverseCollection(collectionId, data = {}) { return API.post(`/rentals/collections/${encodeURIComponent(collectionId)}/reverse`, data); },
+    markChequeCashed(collectionId) { return API.post(`/rentals/collections/${encodeURIComponent(collectionId)}/cheque-cashed`, {}); },
+    undoChequeCashed(collectionId, data = {}) { return API.post(`/rentals/collections/${encodeURIComponent(collectionId)}/cheque-cashed/undo`, data); },
     allocate(collectionId, data) { return API.post(`/rentals/collections/${encodeURIComponent(collectionId)}/allocations`, data); },
     declarations: {
       list(assetId) { return API.get(`/rentals/declarations${assetId ? `?assetId=${encodeURIComponent(assetId)}` : ''}`); },
