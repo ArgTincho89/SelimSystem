@@ -31,7 +31,9 @@ class FakeElement {
         if (on) names.add(name); else names.delete(name);
         element.className = [...names].join(' ');
       },
-      contains: name => element.className.split(' ').includes(name)
+      contains: name => element.className.split(' ').includes(name),
+      add: (...names) => names.forEach(name => element.classList.toggle(name, true)),
+      remove: (...names) => names.forEach(name => element.classList.toggle(name, false))
     };
   }
 
@@ -131,7 +133,7 @@ function loadBrowser(files, names = [], globals = {}) {
     console, HTMLElement: FakeElement, ...globals
   };
   vm.createContext(context);
-  vm.runInContext(['js/utils/dom.js', 'js/components/feedback.js', ...files].map(file => fs.readFileSync(path.join(publicDir, file), 'utf8')).join('\n'), context);
+  vm.runInContext(['js/utils/dom.js', 'js/components/feedback.js', 'js/components/documentViewer.js', ...files.filter(file => file !== 'js/components/documentViewer.js')].map(file => fs.readFileSync(path.join(publicDir, file), 'utf8')).join('\n'), context);
   const exported = names.length ? vm.runInContext(`({ ${names.join(', ')} })`, context) : {};
   return { context, ...exported };
 }

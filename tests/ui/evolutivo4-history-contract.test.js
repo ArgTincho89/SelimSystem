@@ -31,21 +31,24 @@ describe('Evolutivo 4 asset history and receipt viewer contract (re-pointed to a
     expect(read('js/app.js')).toContain('AssetsPage.showDetails(params.asset)');
   });
 
+  // Evolutivo 7: the receipt viewer is the shared DocumentViewer (components/documentViewer.js).
+  const viewer = read('js/components/documentViewer.js');
+
   it('shows the record detail with payments, title, notes and receipts', () => {
     expect(history).toContain('showDetail(row, ctx)');
     expect(history).toContain('payment.title');
     expect(history).toContain('payment.notes');
-    expect(history).toContain('this.showReceipt(doc)');
+    expect(history).toContain('...DocumentViewer.actions(doc)');
   });
 
-  it('shows receipts from a Blob object URL in a stacked 900px viewer, revoked on close, no sandbox attribute', () => {
-    expect(history).toContain('async showReceipt(doc)');
-    expect(history).toContain("width: '900px', onClose: revoke");
-    expect(history).toContain('URL.createObjectURL');
-    expect(history).toContain('URL.revokeObjectURL(objectUrl)');
-    expect(history).toContain("create('iframe', { src: objectUrl");
-    expect(history).not.toMatch(/sandbox/i);
-    expect(history).toContain('Modal.push(');
+  it('shows receipts from a Blob object URL in a stacked viewer, revoked on close, no sandbox attribute', () => {
+    expect(history).toContain('return DocumentViewer.open(doc);');
+    expect(viewer).toContain("width: '960px', onClose: revoke");
+    expect(viewer).toContain('URL.createObjectURL');
+    expect(viewer).toContain('URL.revokeObjectURL(objectUrl)');
+    expect(viewer).toContain("create('iframe', { className: 'document-viewer-frame', src");
+    expect(viewer).not.toMatch(/sandbox/i);
+    expect(viewer).toContain('Modal.push(');
     expect(source).not.toContain('async showReceipt(doc)');
   });
 
@@ -58,11 +61,11 @@ describe('Evolutivo 4 asset history and receipt viewer contract (re-pointed to a
     expect(page.receiptMime('text/html')).toBe('');
     expect(page.receiptMime('image/svg+xml')).toBe('');
     expect(page.receiptMime(undefined)).toBe('');
-    expect(history).toContain('img.style.scale');
-    expect(history).toContain('zoom(0.25)');
-    expect(history).toContain('zoom(-0.25)');
-    expect(history).toContain('textContent: \'Abrir\'');
-    expect(history).toContain('textContent: \'Descargar\'');
+    expect(viewer).toContain('frame.style.transform = `scale(${scale})`');
+    expect(viewer).toContain("textContent: '+ Acercar'");
+    expect(viewer).toContain("textContent: '− Alejar'");
+    expect(viewer).toContain("textContent: 'Restablecer'");
+    expect(viewer).toContain("textContent: 'Descargar'");
   });
 
   it('formats amounts per currency without conversion', () => {

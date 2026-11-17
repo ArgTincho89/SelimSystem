@@ -16,6 +16,18 @@ const TOUCHED = ['transactions', 'rentCollections', 'rentCollectionAllocations',
 const NON_TRANSACTION_TARGETS = ['assetId', 'entityId', 'obligationId', 'contractId', 'occurrenceId', 'rentOccurrenceId', 'tenantEntityId'];
 
 const fail = (error, status = 400) => ({ error, status });
+const CHEQUE_MAX_DAYS = 365;
+
+// "Cheque" (case and accent insensitive) is the payment method that defers the collection by `chequeDays`.
+function isCheque(label) {
+  return String(label || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase() === 'cheque';
+}
+
+function plusDays(date, days) {
+  const value = new Date(`${date}T00:00:00.000Z`);
+  value.setUTCDate(value.getUTCDate() + days);
+  return value.toISOString().slice(0, 10);
+}
 
 // Runs every write of `work` or none: on failure the touched collections are restored from a snapshot.
 function atomically(db, userId, work, message) {
@@ -33,7 +45,8 @@ function atomically(db, userId, work, message) {
 function lineFingerprint(lines) {
   return rentals.hash(JSON.stringify(lines.map(line => ({
     occurrenceId: line?.occurrenceId ?? null, amount: line?.amount ?? null, accountId: line?.accountId ?? null, date: line?.date || '',
-    method: line?.method || '', paymentMethodId: line?.paymentMethodId || null, clasificacion: line?.clasificacion || null
+    method: line?.method || '', paymentMethodId: line?.paymentMethodId || null, clasificacion: line?.clasificacion || null,
+    ...(line?.chequeDays !== undefined && line?.chequeDays !== null ? { chequeDays: line.chequeDays } : {})
   }))));
 }
 
@@ -50,12 +63,20 @@ function validateLine(db, userId, line, today) {
   const methodLabel = typeof line.method === 'string' ? line.method.trim() : '';
   if (methodLabel.length > 100) return fail('El medio de cobro no puede superar los 100 caracteres');
   if (line.clasificacion !== undefined && line.clasificacion !== null && !['A', 'B'].includes(line.clasificacion)) return fail('La clasificación debe ser A o B');
+  const method = methodLabel || paymentMethod?.name || '';
+  const hasDays = line.chequeDays !== undefined && line.chequeDays !== null;
+  if (hasDays && !isCheque(method)) return fail('Los días de cobro solo aplican al medio de cobro Cheque');
+  let cheque = null;
+  if (isCheque(method)) {
+    if (!Number.isInteger(line.chequeDays) || line.chequeDays < 1 || line.chequeDays > CHEQUE_MAX_DAYS) return fail(`Indicá en cuántos días se cobra el cheque (entre 1 y ${CHEQUE_MAX_DAYS})`);
+    cheque = { days: line.chequeDays, dueDate: plusDays(date, line.chequeDays), cashedAt: null };
+  }
   const allocation = rentals.validateAllocations(db, userId, [{ occurrenceId: line.occurrenceId, amount: line.amount }], account.currency);
   if (allocation.error) return fail(allocation.error);
   const occurrence = db.findById('rentOccurrences', line.occurrenceId, userId);
   const contract = db.findById('rentalContracts', occurrence.contractId, userId);
   return { value: {
-    account, amountMinor, date, paymentMethod, method: methodLabel || paymentMethod?.name || '', clasificacion: line.clasificacion || null,
+    account, amountMinor, date, postingDate: cheque ? cheque.dueDate : date, cheque, paymentMethod, method, clasificacion: line.clasificacion || null,
     allocation: allocation.allocations[0], modality: occurrence.modality || (contract ? rentals.modalityOf(contract) : null), assetId: contract?.assetId || null
   } };
 }
@@ -99,14 +120,15 @@ function createMonthCollection(db, userId, input = {}) {
       const transaction = db.create('transactions', {
         userId, tipo: 'income', monto: amount, amountMinor, accountId: account.id, currencyCode: account.currency, titulo: 'Cobro de alquiler',
         ...incomeAttribution.incomeHolderSnapshot(db, userId, account),
-        categoryId: null, refundSourceId: null, fecha: line.date, recurrente: false, frecuencia: null, fechaFin: null,
+        categoryId: null, refundSourceId: null, fecha: line.postingDate, recurrente: false, frecuencia: null, fechaFin: null,
         clasificacion, montoA: null, montoB: null, ivaPorcentaje: ivaApplies ? ivaPercent : null, ivaIncluded: ivaApplies,
         rentCollectionId: collectionId, rentCollectionGroupId: groupId, rentCollectionIdempotencyKey: lineKey, rentModality: line.modality,
         paymentMethodId: line.paymentMethod?.id || null, paymentMethod: line.method
       }, userId);
       db.create('rentCollections', {
         id: collectionId, groupId, transactionId: transaction.id, amountMinor, amount, currencyCode: account.currency, accountId: account.id,
-        date: line.date, method: line.method, paymentMethodId: line.paymentMethod?.id || null, clasificacion, modality: line.modality,
+        date: line.postingDate, receivedDate: line.date, method: line.method, paymentMethodId: line.paymentMethod?.id || null, clasificacion, modality: line.modality,
+        ...(line.cheque ? { cheque: line.cheque } : {}),
         idempotencyKey: lineKey, fingerprint
       }, userId);
       db.create('rentCollectionAllocations', {
@@ -117,13 +139,70 @@ function createMonthCollection(db, userId, input = {}) {
       transactionIds.push(transaction.id);
     });
     return db.create(GROUPS, {
-      id: groupId, idempotencyKey: keyHash, fingerprint, date: planned.map(line => line.date).sort().pop(),
+      id: groupId, idempotencyKey: keyHash, fingerprint, date: planned.map(line => line.postingDate).sort().pop(),
       collectionIds, transactionIds, reversedAt: null
     }, userId);
   }, 'No se pudo registrar el cobro');
   if (written.error) return written;
   ledger.refreshAlerts(db, userId);
   return { value: collectionDetail(db, userId, written.value.id) };
+}
+
+/**
+ * What is still owed on the periods a collection touched: one row per currency (only positive balances).
+ * `partial` is true when at least one of those periods keeps a pending balance ("Parcialmente cancelado").
+ */
+function pendingAfter(db, userId, detail) {
+  const today = ledger.localDateForUser(db, userId);
+  const occurrenceIds = new Set();
+  detail.collectionIds.forEach(collectionId => db.findAll('rentCollectionAllocations', userId)
+    .filter(item => item.collectionId === collectionId).forEach(item => occurrenceIds.add(item.occurrenceId)));
+  const totals = new Map();
+  occurrenceIds.forEach(id => {
+    const occurrence = db.findById('rentOccurrences', id, userId);
+    if (!occurrence) return;
+    const view = rentals.occurrenceView(db, userId, occurrence, today);
+    if (view.remainingMinor > 0) totals.set(view.currencyCode, (totals.get(view.currencyCode) || 0) + view.remainingMinor);
+  });
+  const pending = [...totals].map(([currencyCode, amountMinor]) => ({ currencyCode, amountMinor, amount: ledger.fromMinorUnits(amountMinor, currencyCode) }));
+  return { partial: pending.length > 0, pending };
+}
+
+/** "Cobrado" for a cheque collection (`cashed` = true) or back to pending (`cashed` = false). */
+function setChequeCashed(db, userId, id, cashed) {
+  const resolved = resolve(db, userId, id);
+  if (!resolved) return fail('Cobro no encontrado', 404);
+  const collections = resolved.collections.filter(item => item.cheque && !item.reversedAt);
+  if (!collections.length) return fail('Ese cobro no tiene un cheque pendiente', 409);
+  const pending = collections.filter(item => (cashed ? !item.cheque.cashedAt : Boolean(item.cheque.cashedAt)));
+  if (!pending.length) return fail(cashed ? 'El cheque ya figura como cobrado' : 'El cheque no figura como cobrado', 409);
+  const cashedAt = cashed ? new Date().toISOString() : null;
+  pending.forEach(item => db.update('rentCollections', item.id, { cheque: { ...item.cheque, cashedAt } }, userId));
+  const updated = pending.map(item => db.findById('rentCollections', item.id, userId));
+  return { value: { id: resolved.group ? resolved.group.id : updated[0].id, collectionIds: updated.map(item => item.id), cashedAt, collections: updated } };
+}
+
+/**
+ * Cheques still to be collected (not cashed, collection not undone) whose collection date is within
+ * `leadDays` or already past. Each item names the asset, the tenants, the period and the amount.
+ */
+function chequeAlerts(db, userId, { today, leadDays = 7 } = {}) {
+  const limit = plusDays(today, leadDays);
+  return db.findAll('rentCollections', userId)
+    .filter(item => item.cheque && !item.cheque.cashedAt && !item.reversedAt && item.cheque.dueDate <= limit)
+    .map(item => {
+      const allocation = db.findAll('rentCollectionAllocations', userId).find(entry => entry.collectionId === item.id);
+      const occurrence = allocation ? db.findById('rentOccurrences', allocation.occurrenceId, userId) : null;
+      const contract = occurrence ? db.findById('rentalContracts', occurrence.contractId, userId) : null;
+      const declaration = contract?.declarationId ? db.findById('rentalDeclarations', contract.declarationId, userId) : null;
+      const tenantIds = declaration?.tenantIds || contract?.tenantIds || [];
+      return {
+        collectionId: item.id, groupId: item.groupId || null, assetId: contract?.assetId || null, contractId: contract?.id || null,
+        declarationId: contract?.declarationId || null, tenantIds, period: occurrence?.period || null, modality: item.modality || null,
+        date: item.cheque.dueDate, receivedDate: item.receivedDate || null, days: item.cheque.days,
+        amount: item.amount, currencyCode: item.currencyCode, overdue: item.cheque.dueDate < today
+      };
+    });
 }
 
 /** Group and child collections for a group, child collection or transaction id (legacy = group of one). */
@@ -164,7 +243,7 @@ function collectionDetail(db, userId, id) {
     const base = {
       collectionId: collection.id, transactionId: collection.transactionId || null, date: collection.date, method: collection.method || '',
       accountId: collection.accountId || null, accountName: account ? (account.nombre || account.name || '') : '', currencyCode: collection.currencyCode,
-      clasificacion: clasificacion === 'Mixto' ? null : clasificacion
+      clasificacion: clasificacion === 'Mixto' ? null : clasificacion, receivedDate: collection.receivedDate || null, cheque: collection.cheque || null
     };
     const allocations = db.findAll('rentCollectionAllocations', userId).filter(item => item.collectionId === collection.id);
     let allocatedMinor = 0;
@@ -271,4 +350,4 @@ function reverseGroup(db, userId, group, storage = null, reason = null) {
   };
 }
 
-module.exports = { GROUPS, createMonthCollection, collectionDetail, reverseGroup, resolve };
+module.exports = { GROUPS, CHEQUE_MAX_DAYS, isCheque, createMonthCollection, collectionDetail, reverseGroup, resolve, pendingAfter, setChequeCashed, chequeAlerts };

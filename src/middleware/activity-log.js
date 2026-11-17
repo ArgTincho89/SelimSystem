@@ -39,7 +39,11 @@ function activityLogMiddleware(req, res, next) {
         const note = outcome === 'success' && res.locals && typeof res.locals.activityNote === 'string' ? res.locals.activityNote.trim().slice(0, 120) : '';
         if (note) label = `${label}${label ? ', ' : ''}motivo: ${note}`;
         let route = context.route;
-        if (outcome === 'success' && !context.entityId) {
+        // A route may pick a more precise wording of the same request (e.g. a partial rent collection).
+        const chosen = outcome === 'success' && res.locals && res.locals.activityMeta && typeof res.locals.activityMeta.action === 'string'
+          ? activityLog.ROUTES.find(item => item.action === res.locals.activityMeta.action && route && item.pattern === route.pattern) : null;
+        if (chosen) route = chosen;
+        if (outcome === 'success' && !context.entityId && !chosen) {
           const refined = activityLog.refineRoute(db, userId, route, entityId);
           if (refined.label) { route = refined.route; label = refined.label; }
         }

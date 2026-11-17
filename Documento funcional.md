@@ -1,12 +1,12 @@
 # SelimSystem — Documento funcional
 
-**Versión del producto:** 1.15.0
+**Versión del producto:** 1.16.0
 **Entorno productivo:** https://selimsystem.fly.dev
-**Fecha del documento:** 16/11/2026
+**Fecha del documento:** 17/11/2026
 
 Este documento describe qué hace SelimSystem, cómo se usa cada pantalla y qué reglas de negocio aplica la aplicación. Está pensado para personas usuarias y responsables del negocio que necesitan entender el producto sin leer el código. Los detalles técnicos se limitan a la sección 16.
 
-Todo lo descrito se verificó contra el código actual de la aplicación (versión 1.15.0). Cuando una capacidad existe solo en el servidor y no tiene pantalla, se indica de forma explícita.
+Todo lo descrito se verificó contra el código actual de la aplicación (versión 1.16.0). Cuando una capacidad existe solo en el servidor y no tiene pantalla, se indica de forma explícita.
 
 ---
 
@@ -180,7 +180,7 @@ Configuración
 
 ### 5.2 Selector de mes
 
-Permite ir a meses anteriores y **futuros** (para ver lo programado). Al tocar el **nombre del mes** se abre un selector con los doce meses; al tocar el **año**, un selector de año (se conserva el mes elegido).
+Permite ir a meses anteriores y **futuros** (para ver lo programado). Al tocar el **nombre del mes** se abre un selector con los doce meses, que se ajusta al ancho de la pantalla sin cortar nombres ni desplazarse en horizontal; al tocar el **año**, una **lista desplegable de años con desplazamiento**, centrada en el año elegido (se conserva el mes elegido).
 
 ### 5.3 Tarjetas de métricas
 
@@ -194,7 +194,7 @@ Permite ir a meses anteriores y **futuros** (para ver lo programado). Al tocar e
 - Una tarjeta por cuenta activa con nombre, marca "Principal", moneda y saldo.
 - El saldo solo se muestra si la cuenta está **conciliada**; si no, aparece "—" (Saldo sin conciliar). Ver 12.1.
 - **Ver cuenta** lleva a Configuración > Cuentas.
-- **Ocultar importes / Mostrar importes** (y el botón con forma de ojo): oculta todos los importes con "••••••". La preferencia se recuerda en el dispositivo y aplica en Inicio, cuentas, transacciones y Configuración.
+- **Ocultar importes / Mostrar importes** (y el botón con forma de ojo): son dos preferencias independientes que se recuerdan en el dispositivo. El ojo de Inicio oculta con "••••••" las tarjetas de **Ingresos, Gastos y Ahorro** (y los importes de Inicio); el botón **Ocultar importes** de Configuración oculta solo los **saldos de las cuentas**. Uno no modifica al otro.
 
 ### 5.5 Transacciones del mes
 
@@ -302,6 +302,7 @@ En la experiencia **Escritorio**, cada gráfico tiene una estrella (☆/★) par
 | **Pagos parciales** | Vencimiento con un pago menor al importe. | Registrar pago, Adjuntar comprobante, Ver obligación |
 | **Comprobantes pendientes de inquilinos** | La parte del inquilino no tiene resolución registrada. | Resolver, Adjuntar comprobante, Ver obligación |
 | **Alquileres pendientes de cobro** | Mes de alquiler sin cobrar (vencido o dentro de los días de aviso de Configuración > Avisos, por defecto 5). | Registrar cobro, Ver bien |
+| **Cheques por cobrar** | Cobro de alquiler con medio **Cheque** no marcado como cobrado, cuya fecha de cobro llega en 7 días o menos (o ya pasó). Indica bien, inquilino, período y importe. | Marcar como cobrado, Ver cobro, Ver bien |
 | **Cuotas de tarjeta** | Cuota programada vencida o dentro de sus días de aviso (por defecto 5). | Contabilizar cuota, Ver transacciones |
 | **Contratos por vencer** | Contrato de alquiler que vence en los próximos 30 días. | Ver bien |
 | **Ajustes de alquiler** | Ajuste de alquiler en los próximos 30 días. | Ver bien |
@@ -449,9 +450,13 @@ Un mismo alquiler puede componerse de **una, dos o las tres** modalidades. El me
 
 Se abre desde **Avisos** (Registrar cobro), desde los meses de alquiler o desde **Próximos vencimientos / Pagos atrasados** de la ficha. Cobra **solo el mes seleccionado**.
 
-1. Para cada modalidad con saldo pendiente se muestra una línea con: **Importe** (precargado), **Clasificación** (A declarado / B sin facturar; locación por defecto A y comodato/mutuo por defecto B), el IVA incluido si es A con IVA, **Fecha de cobro**, **Medio de cobro** y **Cuenta de destino** (de la misma moneda).
+1. Para cada modalidad con saldo pendiente se muestra una línea con: **Importe** (precargado con el saldo pendiente), **Clasificación** (A declarado / B sin facturar; locación por defecto A y comodato/mutuo por defecto B), el IVA incluido si es A con IVA, **Fecha de cobro**, **Medio de cobro** y **Cuenta de destino** (de la misma moneda). Opcionalmente se adjunta el **Comprobante de pago**.
 2. Pulsar **Registrar cobro**.
 3. Cada línea se registra como un **ingreso real** en su cuenta. Todas las líneas del mes forman un único cobro.
+
+**Pago parcial.** Si el importe es inferior al total pendiente, se pregunta si se trata de un pago parcial. **No** vuelve al formulario con los valores cargados; **Sí** registra el cobro y el período queda **Parcialmente cancelado**, mostrando el **saldo pendiente** en Períodos, en el historial del bien y en la ventana del alquiler. Los cobros siguientes se suman hasta cancelar el saldo; deshacer un cobro recalcula el estado.
+
+**Cheque.** Con el medio de cobro **Cheque** se pide **Días** (obligatorio, de 1 a 365). La fecha de cobro del cheque es la fecha de cobro más esos días, y el ingreso se registra en esa fecha. Cuando faltan 7 días o menos (o la fecha ya pasó) y el cheque no está marcado como cobrado, aparece el aviso **Cheques por cobrar**, desde donde se puede **Marcar como cobrado** (se puede deshacer desde Logs, con motivo).
 
 Desde la tarjeta de un contrato también existe **Registrar cobro** multi-período: se marcan uno o varios períodos, se reparte el importe total recibido y la parte no asignada queda visible.
 

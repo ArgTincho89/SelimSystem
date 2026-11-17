@@ -137,7 +137,7 @@ const AssetHistory = {
 
   badge(state, row = {}) {
     if (!state) return null;
-    const info = statusBadge(state, { overdue: row.overdue });
+    const info = statusBadge(row.kind === 'rent' ? rentStatus(state) : state, { overdue: row.overdue });
     return create('span', { className: `status-badge ${info.className}`, dataset: { status: state }, textContent: `${info.icon} ${info.label}` });
   },
 
@@ -161,7 +161,7 @@ const AssetHistory = {
     }
     const badge = this.badge(row.state, row);
     if (badge) line('Estado', badge);
-    (row.parts || []).forEach(part => line(part.modalityLabel, `${this.amountText(part.amount, part.currencyCode)} · ${part.classification} · ${statusLabel(part.state)}`));
+    (row.parts || []).forEach(part => line(part.modalityLabel, `${this.amountText(part.amount, part.currencyCode)} · ${part.classification} · ${row.kind === 'rent' ? rentStatusLabel(part.state) : statusLabel(part.state)}`));
     if (row.previousAmount !== undefined) line('Importe anterior', this.amountText(row.previousAmount, row.currencyCode));
     panel.appendChild(create('strong', { textContent: row.kind === 'rent' ? 'Cobros registrados' : 'Pagos registrados' }));
     if (!row.payments.length) panel.appendChild(create('span', { className: 'text-muted', textContent: row.kind === 'rent' ? 'Sin cobros registrados.' : 'Sin pagos registrados.' }));
@@ -181,8 +181,7 @@ const AssetHistory = {
     panel.appendChild(create('strong', { textContent: 'Comprobantes' }));
     if (!row.documents.length) panel.appendChild(create('span', { className: 'text-muted', textContent: 'Sin comprobantes adjuntos.' }));
     row.documents.forEach(doc => panel.appendChild(create('span', { style: { display: 'inline-flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' } }, [
-      create('button', { className: 'btn btn-secondary btn-sm', type: 'button', textContent: 'Ver comprobante', 'aria-label': `Ver comprobante ${doc.title || doc.fileName || ''}`.trim(), onClick: () => this.showReceipt(doc) }),
-      create('a', { className: 'btn btn-ghost btn-sm', href: API.documents.contentUrl(doc.id, true), textContent: 'Descargar comprobante', 'aria-label': `Descargar comprobante ${doc.title || doc.fileName || ''}`.trim() })
+      ...DocumentViewer.actions(doc)
     ])));
     panel.appendChild(create('strong', { textContent: 'Notas' }));
     if (!row.notes.length) panel.appendChild(create('span', { className: 'text-muted', textContent: 'Sin notas.' }));
@@ -300,52 +299,9 @@ const AssetHistory = {
     return this.RECEIPT_MIME_ALLOWLIST.includes(base) ? base : '';
   },
 
-  // Receipt viewer stacked over the history: the file is fetched as a Blob and shown from an object URL
-  // (the content endpoint is restricted, which blocks the browser PDF viewer).
-  async showReceipt(doc) {
-    const viewer = create('div', { className: 'receipt-viewer' }, [create('div', { className: 'loading', textContent: 'Cargando comprobante...' })]);
-    let objectUrl = null;
-    let closed = false;
-    const revoke = () => {
-      closed = true;
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
-      objectUrl = null;
-    };
-    Modal.push(doc.title || doc.fileName || 'Comprobante', viewer, { width: '900px', onClose: revoke });
-    const downloadLink = create('a', { className: 'btn btn-ghost btn-sm', href: API.documents.contentUrl(doc.id, true), textContent: 'Descargar' });
-    try {
-      const response = await fetch(API.documents.contentUrl(doc.id), { credentials: 'same-origin' });
-      if (!response.ok) throw new Error('No se pudo cargar el comprobante');
-      const raw = await response.blob();
-      if (closed) return;
-      const type = this.receiptMime(doc.contentType || doc.mimeType || raw.type);
-      if (!type) {
-        viewer.replaceChildren(create('p', { className: 'text-muted', textContent: 'Este tipo de archivo no se puede mostrar. Descargalo para verlo.' }), downloadLink);
-        return;
-      }
-      objectUrl = URL.createObjectURL(new Blob([raw], { type }));
-      const toolbar = create('div', { style: { display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' } });
-      let content;
-      if (type.startsWith('image/')) {
-        let scale = 1;
-        const img = create('img', { src: objectUrl, alt: doc.title || doc.fileName || 'Comprobante' });
-        const apply = () => { img.style.scale = String(scale); };
-        const zoom = delta => { scale = Math.min(4, Math.max(0.25, Math.round((scale + delta) * 100) / 100)); apply(); };
-        toolbar.append(
-          create('button', { className: 'btn btn-secondary btn-sm', type: 'button', textContent: '− Alejar', onClick: () => zoom(-0.25) }),
-          create('button', { className: 'btn btn-secondary btn-sm', type: 'button', textContent: '+ Acercar', onClick: () => zoom(0.25) }),
-          create('button', { className: 'btn btn-ghost btn-sm', type: 'button', textContent: '100%', onClick: () => { scale = 1; apply(); } })
-        );
-        content = create('div', { className: 'receipt-image-frame' }, [img]);
-      } else {
-        content = create('iframe', { src: objectUrl, title: doc.title || doc.fileName || 'Comprobante' });
-      }
-      toolbar.append(create('a', { className: 'btn btn-ghost btn-sm', href: objectUrl, target: '_blank', rel: 'noopener', textContent: 'Abrir' }), downloadLink);
-      viewer.replaceChildren(toolbar, content);
-    } catch (error) {
-      if (closed) return;
-      viewer.replaceChildren(create('p', { className: 'text-muted', textContent: error.message }), downloadLink);
-    }
+  // Receipt viewer stacked over the history: the shared DocumentViewer (iframe with zoom in / out / reset).
+  showReceipt(doc) {
+    return DocumentViewer.open(doc);
   }
 };
 

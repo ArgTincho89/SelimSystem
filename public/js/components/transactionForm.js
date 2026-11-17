@@ -221,7 +221,7 @@ const TransactionForm = {
       const option = create('option', { value: item.id });
       const label = `${item.titulo} · ${item.fecha} · ${formatearMoneda(item.monto, item.currencyCode || 'EUR')}`;
       option.dataset.publicValue = label;
-      option.textContent = localStorage.getItem('pate_hide_income') === 'true' ? `${item.titulo} · ${item.fecha} · ••••••` : label;
+      option.textContent = localStorage.getItem('pate_hide_home_stats') === 'true' ? `${item.titulo} · ${item.fecha} · ••••••` : label;
       refundSourceSelect.appendChild(option);
     });
     refundSourceSelect.value = transaction?.refundSourceId || '';
@@ -470,6 +470,15 @@ const TransactionForm = {
     commentsGroup.appendChild(commentsInput);
     form.appendChild(commentsGroup);
 
+    // Receipts of the movement: the existing ones (edit) with "Ver documento" / "Descargar", and new files to attach.
+    const attachment = DocumentViewer.fileField({ label: 'Adjuntar comprobante (opcional)', multiple: true });
+    if (isEdit && (transaction.originalId || transaction.id)) {
+      const existingDocuments = create('div', { dataset: { existingDocuments: 'true' } });
+      form.appendChild(existingDocuments);
+      DocumentViewer.listInto(existingDocuments, { transactionId: transaction.originalId || transaction.id });
+    }
+    form.appendChild(attachment.element);
+
     const footer = create('div', { style: { display: 'flex', gap: '8px' } });
     const cancelBtn = create('button', {
       className: 'btn btn-ghost',
@@ -538,6 +547,8 @@ const TransactionForm = {
       }
 
       if (!data.monto || data.monto <= 0) return showToast('El monto debe ser positivo', 'error');
+      const attachmentError = attachment.error();
+      if (attachmentError) return showToast(attachmentError, 'error');
       if (selectedType === 'income' && data.clasificacion === 'Mixto' && (!Number.isFinite(data.montoA) || !Number.isFinite(data.montoB) || Math.round((data.montoA + data.montoB) * 100) !== Math.round(data.monto * 100))) {
         return showToast('Los importes A y B deben sumar el monto total', 'error');
       }
@@ -599,6 +610,9 @@ const TransactionForm = {
             return { contractId: id, rentOccurrenceId: occurrenceId, amount: value };
           }).filter(Boolean);
           await API.finance.setAllocations(savedTransactionId, { allocations, complete: allocationComplete.checked });
+        }
+        if (attachment.files().length && savedTransactionId) {
+          DocumentViewer.reportFailures((await DocumentViewer.uploadAll(attachment.files(), { transactionId: savedTransactionId })).failed, 'El movimiento');
         }
         if (onSave) await onSave();
         Modal.hide();

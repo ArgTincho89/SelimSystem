@@ -74,7 +74,11 @@ const ROUTES = [
   r('PUT', '/rentals/declarations/:id', 'rental.declaration-update', 'Modificaste el alquiler de', 'modificar un alquiler', 'declaration', { id: 'id', join: '' }),
   r('POST', '/rentals/collections/:id/reverse', 'rental.collection-undo', 'Deshiciste el cobro del alquiler', 'deshacer un cobro de alquiler', 'collection', { id: 'id', withAmount: true }),
   r('POST', '/rentals/collections/:id/allocations', 'rental.collection-allocate', 'Asignaste un cobro al alquiler', 'asignar un cobro a un alquiler', 'collection', { id: 'id' }),
+  r('POST', '/rentals/collections/:id/cheque-cashed/undo', 'rental.cheque-undo', 'Deshiciste el cobro del cheque del alquiler', 'deshacer el cobro de un cheque de alquiler', 'collection', { id: 'id', withAmount: true }),
+  r('POST', '/rentals/collections/:id/cheque-cashed', 'rental.cheque-cashed', 'Marcaste como cobrado el cheque del alquiler', 'marcar como cobrado un cheque de alquiler', 'collection', { id: 'id' }),
   r('POST', '/rentals/collections/month', 'rental.collection', 'Registraste el cobro del alquiler', 'registrar el cobro del alquiler', 'collection'),
+  // Same request as above, selected by the route (res.locals.activityMeta.action) when a balance stays pending.
+  r('POST', '/rentals/collections/month', 'rental.collection-partial', 'Registraste un cobro parcial del alquiler', 'registrar un cobro parcial del alquiler', 'collection'),
   r('POST', '/rentals/collections', 'rental.collection', 'Registraste el cobro del alquiler', 'registrar el cobro del alquiler', 'collection'),
   r('POST', '/rentals/:id/conditions', 'rental.condition', 'Registraste un ajuste en el alquiler', 'registrar un ajuste en un alquiler', 'contract', { id: 'id' }),
   r('POST', '/rentals/:id/occurrences/:occurrenceId/cancel', 'rental.occurrence-cancel', 'Cancelaste un período del alquiler', 'cancelar un período de un alquiler', 'contract', { id: 'id' }),
@@ -121,7 +125,11 @@ const LABELS = {
   obligation: (db, userId, id) => db.findById('obligations', id, userId)?.title || '',
   transfer: (db, userId, id) => db.findById('transfers', id, userId)?.reference || '',
   paymentMethod: (db, userId, id) => db.findById('paymentMethods', id, userId)?.name || '',
-  document: (db, userId, id) => db.findById('documents', id, userId)?.title || '',
+  document: (db, userId, id) => {
+    const doc = db.findById('documents', id, userId);
+    if (!doc) return '';
+    return [doc.title || '', documentContext(db, userId, doc)].filter(Boolean).join(' ');
+  },
   contract: (db, userId, id) => assetNameOf(db, userId, db.findById('rentalContracts', id, userId)?.assetId),
   declaration: (db, userId, id) => assetNameOf(db, userId, db.findById('rentalDeclarations', id, userId)?.assetId),
   collection: (db, userId, id) => {
@@ -139,6 +147,24 @@ const LABELS = {
   }
 };
 
+// Where an attachment belongs, for its log entry: "al cobro del alquiler de Casa (período noviembre 2026)",
+// "al movimiento Sueldo (ARS 100)", "a la obligación ABL de la propiedad Casa", ...
+function documentContext(db, userId, doc) {
+  const tx = doc.transactionId ? db.findById('transactions', doc.transactionId, userId) : null;
+  if (tx?.rentCollectionId) {
+    const label = LABELS.collection(db, userId, tx.rentCollectionId);
+    return `(comprobante del cobro del alquiler${label ? ` de ${label}` : ''})`;
+  }
+  if (doc.occurrenceId || doc.obligationId) {
+    const obligation = db.findById('obligations', doc.obligationId || db.findById('obligationOccurrences', doc.occurrenceId, userId)?.obligationId, userId);
+    const asset = assetNameOf(db, userId, obligation?.assetId);
+    if (obligation) return `(comprobante de la obligación ${obligation.title}${asset ? ` de la propiedad ${asset}` : ''}${doc.tenantEntityId ? ', pagada por el inquilino' : ''})`;
+  }
+  if (tx) return `(comprobante del movimiento ${LABELS.transaction(db, userId, tx.id)})`;
+  if (doc.contractId || doc.declarationId) return `(documento del alquiler de ${LABELS.declaration(db, userId, doc.declarationId) || LABELS.contract(db, userId, doc.contractId)})`;
+  return '';
+}
+
 // Plain "1.234,5" amounts (es-AR), independent of the ICU build.
 function formatAmount(value) {
   if (typeof value !== 'number' || !Number.isFinite(value)) return '';
@@ -154,7 +180,8 @@ function formatDueDate(value) {
 
 // Builds the descriptive label of a log entry from the facts a route provides. A missing fact drops its fragment,
 // so the message never contains "undefined" or empty brackets. Facts: title, assetName, period, amount + currencyCode
-// (or amounts[]), dueDate, installment ({ number, total }). `base` is used when the route gives no title.
+// (or amounts[]), dueDate, installment ({ number, total }), details (extra short fragments, e.g. the pending balance).
+// `base` is used when the route gives no title.
 function describe(route, facts = {}, base = '') {
   const title = typeof facts.title === 'string' ? facts.title.trim() : '';
   const assetName = typeof facts.assetName === 'string' ? facts.assetName.trim() : '';
@@ -165,7 +192,8 @@ function describe(route, facts = {}, base = '') {
   const installment = facts.installment && Number.isInteger(facts.installment.number) && Number.isInteger(facts.installment.total) && facts.installment.number > 0 && facts.installment.total >= facts.installment.number
     ? `cuota ${facts.installment.number}/${facts.installment.total}` : '';
   const due = formatDueDate(facts.dueDate);
-  return [head, amounts && `por un monto de ${amounts}`, due && `con vencimiento ${due}`, installment].filter(Boolean).join(', ').slice(0, 300);
+  const details = (Array.isArray(facts.details) ? facts.details : []).filter(item => typeof item === 'string' && item.trim()).map(item => item.trim());
+  return [head, amounts && `por un monto de ${amounts}`, due && `con vencimiento ${due}`, installment, ...details].filter(Boolean).join(', ').slice(0, 300);
 }
 
 function activeOwnerIds(db, userId, assetId, today = new Date().toISOString().slice(0, 10)) {
@@ -377,6 +405,10 @@ function isUndoable(db, userId, item) {
   try {
     if (undo.type === 'obligation.payment') return db.findById('transactions', undo.transactionId, userId)?.obligationOccurrenceId === undo.occurrenceId;
     if (undo.type === 'obligation.resolution') return db.findById('obligationResolutions', undo.resolutionId, userId)?.status === 'active';
+    if (undo.type === 'rental.cheque') {
+      const ids = collectionIdsOf(db, userId, undo.collectionId);
+      return ids.map(id => db.findById('rentCollections', id, userId)).some(item => item && !item.reversedAt && item.cheque && item.cheque.cashedAt);
+    }
     if (undo.type === 'rental.collection') {
       const target = db.findById('rentCollectionGroups', undo.collectionId, userId) || db.findById('rentCollections', undo.collectionId, userId);
       return Boolean(target) && !target.reversedAt;
@@ -417,4 +449,4 @@ function list(db, userId, { limit, before, from, to, timezone = 'UTC', assetId, 
   return { items, nextBefore: sorted.length > size ? items[items.length - 1].timestamp : null };
 }
 
-module.exports = { validFilters, isUndoable, describe, deriveMeta, obligationMeta, formatAmount, COLLECTION, ROUTES, refineRoute, labelFor, buildMessage, append, pruneOld, list, resolveContext, isSkipped, normalizePath, periodLabel, isIsoDate, isValidTimezone };
+module.exports = { documentContext, validFilters, isUndoable, describe, deriveMeta, obligationMeta, formatAmount, COLLECTION, ROUTES, refineRoute, labelFor, buildMessage, append, pruneOld, list, resolveContext, isSkipped, normalizePath, periodLabel, isIsoDate, isValidTimezone };

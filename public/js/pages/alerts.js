@@ -15,6 +15,7 @@ const AlertsPage = {
     contract_expiry: 'Contratos por vencer',
     rent_adjustment_due: 'Ajustes de alquiler',
     document_pending: 'Documentos pendientes',
+    cheque_due: 'Cheques por cobrar',
     account_forecast: 'Saldo insuficiente en cuentas'
   },
 
@@ -126,6 +127,8 @@ const AlertsPage = {
         return [['Adjuntar comprobante', () => this.attachReceipt(alert), true], ['Revertir pago', () => this.revertPayment(alert)], viewObligation, ...(alert.assetId ? [viewAsset] : [])];
       case 'rent_due':
         return [['Registrar cobro', () => this.collectRent(alert), true], ...(alert.assetId ? [viewAsset] : [])];
+      case 'cheque_due':
+        return [['Marcar como cobrado', () => this.markChequeCashed(alert), true], ['Ver cobro', () => AssetsPage.showCollectionView(alert.groupId || alert.collectionId)], ...(alert.assetId ? [viewAsset] : [])];
       case 'card_installment_due':
         return [['Contabilizar cuota', () => this.postInstallment(alert), true], ['Ver transacciones', () => Router.navigate('/home')]];
       case 'account_forecast':
@@ -180,6 +183,19 @@ const AlertsPage = {
       } catch (error) { showToast(error.message, 'error'); }
     });
     input.click();
+  },
+
+  // A cheque received for a rent: once it is credited it is marked as cashed (undoable from the logs).
+  async markChequeCashed(alert) {
+    const { confirmed } = await ConfirmDialog.open({
+      title: 'Marcar cheque como cobrado', confirmLabel: 'Marcar como cobrado',
+      message: 'El ingreso ya está registrado en la fecha de cobro del cheque. Solo se marca el cheque como cobrado y el aviso deja de mostrarse.',
+      details: [['Bien', alert.assetName], ['Inquilino', (alert.tenantNames || []).join(', ')], ['Período', alert.period ? formatMonthLabel(alert.period) : ''], ['Importe', formatearMonedaConCodigo(alert.amount, alert.currencyCode)], ['Fecha de cobro', alert.date]]
+    });
+    if (!confirmed) return;
+    await API.rentals.markChequeCashed(alert.groupId || alert.collectionId);
+    showToast('Cheque marcado como cobrado');
+    await this.reload();
   },
 
   // One alert per declaration month: the dialog collects every modality of that month.

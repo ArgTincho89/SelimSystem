@@ -440,7 +440,8 @@ export class HomePage extends BasePage {
     const eye = this.page.locator(this.selectors.eyeToggle);
     await expect(eye).toHaveAttribute('aria-pressed', String(hidden));
     await expect(eye).toHaveAttribute('aria-label', hidden ? 'Métricas principales ocultas' : 'Métricas principales visibles');
-    const privateValues = this.page.locator('#page-content [data-public-value]');
+    // The Home eye only covers the Home metrics; account balances follow the "Ocultar importes" of the accounts (evolutivo 7).
+    const privateValues = this.page.locator('#page-content [data-public-value][data-privacy-scope="home"]');
     const displayedValues = await privateValues.allTextContents();
     if (hidden) {
       expect(displayedValues.length).toBeGreaterThan(0);

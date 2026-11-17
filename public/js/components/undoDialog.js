@@ -5,6 +5,7 @@
 //   UndoDialog.open({ type: 'obligation.payment', obligationId, occurrenceId, transactionId }, { onDone })
 //   UndoDialog.open({ type: 'obligation.resolution', obligationId, occurrenceId }, { onDone })
 //   UndoDialog.open({ type: 'rental.collection', collectionId }, { onDone })        // or collectionIds: [...]
+//   UndoDialog.open({ type: 'rental.cheque', collectionId }, { onDone })            // a cheque marked as cashed
 //
 // Optional descriptor fields: `title`, `message`, `confirmLabel`, `details` ([label, value] pairs shown above the field).
 // Resolves with true once the undo succeeded and false when the dialog was dismissed or the request failed.
@@ -15,7 +16,8 @@ const UndoDialog = {
   TYPES: {
     'obligation.payment': { title: 'Deshacer pago', confirmLabel: 'Deshacer pago', message: 'Se anulará el gasto asociado y el vencimiento volverá a pendiente. Esta acción no se puede deshacer.' },
     'obligation.resolution': { title: 'Deshacer resolución', confirmLabel: 'Deshacer resolución', message: 'Se anulará la resolución y el vencimiento volverá a quedar pendiente de resolver.' },
-    'rental.collection': { title: 'Deshacer cobro', confirmLabel: 'Deshacer cobro', message: 'Se deshace el cobro y el período vuelve a quedar pendiente de cobro.' }
+    'rental.collection': { title: 'Deshacer cobro', confirmLabel: 'Deshacer cobro', message: 'Se deshace el cobro y el período vuelve a quedar pendiente de cobro.' },
+    'rental.cheque': { title: 'Deshacer cobro del cheque', confirmLabel: 'Deshacer', message: 'El cheque vuelve a quedar pendiente de cobro y su aviso vuelve a aparecer en Avisos.' }
   },
 
   // The trimmed reason, or '' when it is empty or too long.
@@ -28,6 +30,7 @@ const UndoDialog = {
   async request(descriptor, reason) {
     if (descriptor.type === 'obligation.payment') return API.obligations.revertPayment(descriptor.obligationId, descriptor.occurrenceId, descriptor.transactionId, { reason });
     if (descriptor.type === 'obligation.resolution') return API.obligations.voidResolution(descriptor.obligationId, descriptor.occurrenceId, { reason });
+    if (descriptor.type === 'rental.cheque') return API.rentals.undoChequeCashed(descriptor.collectionId, { reason });
     if (descriptor.type === 'rental.collection') {
       const ids = descriptor.collectionIds || [descriptor.collectionId];
       const done = new Set();
@@ -45,7 +48,7 @@ const UndoDialog = {
 
   successMessage(descriptor, result) {
     const warning = result && (result.reconciliationReset || result.reconciliationReset === true);
-    const base = { 'obligation.payment': 'Pago revertido', 'obligation.resolution': 'Resolución anulada', 'rental.collection': 'Cobro deshecho' }[descriptor.type];
+    const base = { 'obligation.payment': 'Pago revertido', 'obligation.resolution': 'Resolución anulada', 'rental.collection': 'Cobro deshecho', 'rental.cheque': 'El cheque volvió a quedar pendiente de cobro' }[descriptor.type];
     return warning ? `${base}. La conciliación de la cuenta quedó pendiente de revisar` : base;
   },
 

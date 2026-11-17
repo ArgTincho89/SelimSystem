@@ -258,7 +258,13 @@ const WealthRecords = {
     } catch (error) { showToast(error.message, 'error'); }
   },
 
-  async preview(documentRecord) {
+  // "Ver": the shared zoomable viewer (iframe with zoom in / out / reset and "Descargar").
+  preview(documentRecord) {
+    if (typeof DocumentViewer !== 'undefined') return DocumentViewer.open(documentRecord);
+    return this.basicPreview(documentRecord);
+  },
+
+  async basicPreview(documentRecord) {
     const body = create('div', { style: { minHeight: '120px', maxHeight: '70vh', overflow: 'auto' } });
     try {
       if (documentRecord.contentType.startsWith('text/plain')) {

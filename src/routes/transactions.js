@@ -432,9 +432,27 @@ router.delete('/:id', (req, res) => {
   if (hasFinancialAssociations) return res.status(409).json({ error: 'Este movimiento tiene asignaciones o historial de reintegros; no se puede eliminar' });
 
   db.remove('transactions', id, userId);
+  const removedDocumentIds = releaseReceipts(req, db, userId, id);
   ledger.refreshAlerts(db, userId);
-  res.json({ ok: true });
+  res.json({ ok: true, ...(removedDocumentIds.length ? { deletedDocumentIds: removedDocumentIds } : {}) });
 });
+
+// Receipts attached only to a deleted movement go with it (metadata and stored file); a receipt that also
+// belongs to something else (an asset, an obligation...) just loses the link to the movement.
+function releaseReceipts(req, db, userId, transactionId) {
+  const otherTargets = ['assetId', 'entityId', 'obligationId', 'contractId', 'occurrenceId', 'rentOccurrenceId', 'tenantEntityId', 'declarationId'];
+  const removed = [];
+  db.findAll('documents', userId).filter(item => item.transactionId === transactionId).forEach(item => {
+    if (otherTargets.some(field => item[field])) {
+      db.update('documents', item.id, { transactionId: null }, userId);
+      return;
+    }
+    db.remove('documents', item.id, userId);
+    removed.push(item.id);
+    try { req.app.locals.documentStorage?.remove(userId, item.storageKey); } catch { /* an orphan file is harmless */ }
+  });
+  return removed;
+}
 
 router.post('/:id/occurrences/:date/post', (req, res) => {
   const db = req.app.locals.db;

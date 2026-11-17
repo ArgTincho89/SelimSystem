@@ -128,7 +128,7 @@ function currencyDigits(code) {
 const STATUS_LABELS = {
   pending: 'Pendiente',
   overdue: 'Vencido',
-  partially_collected: 'Parcial',
+  partially_collected: 'Parcialmente cancelado',
   partial: 'Parcial',
   collected: 'Cobrado',
   paid: 'Pagado',
@@ -163,6 +163,7 @@ const STATUS_BADGES = {
   'ending-soon': { label: 'Próximo a vencer', icon: '⏳', className: 'status-soon' },
   overdue: { label: 'Vencido', icon: '⚠', className: 'status-overdue' },
   partial: { label: 'Parcial', icon: '◐', className: 'status-partial' },
+  partially_collected: { label: 'Parcialmente cancelado', icon: '◐', className: 'status-partial' },
   paid: { label: 'Pagado', icon: '✔', className: 'status-done' },
   collected: { label: 'Cobrado', icon: '✔', className: 'status-done' },
   resolved: { label: 'Resuelto', icon: '✔', className: 'status-done' },
@@ -174,6 +175,15 @@ const STATUS_BADGES = {
 };
 function statusBadge(state) {
   return Object.prototype.hasOwnProperty.call(STATUS_BADGES, state) ? STATUS_BADGES[state] : STATUS_BADGES.pending;
+}
+
+// Rent periods paid in part read "Parcialmente cancelado" (obligations keep "Parcial").
+function rentStatus(state) {
+  return state === 'partial' ? 'partially_collected' : state;
+}
+
+function rentStatusLabel(state) {
+  return statusLabel(rentStatus(state));
 }
 
 // Spanish label for a status code. Unknown or empty values never leak the raw code.

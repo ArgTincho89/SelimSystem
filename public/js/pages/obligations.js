@@ -208,7 +208,10 @@ const ObligationsPage = {
           className: 'btn btn-ghost btn-sm', textContent: all.length > 1 ? `Revertir pago ${index + 1}` : 'Revertir pago', 'aria-label': `Revertir pago de ${occurrence.date}`, dataset: { revertPayment: paymentId },
           onClick: () => this.revertPayment({ obligationId: item.id, occurrenceId: occurrence.id, transactionId: paymentId }, () => this.refresh())
         })));
-        if (occurrence.resolution || Number(occurrence.totalPaid) > 0) actions.append(create('button', { className: 'btn btn-ghost btn-sm', textContent: 'Adjuntar comprobante', onClick: () => this.attachReceiptTo(occurrence) }));
+        if (occurrence.resolution || Number(occurrence.totalPaid) > 0) {
+          actions.append(create('button', { className: 'btn btn-ghost btn-sm', textContent: 'Adjuntar comprobante', onClick: () => this.attachReceiptTo(occurrence) }));
+          actions.append(create('button', { className: 'btn btn-ghost btn-sm', textContent: 'Comprobantes', 'aria-label': `Ver comprobantes de ${occurrence.date}`, dataset: { occurrenceReceipts: occurrence.id }, onClick: () => this.showReceipts(occurrence) }));
+        }
         if (occurrence.resolution) {
           actions.append(create('button', { className: 'btn btn-ghost btn-sm', textContent: 'Anular resolución', onClick: () => this.voidResolution(item, occurrence) }));
         }
@@ -444,7 +447,10 @@ const ObligationsPage = {
       if (!documents.length) existingDocuments.appendChild(create('small', { className: 'text-muted', textContent: 'No hay comprobantes cargados.' }));
       documents.forEach(document => {
         const checkbox = create('input', { type: 'checkbox', value: document.id });
-        existingDocuments.appendChild(create('label', { style: { display: 'flex', gap: '6px' } }, [checkbox, create('span', { textContent: document.title || document.fileName })]));
+        existingDocuments.appendChild(create('div', { style: { display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' } }, [
+          create('label', { style: { display: 'flex', gap: '6px' } }, [checkbox, create('span', { textContent: document.title || document.fileName })]),
+          ...DocumentViewer.actions(document)
+        ]));
       });
     } catch { existingDocuments.appendChild(create('small', { className: 'text-muted', textContent: 'No se pudieron cargar los comprobantes.' })); }
     const files = create('input', { className: 'form-control', type: 'file', multiple: true, accept: '.pdf,.png,.jpg,.jpeg,.webp,.txt' });
@@ -457,6 +463,8 @@ const ObligationsPage = {
       event.preventDefault();
       if (!this.validNotes(notes)) return;
       if (!this.validMoney(amount)) return;
+      const invalidFile = [...(files.files || [])].map(file => DocumentViewer.fileError(file)).find(Boolean);
+      if (invalidFile) { alert(invalidFile); return; }
       try {
         const documentIds = [...existingDocuments.querySelectorAll('input:checked')].map(input => input.value);
         for (const file of [...(files.files || [])]) {
@@ -482,6 +490,13 @@ const ObligationsPage = {
 
   isTenantOnly(obligation, occurrence) {
     return (occurrence.responsibilityType || obligation.responsibilityType) === 'tenant' || (occurrence.tenantDueAmount !== undefined && occurrence.ownerDueAmount === 0);
+  },
+
+  // Receipts of one due date (owner payments and tenant resolutions) with "Ver documento" and "Descargar".
+  async showReceipts(occurrence) {
+    let documents = [];
+    try { documents = await API.documents.listBy({ occurrenceId: occurrence.id }); } catch (error) { showToast(error.message, 'error'); return; }
+    Modal.push(`Comprobantes · ${occurrence.date}`, DocumentViewer.list(documents, { empty: 'No hay comprobantes cargados.' }), { width: '560px' });
   },
 
   // Uploads a receipt linked to the occurrence (and the payment transaction when there is one).
@@ -569,8 +584,8 @@ const ObligationsPage = {
     payTitle.maxLength = 100;
     const payNotes = this.field(form, 'Notas', { multiline: true, required: true });
     payNotes.maxLength = 1000;
-    const file = create('input', { className: 'form-control', type: 'file', accept: '.pdf,.png,.jpg,.jpeg,.webp,.txt' });
-    this.fieldWrap(form, 'Comprobante (opcional)', file);
+    const attachment = DocumentViewer.fileField({ label: 'Comprobante (opcional)', multiple: true });
+    form.appendChild(attachment.element);
     const submit = create('button', { className: 'btn btn-primary', type: 'submit', textContent: 'Registrar pago' });
     form.appendChild(submit);
     const idempotencyKey = globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`;
@@ -579,6 +594,8 @@ const ObligationsPage = {
       if (!category.value) { alert('Seleccioná una categoría'); return; }
       if (!this.validNotes(payNotes)) return;
       if (!this.validMoney(amount)) return;
+      const attachmentError = attachment.error();
+      if (attachmentError) { showToast(attachmentError, 'error'); return; }
       submit.disabled = true;
       let result;
       try {
@@ -590,9 +607,9 @@ const ObligationsPage = {
         });
       } catch (error) { submit.disabled = false; alert(error.message); return; }
       Modal.hide();
-      if (file.files?.[0]) {
-        try { await this.uploadReceipt(occurrence, file.files[0], result.transaction?.id || null); }
-        catch (error) { showToast(`El pago se registró, pero no se pudo adjuntar el comprobante: ${error.message}. Usá "Adjuntar comprobante" en la fila.`, 'error'); }
+      for (const receipt of attachment.files()) {
+        try { await this.uploadReceipt(occurrence, receipt, result.transaction?.id || null); }
+        catch (error) { showToast(`El pago se registró, pero no se pudo adjuntar el comprobante: ${error.message}. Usá "Adjuntar comprobante" en la fila.`, 'error'); break; }
       }
       await this.refresh();
     });
@@ -633,10 +650,7 @@ const ObligationsPage = {
       notes.forEach(note => content.appendChild(create('p', { textContent: `${note.date}: ${note.content}` })));
       content.appendChild(create('h4', { textContent: 'Documentos' }));
       if (!documents.length) content.appendChild(create('p', { className: 'text-muted', textContent: 'No hay documentos.' }));
-      documents.forEach(document => {
-        const link = create('a', { href: API.documents.contentUrl(document.id), target: '_blank', rel: 'noopener', textContent: document.title || document.fileName });
-        content.appendChild(link);
-      });
+      if (documents.length) content.appendChild(DocumentViewer.list(documents, { empty: '' }));
       Modal.show('Notas y documentos', content);
     } catch (error) { alert(error.message); }
   },
