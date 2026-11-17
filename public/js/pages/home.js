@@ -1009,7 +1009,30 @@ const HomePage = {
       comments.appendChild(document.createTextNode(tx.comments));
       details.appendChild(comments);
     }
+    // Attached receipts: "Ver documento" (zoomable viewer) and "Descargar", plus a quick "Adjuntar comprobante".
+    const transactionId = tx.originalId || tx.id;
+    const documentsSlot = create('div', { className: 'transaction-documents', dataset: { transactionDocuments: transactionId } });
+    details.appendChild(documentsSlot);
+    if (transactionId) {
+      DocumentViewer.listInto(documentsSlot, { transactionId });
+      details.appendChild(this.attachButton(transactionId, documentsSlot));
+    }
     Modal.show('Transacción', details, { footer });
+  },
+
+  // "Adjuntar comprobante" for an existing movement: uploads the chosen file and refreshes its documents.
+  attachButton(transactionId, slot) {
+    const input = create('input', { type: 'file', accept: DocumentViewer.ACCEPT, hidden: true, 'aria-label': 'Archivo del comprobante' });
+    const button = create('button', { className: 'btn btn-ghost btn-sm', type: 'button', textContent: 'Adjuntar comprobante', dataset: { attachReceipt: transactionId }, onClick: () => input.click() });
+    on(input, 'change', async () => {
+      const files = [...(input.files || [])];
+      const invalid = files.map(file => DocumentViewer.fileError(file)).find(Boolean);
+      if (invalid) { showToast(invalid, 'error'); return; }
+      const { uploaded, failed } = await DocumentViewer.uploadAll(files, { transactionId });
+      if (failed.length) showToast(failed[0].message, 'error');
+      if (uploaded.length) { showToast('Comprobante adjuntado'); await DocumentViewer.listInto(slot, { transactionId }); }
+    });
+    return create('div', { style: { marginTop: '8px' } }, [button, input]);
   },
 
   async showTransferDetails(tx) {
