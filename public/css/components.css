@@ -1174,3 +1174,45 @@ a[aria-busy="true"] {
   opacity: 0.6;
   cursor: progress;
 }
+
+/* Document viewer: zoomable iframe inside a scrolling stage. */
+.document-viewer {
+  display: grid;
+  gap: 10px;
+}
+
+.document-viewer-toolbar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.document-viewer-level {
+  min-width: 48px;
+  text-align: center;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.document-viewer-stage {
+  width: 100%;
+  height: min(70vh, 720px);
+  overflow: auto;
+  background: var(--bg-secondary, #f4f4f5);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+}
+
+.document-viewer-sizer {
+  position: relative;
+}
+
+.document-viewer-frame {
+  position: absolute;
+  top: 0;
+  left: 0;
+  border: 0;
+  background: #fff;
+  transform-origin: 0 0;
+}

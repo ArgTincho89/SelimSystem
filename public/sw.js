@@ -17,6 +17,7 @@ const STATIC_ASSETS = [
   '/js/components/moneyInput.js',
   '/js/components/navbar.js',
   '/js/components/modal.js',
+  '/js/components/documentViewer.js',
   '/js/components/monthSelector.js',
   '/js/components/feedback.js',
   '/js/components/tabs.js',

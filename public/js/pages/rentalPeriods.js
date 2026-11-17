@@ -248,7 +248,7 @@ const RentalPeriods = {
     section('Cobros registrados', period.collections.length ? period.collections.map(item => text(`${this.shortDate(item.date)} · ${this.money(item.amount, item.currencyCode)}${item.modality ? ` · ${modalityLabel(item.modality)}` : ''}${item.accountName ? ` · ${item.accountName}` : ''}${item.paymentMethod ? ` · ${item.paymentMethod}` : ''}`)) : [text('Sin cobros registrados.')]);
     if (period.unapplied.length) section('Saldo sin aplicar', period.unapplied.map(item => text(`Cobro del ${this.shortDate(item.date)} con ${this.money(item.amount, item.currencyCode)} sin aplicar a un período.`)));
     const documents = [...period.documents, ...obligations.flatMap(item => item.documents || [])];
-    section('Comprobantes', documents.length ? documents.map(doc => create('button', { className: 'btn btn-ghost btn-sm', type: 'button', textContent: `Ver ${doc.title || doc.fileName || 'comprobante'}`, onClick: () => AssetHistory.showReceipt(doc) })) : [text('Sin comprobantes.')]);
+    section('Comprobantes', [DocumentViewer.list(documents, { empty: 'Sin comprobantes.' })]);
     const notes = [...period.notes, ...obligations.flatMap(item => item.notes || [])];
     section('Notas', notes.length ? notes.map(note => text(`${this.shortDate(note.date)} · ${note.content}`)) : [text('Sin notas.')]);
     return root;
@@ -578,7 +578,7 @@ const MonthlySheet = {
   receiptCell(row) {
     const doc = (row.documents || [])[0];
     if (!doc) return '—';
-    return create('button', { className: 'btn btn-ghost btn-sm', type: 'button', textContent: 'Ver', 'aria-label': `Ver comprobante de ${row.concept}`, onClick: () => AssetHistory.showReceipt(doc) });
+    return create('div', { style: { display: 'flex', gap: '4px', flexWrap: 'wrap' } }, DocumentViewer.actions(doc, { viewLabel: 'Ver documento', viewClass: 'btn btn-ghost btn-sm' }));
   },
 
   // The same actions as the history detail; each button reloads the sheet when its flow ends.

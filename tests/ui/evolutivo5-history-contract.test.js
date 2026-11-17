@@ -53,7 +53,8 @@ describe('Evolutivo 5 asset history timeline contract', () => {
   it('opens a detail dialog with an actions slot and the contextual actions chosen by the server', () => {
     expect(source).toContain("dataset: { actionsSlot: 'true' }");
     expect(source).toContain('actionProviders');
-    ['Registrar pago', 'Resolver', 'Registrar cobro', 'Adjuntar comprobante', 'Agregar nota', 'Ver comprobante', 'Descargar comprobante'].forEach(label => expect(source).toContain(label));
+    ['Registrar pago', 'Resolver', 'Registrar cobro', 'Adjuntar comprobante', 'Agregar nota'].forEach(label => expect(source).toContain(label));
+    expect(source).toContain('...DocumentViewer.actions(doc)');
     expect(source).toContain("actions.includes('pay')");
     expect(source).toContain("actions.includes('resolve')");
     expect(source).toContain("actions.includes('collect')");

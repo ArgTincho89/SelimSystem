@@ -444,7 +444,10 @@ const ObligationsPage = {
       if (!documents.length) existingDocuments.appendChild(create('small', { className: 'text-muted', textContent: 'No hay comprobantes cargados.' }));
       documents.forEach(document => {
         const checkbox = create('input', { type: 'checkbox', value: document.id });
-        existingDocuments.appendChild(create('label', { style: { display: 'flex', gap: '6px' } }, [checkbox, create('span', { textContent: document.title || document.fileName })]));
+        existingDocuments.appendChild(create('div', { style: { display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' } }, [
+          create('label', { style: { display: 'flex', gap: '6px' } }, [checkbox, create('span', { textContent: document.title || document.fileName })]),
+          ...DocumentViewer.actions(document)
+        ]));
       });
     } catch { existingDocuments.appendChild(create('small', { className: 'text-muted', textContent: 'No se pudieron cargar los comprobantes.' })); }
     const files = create('input', { className: 'form-control', type: 'file', multiple: true, accept: '.pdf,.png,.jpg,.jpeg,.webp,.txt' });
@@ -633,10 +636,7 @@ const ObligationsPage = {
       notes.forEach(note => content.appendChild(create('p', { textContent: `${note.date}: ${note.content}` })));
       content.appendChild(create('h4', { textContent: 'Documentos' }));
       if (!documents.length) content.appendChild(create('p', { className: 'text-muted', textContent: 'No hay documentos.' }));
-      documents.forEach(document => {
-        const link = create('a', { href: API.documents.contentUrl(document.id), target: '_blank', rel: 'noopener', textContent: document.title || document.fileName });
-        content.appendChild(link);
-      });
+      if (documents.length) content.appendChild(DocumentViewer.list(documents, { empty: '' }));
       Modal.show('Notas y documentos', content);
     } catch (error) { alert(error.message); }
   },

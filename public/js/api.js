@@ -234,10 +234,16 @@ const API = {
       return data;
     },
     contentUrl(id, download = false) { return `/api/documents/${encodeURIComponent(id)}/content${download ? '?download=1' : ''}`; },
-    // Receipt list with "Ver" (inline) and "Descargar" links; "Sin comprobante" when empty.
+    // Receipt list with "Ver documento" (zoomable viewer) and "Descargar"; "Sin comprobante" when empty.
     receiptLinks(documents = []) {
       const box = create('span', { style: { display: 'inline-flex', gap: '8px', flexWrap: 'wrap' } });
       if (!documents.length) box.textContent = 'Sin comprobante';
+      if (typeof DocumentViewer !== 'undefined') {
+        documents.forEach(doc => box.append(create('span', { style: { display: 'inline-flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' } }, [
+          document.createTextNode(`${doc.title || doc.fileName} `), ...DocumentViewer.actions(doc)
+        ])));
+        return box;
+      }
       documents.forEach(doc => box.append(create('span', {}, [
         document.createTextNode(`${doc.title || doc.fileName} `),
         create('a', { href: API.documents.contentUrl(doc.id), target: '_blank', rel: 'noopener noreferrer', textContent: 'Ver' }),
