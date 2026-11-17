@@ -33,8 +33,11 @@ function create(tag, attrs = {}, children = []) {
 // Every busy control is also released when a dialog opens (Modal.open calls releaseGuards): a handler that awaits
 // a dialog must not keep its button locked while the user decides.
 const activeGuards = new Set();
+// Bumped on every dialog open, so a handler that opens a dialog before its first await is never locked.
+let guardGeneration = 0;
 
 function releaseGuards() {
+  guardGeneration += 1;
   [...activeGuards].forEach(release => release());
 }
 
@@ -58,8 +61,10 @@ function guard(el, event, handler) {
       if (evt && typeof evt.preventDefault === 'function') evt.preventDefault();
       return undefined;
     }
+    const generation = guardGeneration;
     const result = handler.call(this, evt);
     if (!result || typeof result.then !== 'function') return result;
+    if (generation !== guardGeneration) return result;
     const targets = busyTargets(el).map(target => ({ target, wasDisabled: Boolean(target.disabled) }));
     el.setAttribute('aria-busy', 'true');
     targets.forEach(({ target }) => { target.disabled = true; target.setAttribute('aria-busy', 'true'); });

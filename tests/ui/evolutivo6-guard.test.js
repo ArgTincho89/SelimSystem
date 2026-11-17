@@ -185,6 +185,14 @@ describe('Evolutivo 6 duplicate action guard', () => {
       expect(read('js/components/modal.js')).toContain("typeof releaseGuards === 'function'");
     });
 
+    it('never locks a handler that opens a dialog before its first await', () => {
+      const never = new Promise(() => {});
+      const button = create('button', { type: 'button', onClick: () => { releaseGuards(); return never; } });
+      button.click();
+      expect(button.disabled).toBe(false);
+      expect(button.getAttribute('aria-busy')).not.toBe('true');
+    });
+
     it('opts out the month navigation arrows (repeatable)', () => {
       expect(read('js/components/monthSelector.js').match(/dataset: \{ repeatable: '' \}/g)).toHaveLength(2);
     });
