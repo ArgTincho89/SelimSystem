@@ -1,8 +1,10 @@
 // Dedicated activity log screen: every action of the user, newest first, with an accent/case
-// insensitive search and optional "Desde"/"Hasta" days. Date/time on the left, description on the right.
+// insensitive search, optional "Desde"/"Hasta" days and server-side filters (Bien, Titular, Inquilino, Categoría).
+// Date/time on the left, description on the right; "Deshacer" on the rows whose action can still be undone.
 const LogsPage = {
   LOGS_PAGE_SIZE: 200,
   LOGS_MAX_PAGES: 50,
+  FILTERS: [['assetId', 'Bien', 'Todos los bienes'], ['ownerId', 'Titular', 'Todos los titulares'], ['tenantId', 'Inquilino', 'Todos los inquilinos'], ['categoryId', 'Categoría', 'Todas las categorías']],
 
   // Lowercase text without accents, for tolerant matching.
   normalizeText(value) {
@@ -20,12 +22,13 @@ const LogsPage = {
   },
 
   // Loads every page of the range (newest first), following `nextBefore` up to LOGS_MAX_PAGES pages.
-  async loadAll(from, to) {
+  async loadAll(from, to, filters = {}) {
     const items = [];
     let before = null;
     for (let page = 0; page < this.LOGS_MAX_PAGES; page += 1) {
       const result = await API.activityLogs.list({
-        limit: this.LOGS_PAGE_SIZE, before, from, to, timezone: localStorage.getItem('pate_timezone') || undefined
+        limit: this.LOGS_PAGE_SIZE, before, from, to, timezone: localStorage.getItem('pate_timezone') || undefined,
+        assetId: filters.assetId || undefined, ownerId: filters.ownerId || undefined, tenantId: filters.tenantId || undefined, categoryId: filters.categoryId || undefined
       });
       items.push(...result.items);
       before = result.nextBefore;
@@ -34,7 +37,22 @@ const LogsPage = {
     return items;
   },
 
-  renderRow(item) {
+  // Options of the four selectors: [{ value, label }] per filter key. A list that fails to load stays empty.
+  async loadFilterOptions() {
+    const safe = async request => { try { return (await request) || []; } catch { return []; } };
+    const [assets, owners, categories] = await Promise.all([safe(API.assets.list()), safe(API.owners.list()), safe(API.categories.list())]);
+    const named = (items, label) => items.map(item => ({ value: item.id, label: label(item) })).filter(item => item.value && item.label)
+      .sort((a, b) => a.label.localeCompare(b.label, 'es'));
+    const hasRole = (item, role) => (item.roles || ['owner']).includes(role);
+    return {
+      assetId: named(assets, item => item.name),
+      ownerId: named(owners.filter(item => hasRole(item, 'owner')), item => item.name),
+      tenantId: named(owners.filter(item => hasRole(item, 'tenant')), item => item.name),
+      categoryId: named(categories, item => item.nombre)
+    };
+  },
+
+  renderRow(item, onUndone = null) {
     const failed = item.outcome === 'failure';
     const description = create('div', { className: 'log-description' }, [
       create('span', { textContent: item.message })
@@ -42,6 +60,13 @@ const LogsPage = {
     if (failed) {
       description.appendChild(create('span', {
         className: 'due-overdue', textContent: ' · No se completó', style: { marginLeft: '4px' }
+      }));
+    }
+    if (item.undoable && item.undo && !failed) {
+      description.appendChild(create('button', {
+        className: 'btn btn-ghost btn-sm', type: 'button', textContent: 'Deshacer', style: { marginLeft: '8px' },
+        'data-log-action': 'undo',
+        onClick: () => UndoDialog.open(item.undo, { onDone: () => { if (onUndone) onUndone(); } })
       }));
     }
     return create('div', { className: 'log-row' }, [
@@ -74,16 +99,32 @@ const LogsPage = {
     });
     content.appendChild(filters);
 
+    // Server-side filters: changing any selector reloads the list.
+    const selects = {};
+    const panel = create('div', { className: 'logs-filters', style: { display: 'flex', gap: '8px', alignItems: 'flex-end', flexWrap: 'wrap', marginBottom: '12px' } });
+    this.FILTERS.forEach(([key, label, allLabel]) => {
+      const select = create('select', { className: 'form-control', id: `logs-filter-${key}` }, [create('option', { value: '', textContent: allLabel })]);
+      selects[key] = select;
+      const group = create('div', { className: 'form-group', style: { flex: '1 1 160px', marginBottom: '0' } });
+      group.appendChild(create('label', { textContent: label, for: select.id }));
+      group.appendChild(select);
+      panel.appendChild(group);
+    });
+    const clearButton = create('button', { className: 'btn btn-ghost btn-sm', type: 'button', id: 'logs-clear-filters', textContent: 'Limpiar filtros' });
+    panel.appendChild(clearButton);
+    content.appendChild(panel);
+
     const list = create('div', { id: 'logs-list' });
     content.appendChild(list);
 
+    const activeFilters = () => Object.fromEntries(this.FILTERS.map(([key]) => [key, selects[key].value]));
     let allItems = [];
     let requestId = 0;
     const paint = () => {
       const visible = this.filterItems(allItems, searchInput.value);
-      list.replaceChildren(...visible.map(item => this.renderRow(item)));
+      list.replaceChildren(...visible.map(item => this.renderRow(item, load)));
       if (!visible.length) {
-        const filtered = searchInput.value.trim() || fromInput.value || toInput.value;
+        const filtered = searchInput.value.trim() || fromInput.value || toInput.value || activeFilters().assetId || activeFilters().ownerId || activeFilters().tenantId || activeFilters().categoryId;
         list.appendChild(create('p', {
           className: 'empty-state',
           textContent: filtered ? 'No hay acciones que coincidan con la búsqueda' : 'Todavía no hay acciones registradas'
@@ -97,7 +138,7 @@ const LogsPage = {
       const current = ++requestId;
       list.replaceChildren(create('div', { className: 'loading', textContent: 'Cargando acciones...' }));
       try {
-        const items = await this.loadAll(from, to);
+        const items = await this.loadAll(from, to, activeFilters());
         if (current !== requestId) return;
         allItems = items;
         paint();
@@ -111,6 +152,18 @@ const LogsPage = {
     on(searchInput, 'input', paint);
     on(fromInput, 'change', load);
     on(toInput, 'change', load);
-    await load();
+    this.FILTERS.forEach(([key]) => on(selects[key], 'change', load));
+    on(clearButton, 'click', () => {
+      this.FILTERS.forEach(([key]) => { selects[key].value = ''; });
+      searchInput.value = '';
+      fromInput.value = '';
+      toInput.value = '';
+      return load();
+    });
+    const loading = load();
+    this.loadFilterOptions().then(options => {
+      this.FILTERS.forEach(([key]) => (options[key] || []).forEach(option => selects[key].appendChild(create('option', { value: option.value, textContent: option.label }))));
+    });
+    await loading;
   }
 };

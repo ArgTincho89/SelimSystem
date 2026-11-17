@@ -2006,3 +2006,6 @@ body:not(.desktop-mode) .home-stats .stat-value-multi .stat-currency-amount:not(
 :root[data-theme="light"] .modal-overlay {
   background: rgba(29, 35, 51, 0.45) !important;
 }
+
+/* Unpaid rent alerts in Ver alquiler: red and bold. */
+.alert-critical { color: var(--danger, #c0392b); font-weight: 700; }

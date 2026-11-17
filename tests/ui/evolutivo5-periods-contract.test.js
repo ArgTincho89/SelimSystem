@@ -75,9 +75,9 @@ describe('Evolutivo 5 periods tab contract', () => {
       ['Registrar cobro', 'Deshacer cobro', 'Cancelar período', 'Registrar pago', 'Resolver', 'Anular resolución', 'Ver detalle', 'Actualizar alquiler'].forEach(label => expect(source).toContain(label));
       expect(source).toContain("period.actions.includes('cancel-period')");
       expect(source).toContain('ConfirmDialog.open(');
-      expect(source).toContain('Confirmar y deshacer');
+      expect(source).toContain('UndoDialog.open({ type: \'rental.collection\'');
       expect(source).toContain('API.rentals.cancelOccurrence(part.contractId, part.occurrenceId)');
-      expect(source).toContain('API.obligations.voidResolution(');
+      expect(source).toContain("type: 'obligation.resolution'");
     });
 
     it('moved the collection dialogs out of assets.js, which keeps thin delegates', () => {

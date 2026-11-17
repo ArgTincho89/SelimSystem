@@ -7,6 +7,7 @@ const router = express.Router();
 router.use(requireAuth);
 
 // Own entries only, newest first. Any userId query parameter is ignored.
+// Optional assetId/ownerId/tenantId/categoryId filters combine with AND (400 "Filtro inválido" when malformed).
 // Optional from/to (YYYY-MM-DD, inclusive) filter by day in `timezone` (IANA), or the user's configured timezone.
 router.get('/', (req, res) => {
   const { limit, before, from, to, timezone } = req.query;
@@ -14,9 +15,11 @@ router.get('/', (req, res) => {
   if (to !== undefined && to !== '' && !activityLog.isIsoDate(to)) return res.status(400).json({ error: 'Fecha "hasta" inválida' });
   if (from && to && from > to) return res.status(400).json({ error: 'La fecha "desde" no puede ser posterior a "hasta"' });
   if (timezone !== undefined && timezone !== '' && !activityLog.isValidTimezone(timezone)) return res.status(400).json({ error: 'Zona horaria inválida' });
+  if (!activityLog.validFilters(req.query)) return res.status(400).json({ error: 'Filtro inválido' });
   const db = req.app.locals.db;
   const zone = timezone || ledger.getSettings(db, req.session.userId, false)?.timezone || 'Europe/Madrid';
-  res.json(activityLog.list(db, req.session.userId, { limit, before, from: from || undefined, to: to || undefined, timezone: zone }));
+  res.json(activityLog.list(db, req.session.userId, { limit, before, from: from || undefined, to: to || undefined, timezone: zone,
+    assetId: req.query.assetId || undefined, ownerId: req.query.ownerId || undefined, tenantId: req.query.tenantId || undefined, categoryId: req.query.categoryId || undefined }));
 });
 
 module.exports = router;

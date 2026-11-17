@@ -172,9 +172,11 @@ const AssetHistory = {
       panel.appendChild(create('div', { className: 'text-muted', textContent: parts.join(' · ') }));
     });
     if (row.resolution) panel.appendChild(create('div', { className: 'text-muted', textContent: `Resuelto el ${this.formatDate(row.resolution.resolvedAt)} por ${this.amountText(row.resolution.amount, row.currencyCode)}${row.resolution.notes ? ` · ${row.resolution.notes}` : ''}` }));
+    (row.voidedResolutions || []).forEach(voided => panel.appendChild(create('div', { className: 'text-muted', dataset: { voidedResolution: voided.id },
+      textContent: `Resolución anulada${voided.voidedAt ? ` el ${this.formatDate(String(voided.voidedAt).slice(0, 10))}` : ''}${voided.voidReason ? ` · Motivo: ${voided.voidReason}` : ''}` })));
     if (row.reversals.length) {
-      panel.appendChild(create('strong', { textContent: 'Pagos revertidos' }));
-      row.reversals.forEach(reversal => panel.appendChild(create('div', { className: 'text-muted', textContent: `Revertido: ${reversal.date ? this.formatDate(reversal.date) : ''} ${reversal.amount !== undefined ? this.amountText(reversal.amount, reversal.currencyCode || row.currencyCode) : ''}${reversal.reason ? ` · Motivo: ${reversal.reason}` : ''}`.trim() })));
+      panel.appendChild(create('strong', { textContent: row.kind === 'obligation' ? 'Pagos revertidos' : 'Cobros revertidos' }));
+      row.reversals.forEach(reversal => panel.appendChild(create('div', { className: 'text-muted', textContent: `Revertido: ${reversal.date || reversal.reversedAt ? this.formatDate(reversal.date || String(reversal.reversedAt).slice(0, 10)) : ''} ${reversal.amount !== undefined ? this.amountText(reversal.amount, reversal.currencyCode || row.currencyCode) : ''}${reversal.reason ? ` · Motivo: ${reversal.reason}` : ''}`.trim() })));
     }
     panel.appendChild(create('strong', { textContent: 'Comprobantes' }));
     if (!row.documents.length) panel.appendChild(create('span', { className: 'text-muted', textContent: 'Sin comprobantes adjuntos.' }));
@@ -200,10 +202,6 @@ const AssetHistory = {
     if (actions.includes('pay')) action('Registrar pago', () => this.payObligation(row, afterDone));
     if (actions.includes('resolve')) action('Resolver', () => this.resolveObligation(row, afterDone), 'btn btn-secondary btn-sm');
     if (actions.includes('collect') && row.refs.monthKey) action('Registrar cobro', () => AssetsPage.showRentMonthModal(row.refs.assetId, row.refs.monthKey, afterDone));
-    if (actions.includes('undo-collect') && row.refs.collectionIds?.length) {
-      const undo = AssetsPage.undoCollections(row.refs.collectionIds, afterDone, 'Se deshacen los cobros de este mes y vuelve a quedar pendiente de cobro.');
-      if (undo) buttons.push(undo);
-    }
     if (row.refs.occurrenceId && row.kind === 'obligation') {
       action('Adjuntar comprobante', () => this.attachReceipt(row, afterDone), 'btn btn-ghost btn-sm');
       action('Agregar nota', () => this.addNote(row, afterDone), 'btn btn-ghost btn-sm');
@@ -212,13 +210,33 @@ const AssetHistory = {
     return buttons;
   },
 
-  // One "Revertir pago" button per revertible payment of an obligation row (the server marks `revertible`).
+  UNDO_COLLECTION_NOTE: 'Se deshacen los cobros de este mes y vuelve a quedar pendiente de cobro.',
+
+  // The "Deshacer" entry points of a history row: a paid obligation, a resolved obligation and a collected rent all
+  // open the same UndoDialog (required "Motivo"). Pending or already reverted rows carry no such action.
+  undoButtons(row, afterDone) {
+    const actions = row.actions || [];
+    const buttons = this.revertButtons(row, afterDone);
+    const button = (descriptor, aria) => create('button', {
+      className: 'btn btn-secondary btn-sm', type: 'button', textContent: 'Deshacer', 'aria-label': aria, dataset: { historyAction: 'undo' },
+      onClick: () => UndoDialog.open(descriptor, { onDone: afterDone })
+    });
+    if (row.kind === 'obligation' && actions.includes('unresolve')) {
+      buttons.push(button({ type: 'obligation.resolution', obligationId: row.refs.obligationId, occurrenceId: row.refs.occurrenceId }, `Deshacer resolución de ${row.concept}`));
+    }
+    if (actions.includes('undo-collect') && row.refs.collectionIds?.length) {
+      buttons.push(button({ type: 'rental.collection', collectionIds: row.refs.collectionIds, message: this.UNDO_COLLECTION_NOTE }, `Deshacer cobro de ${row.concept}`));
+    }
+    return buttons;
+  },
+
+  // One "Deshacer" button per revertible payment of an obligation row (the server marks `revertible`).
   revertButtons(row, afterDone) {
     if (row.kind !== 'obligation' || !(row.actions || []).includes('revert')) return [];
     const revertible = row.payments.filter(payment => payment.revertible);
     return revertible.map((payment, index) => create('button', {
-      className: 'btn btn-secondary btn-sm', type: 'button', textContent: revertible.length > 1 ? `Revertir pago ${index + 1}` : 'Revertir pago',
-      'aria-label': `Revertir pago de ${row.concept}`, dataset: { historyAction: 'revert', revertPayment: payment.transactionId },
+      className: 'btn btn-secondary btn-sm', type: 'button', textContent: revertible.length > 1 ? `Deshacer pago ${index + 1}` : 'Deshacer',
+      'aria-label': `Deshacer pago de ${row.concept}`, dataset: { historyAction: 'undo', revertPayment: payment.transactionId },
       onClick: () => ObligationsPage.revertPayment({ obligationId: row.refs.obligationId, occurrenceId: row.refs.occurrenceId, transactionId: payment.transactionId }, afterDone)
     }));
   },
@@ -331,5 +349,5 @@ const AssetHistory = {
   }
 };
 
-// Extension point use: the revert button of the payments of an obligation row (history detail and monthly sheet).
-AssetHistory.actionProviders.push((row, ctx) => AssetHistory.revertButtons(row, ctx.afterDone));
+// Extension point use: the "Deshacer" buttons of a row (history detail and monthly sheet).
+AssetHistory.actionProviders.push((row, ctx) => AssetHistory.undoButtons(row, ctx.afterDone));

@@ -171,7 +171,7 @@ describe('Rental batch: overlaps, early end, schedule and per-modality collectio
       expect(group.transactionIds.map(id => f.db.findById('transactions', id, f.userId))).toEqual([null, null]);
       expect(f.db.findById('rentCollectionGroups', group.id, f.userId).reversedAt).toBeTruthy();
       expect(f.db.findAll('rentCollectionAllocations', f.userId)).toHaveLength(0);
-      expect((await f.agent.post(`/api/rentals/collections/${group.id}/reverse`)).status).toBe(409);
+      expect((await f.agent.post(`/api/rentals/collections/${group.id}/reverse`).send({ reason: 'Prueba' })).status).toBe(409);
       expect((await f.agent.get(`/api/rentals/collections/${group.id}/view`)).body.reversed).toBe(true);
       expect((await collectMonth(lines(), 'month-key-1-abc')).status).toBe(201);
       const log = f.db.findAll('activityLogs', f.userId).map(item => item.message);
@@ -181,11 +181,11 @@ describe('Rental batch: overlaps, early end, schedule and per-modality collectio
 
     test('reverses through the group id and the child collection id', async () => {
       const a = (await collectMonth(lines())).body;
-      const byGroup = await f.agent.post(`/api/rentals/collections/${a.id}/reverse`);
+      const byGroup = await f.agent.post(`/api/rentals/collections/${a.id}/reverse`).send({ reason: 'Prueba' });
       expect(byGroup.status).toBe(200);
       expect(byGroup.body.collectionIds).toHaveLength(2);
       const b = (await collectMonth(lines())).body;
-      const byChild = await f.agent.post(`/api/rentals/collections/${b.collectionIds[0]}/reverse`);
+      const byChild = await f.agent.post(`/api/rentals/collections/${b.collectionIds[0]}/reverse`).send({ reason: 'Prueba' });
       expect(byChild.status).toBe(200);
       expect(byChild.body.collectionId).toBe(b.collectionIds[0]);
     });
@@ -193,7 +193,7 @@ describe('Rental batch: overlaps, early end, schedule and per-modality collectio
     test('a dependent refund blocks the undo of the whole month', async () => {
       const res = (await collectMonth(lines())).body;
       f.db.create('transactions', { userId: f.userId, tipo: 'refund', refundSourceId: res.transactionIds[1], monto: 1, amountMinor: 100, accountId: cashAccount, currencyCode: 'ARS', fecha: '2025-03-03', titulo: 'refund' }, f.userId);
-      const undone = await f.agent.post(`/api/rentals/collections/${res.id}/reverse`);
+      const undone = await f.agent.post(`/api/rentals/collections/${res.id}/reverse`).send({ reason: 'Prueba' });
       expect(undone.status).toBe(409);
       expect(undone.body.error).toContain('un reembolso');
       expect(res.transactionIds.every(id => f.db.findById('transactions', id, f.userId))).toBe(true);
@@ -202,7 +202,7 @@ describe('Rental batch: overlaps, early end, schedule and per-modality collectio
     test('resets the reconciliation of a reconciled destination account', async () => {
       const res = (await collectMonth(lines())).body;
       await f.agent.post(`/api/accounts/${cashAccount}/reconcile`).send({ openingBalance: 0, openingDate: '2025-06-01', includedMovementIds: [] });
-      const undone = await f.agent.post(`/api/rentals/collections/${res.id}/reverse`);
+      const undone = await f.agent.post(`/api/rentals/collections/${res.id}/reverse`).send({ reason: 'Prueba' });
       expect(undone.body.reconciliationReset).toBe(true);
       expect(f.db.findById('accounts', cashAccount, f.userId).reconciled).toBe(false);
     });

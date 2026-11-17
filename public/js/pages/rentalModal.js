@@ -358,12 +358,12 @@ const RentalModal = {
     return section;
   },
 
-  cardActions(ctx, card) {
+  cardActions(ctx, card, { collect = true } = {}) {
     const actions = create('div', { className: 'rental-card-actions' });
     const button = (label, handler) => actions.appendChild(create('button', { className: 'btn btn-ghost btn-sm', type: 'button', textContent: label, 'aria-label': `${label} · ${card.modalityLabel}`, onClick: handler }));
     if (card.status === 'active') {
       button('Actualizar alquiler', () => this.updateRent(ctx, card.contractId));
-      button('Registrar cobro', () => this.collectContract(ctx, card.contractId));
+      if (collect) button('Registrar cobro', () => this.collectContract(ctx, card.contractId));
     }
     button('Ver períodos', () => { ctx.periodFilter = { modality: card.modality }; ctx.tabs.select('periodos'); ctx.tabs.refresh('periodos'); });
     if (card.status === 'active') button('Finalizar contrato', () => this.finishContract(ctx, card));
@@ -415,7 +415,7 @@ const RentalModal = {
   renderAlerts(ctx, alerts) {
     const section = create('section', { className: 'card', dataset: { summaryBlock: 'alerts' }, role: 'region', 'aria-label': 'Alertas del alquiler', style: { padding: '12px', display: 'grid', gap: '6px' } }, [create('h4', { textContent: 'Alertas' })]);
     alerts.forEach(alert => {
-      const row = create('div', { className: 'rental-alert', dataset: { alertType: alert.type }, style: { display: 'flex', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap', alignItems: 'center' } }, [create('span', { textContent: alert.message })]);
+      const row = create('div', { className: alert.type === 'rent_due' ? 'rental-alert alert-critical' : 'rental-alert', dataset: { alertType: alert.type }, style: { display: 'flex', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap', alignItems: 'center' } }, [create('span', { textContent: alert.message })]);
       const label = this.ALERT_ACTIONS[alert.action];
       if (label && !ctx.readOnly) row.appendChild(create('button', { className: 'btn btn-secondary btn-sm', type: 'button', textContent: label, 'aria-label': `${label}: ${alert.title || alert.message}`, onClick: () => this.runAlert(ctx, alert) }));
       section.appendChild(row);
@@ -452,10 +452,30 @@ const RentalModal = {
         this.line('Criterio de ajuste', card.adjustmentCriterion || '—'),
         this.line('Próximo ajuste', card.nextAdjustmentDate || '—')
       ]);
-      if (!ctx.readOnly) article.appendChild(this.cardActions(ctx, card));
+      const documentsSlot = create('div', { className: 'contract-documents', dataset: { contractDocuments: card.contractId }, style: { display: 'flex', gap: '8px', flexWrap: 'wrap' } });
+      article.appendChild(documentsSlot);
+      this.loadContractDocuments(documentsSlot, card.contractId);
+      if (!ctx.readOnly) article.appendChild(this.cardActions(ctx, card, { collect: false }));
       root.appendChild(article);
     });
     return root;
+  },
+
+  // Fills the card slot with view/download actions for the contract's documents; nothing is shown without documents.
+  async loadContractDocuments(slot, contractId) {
+    let documents = [];
+    try {
+      documents = await API.documents.list('contract', contractId);
+    } catch {
+      return;
+    }
+    (Array.isArray(documents) ? documents : []).forEach(doc => {
+      const name = doc.title || doc.fileName || '';
+      slot.append(
+        create('button', { className: 'btn btn-secondary btn-sm', type: 'button', textContent: 'Ver documento', dataset: { contractDocument: 'view' }, 'aria-label': `Ver documento ${name}`.trim(), onClick: () => AssetHistory.showReceipt(doc) }),
+        create('a', { className: 'btn btn-ghost btn-sm', href: API.documents.contentUrl(doc.id, true), textContent: 'Descargar documento', dataset: { contractDocument: 'download' }, 'aria-label': `Descargar documento ${name}`.trim() })
+      );
+    });
   },
 
   // Períodos: the unified monthly table (one row per month: modalities, obligations, state and actions).

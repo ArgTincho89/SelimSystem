@@ -62,7 +62,7 @@ describe('Evolutivo 5 feedback component and accessibility contract', () => {
   it('uses the shared confirmation for every destructive obligation action', () => {
     const obligations = read('js/pages/obligations.js');
     expect(obligations).toContain("title: 'Eliminar obligación', danger: true");
-    expect(obligations).toContain("title: 'Anular resolución', danger: true");
+    expect(obligations).toContain("title: 'Anular resolución', confirmLabel: 'Anular resolución'");
     expect(obligations).toContain("title: 'Editar obligación con pagos'");
     expect(read('js/components/transactionForm.js')).toContain("title: 'Eliminar medio de pago', danger: true");
     expect(read('js/pages/rentalPeriods.js')).toContain("title: 'Cancelar período'");

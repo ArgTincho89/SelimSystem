@@ -118,16 +118,16 @@ describe('Property monthly view', () => {
     expect(doc.status).toBe(201);
     const tenantOnly = await obligation({ title: 'Tenant fee', responsibilityType: 'tenant', startDate: '2025-02-12' });
     const resolved = await agent.post(`/api/obligations/${tenantOnly.obligation.id}/occurrences/${tenantOnly.occurrence.id}/resolution`)
-      .send({ tenantEntityId: tenantId, period: '2025-02', amount: 100 });
+      .send({ tenantEntityId: tenantId, notes: 'Resuelto', period: '2025-02', amount: 100 });
     expect(resolved.status).toBe(201);
     const shared = await obligation({
       title: 'Shared fee', responsibilityType: 'shared', startDate: '2025-02-14',
       responsibilitySplit: { type: 'percentage', ownerPercent: 50, tenantPercent: 50 }
     });
-    const paid = await agent.post(`/api/obligations/${shared.obligation.id}/occurrences/${shared.occurrence.id}/payments`).send({ amount: 50, idempotencyKey: 'monthly-view-shared' });
+    const paid = await agent.post(`/api/obligations/${shared.obligation.id}/occurrences/${shared.occurrence.id}/payments`).send({ amount: 50, notes: 'Pago de prueba', idempotencyKey: 'monthly-view-shared' });
     expect(paid.status).toBe(201);
     await agent.post(`/api/obligations/${shared.obligation.id}/occurrences/${shared.occurrence.id}/resolution`)
-      .send({ tenantEntityId: tenantId, period: '2025-02', amount: 50 });
+      .send({ tenantEntityId: tenantId, notes: 'Resuelto', period: '2025-02', amount: 50 });
 
     const month = monthOf((await agent.get(url('?from=2025-02&to=2025-02'))).body, '2025-02');
     const row = title => month.obligations.find(item => item.title === title);

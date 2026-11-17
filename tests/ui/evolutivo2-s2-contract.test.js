@@ -8,8 +8,8 @@ describe('Evolutivo 2 S2 party UI contract', () => {
   const entities = read('js/pages/entities.js');
   const app = read('js/app.js');
 
-  it('shows the five settings tabs in order with exact names', () => {
-    expect(settings).toContain("[['accounts', 'Cuentas'], ['alerts', 'Avisos'], ['owners', 'Titular'], ['tenants', 'Inquilino'], ['providers', 'Proveedor']]");
+  it('shows the six settings tabs in order with exact names (Categorías added in evolutivo 6)', () => {
+    expect(settings).toContain("[['accounts', 'Cuentas'], ['alerts', 'Avisos'], ['owners', 'Titular'], ['tenants', 'Inquilino'], ['providers', 'Proveedor'], ['categories', 'Categorías']]");
     expect(settings).toContain("owners: 'owner', tenants: 'tenant', providers: 'provider'");
     expect(settings).toContain('EntitiesPage.renderPanel(panel');
   });

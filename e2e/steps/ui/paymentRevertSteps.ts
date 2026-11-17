@@ -20,7 +20,7 @@ Given('que el inmueble {string} tiene la obligación {string} de {int} pagada ho
   });
   expect(obligation.status()).toBe(201);
   const body = await obligation.json();
-  const paid = await this.api!.post(`/api/obligations/${body.id}/occurrences/${body.occurrences[0].id}/payments`, { data: { amount, idempotencyKey: `e2e-revert-${Date.now()}` } });
+  const paid = await this.api!.post(`/api/obligations/${body.id}/occurrences/${body.occurrences[0].id}/payments`, { data: { amount, notes: 'Pago de prueba', idempotencyKey: `e2e-revert-${Date.now()}` } });
   expect(paid.status()).toBe(201);
 });
 

@@ -6,6 +6,7 @@ const incomeAttribution = require('../services/income-attribution');
 const rentals = require('../services/rentals');
 const rentCollections = require('../services/rent-collections');
 const rentSchedule = require('../services/rent-schedule');
+const { parseReason, REASON_ERROR } = require('../services/reasons');
 
 const router = express.Router();
 router.use(requireAuth);
@@ -274,6 +275,10 @@ router.post('/collections', (req, res) => {
     db.clearCache();
     return res.status(500).json({ error: 'No se pudo registrar el cobro' });
   }
+  res.locals.activityMeta = {
+    facts: { amount: collection.amount, currencyCode: collection.currencyCode },
+    undo: { type: 'rental.collection', collectionId: collection.id }
+  };
   res.status(201).json(rentals.collectionView(db, userId, collection));
 });
 
@@ -283,6 +288,12 @@ router.post('/collections/month', (req, res) => {
   const userId = req.session.userId;
   const result = rentCollections.createMonthCollection(db, userId, req.body || {});
   if (result.error) return res.status(result.status).json({ error: result.error });
+  if (!result.value.replayed) {
+    res.locals.activityMeta = {
+      facts: { amounts: (result.value.totals || []).map(row => ({ amount: row.amount, currencyCode: row.currencyCode })) },
+      undo: { type: 'rental.collection', collectionId: result.value.id }
+    };
+  }
   res.status(result.value.replayed ? 200 : 201).json(result.value);
 });
 
@@ -296,8 +307,11 @@ router.get('/collections/:id/view', (req, res) => {
 router.post('/collections/:id/reverse', (req, res) => {
   const db = req.app.locals.db;
   const userId = req.session.userId;
-  const result = rentals.reverseCollection(db, userId, req.params.id, req.app.locals.documentStorage);
+  const reason = parseReason((req.body || {}).reason);
+  if (!reason) return res.status(400).json({ error: REASON_ERROR });
+  const result = rentals.reverseCollection(db, userId, req.params.id, req.app.locals.documentStorage, reason);
   if (result.error) return res.status(result.status || 409).json({ error: result.error });
+  res.locals.activityNote = reason;
   res.json(result);
 });
 

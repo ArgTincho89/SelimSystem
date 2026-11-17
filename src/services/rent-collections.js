@@ -224,7 +224,8 @@ function dependentFor(db, userId, transaction) {
  * (all or nothing). Same rules as a single collection: only a dependent movement blocks it and a
  * reconciled account gets its reconciliation reset.
  */
-function reverseGroup(db, userId, group, storage = null) {
+function reverseGroup(db, userId, group, storage = null, reason = null) {
+  const reasonFields = reason ? { reversalReason: reason } : {};
   if (group.reversedAt) return fail('Ese cobro ya fue deshecho', 409);
   const collections = group.collectionIds.map(id => db.findById('rentCollections', id, userId)).filter(item => item && !item.reversedAt);
   for (const collection of collections) {
@@ -257,9 +258,9 @@ function reverseGroup(db, userId, group, storage = null) {
         });
         db.remove('transactions', transaction.id, userId);
       }
-      db.update('rentCollections', collection.id, { reversedAt, reversedTransactionId: transaction?.id || null, reversedOccurrenceIds: [...new Set(collectionOccurrenceIds)] }, userId);
+      db.update('rentCollections', collection.id, { reversedAt, reversedTransactionId: transaction?.id || null, reversedOccurrenceIds: [...new Set(collectionOccurrenceIds)], ...reasonFields }, userId);
     });
-    db.update(GROUPS, group.id, { reversedAt }, userId);
+    db.update(GROUPS, group.id, { reversedAt, ...reasonFields }, userId);
   }, 'No se pudo deshacer el cobro');
   if (written.error) return written;
   removedDocuments.forEach(item => { try { storage?.remove(userId, item.storageKey); } catch { /* orphan file is harmless */ } });

@@ -205,7 +205,7 @@ describe('PUT /api/rentals/declarations/:id and POST .../end', () => {
     const created = (await f.declare()).body;
     const collected = await f.collectModality(created, 'locacion', ['2025-01-01']);
     expect((await f.edit(created.id, [f.modality('locacion', { startDate: '2025-02-01' })])).status).toBe(409);
-    expect((await f.agent.post(`/api/rentals/collections/${collected.body.id}/reverse`)).status).toBe(200);
+    expect((await f.agent.post(`/api/rentals/collections/${collected.body.id}/reverse`).send({ reason: 'Prueba' })).status).toBe(200);
     const edited = await f.edit(created.id, [f.modality('locacion', { startDate: '2025-02-01' })]);
     expect(edited.status).toBe(200);
     expect(edited.body.modalities[0].occurrences[0].date).toBe('2025-02-01');

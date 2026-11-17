@@ -24,19 +24,18 @@ const HomePage = {
     content.innerHTML = '<div class="loading">Cargando...</div>';
 
     try {
-      const trendsFrom = addMonths(this.currentMonth, -5);
-      const [summary, transactions, categories, accounts, trends, overview, installments] = await Promise.all([
+      const [summary, transactions, categories, accounts, owners, overview, installments] = await Promise.all([
         API.summary.get(this.currentMonth),
         API.transactions.list(this.currentMonth),
         API.categories.list(),
         API.accounts.list(),
-        API.trends.get(trendsFrom, this.currentMonth, null).catch(() => null),
+        API.owners.list().catch(() => []),
         API.finance.overview(this.currentMonth),
         API.installments.occurrences(this.currentMonth).catch(() => [])
       ]);
 
       localStorage.setItem('pate_app_currency', summary.activeCurrency || 'ARS');
-      this.renderContent(content, summary, transactions, categories, { desktop, accounts, trends, overview, installments });
+      this.renderContent(content, summary, transactions, categories, { desktop, accounts, owners, overview, installments });
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
           content.classList.add('visible');
@@ -101,7 +100,7 @@ const HomePage = {
         analyticsOnly: true,
         categoryDisclosure: true
       });
-      analyticsContent.appendChild(SummaryPage.renderIvaChart(options.trends));
+      analyticsContent.appendChild(SummaryPage.renderIvaByOwner(summary, (options.owners || []).filter(owner => (owner.roles || ['owner']).includes('owner'))));
       analytics.appendChild(analyticsContent);
       transactionPane.appendChild(analytics);
     }
@@ -339,7 +338,7 @@ const HomePage = {
       analyticsOnly: true,
       categoryDisclosure: true
     });
-    analyticsContent.appendChild(SummaryPage.renderIvaChart(options.trends));
+    analyticsContent.appendChild(SummaryPage.renderIvaByOwner(summary, (options.owners || []).filter(owner => (owner.roles || ['owner']).includes('owner'))));
     this.refreshFavoriteSources(analyticsContent);
     this.renderFavoriteSlot();
     requestAnimationFrame(() => this.renderFavoriteSlot());

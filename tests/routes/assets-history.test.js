@@ -68,7 +68,7 @@ describe('GET /api/assets/:id/history', () => {
   it('shows a reversed collection as a "Revertido" row and the period as overdue again', async () => {
     const occurrence = await occurrenceOf('locacion', '2025-04-01');
     const created = await collect('asset-history-rev', [occurrence], '2025-04-02');
-    expect((await f.agent.post(`/api/rentals/collections/${created.body.id}/reverse`).send({})).status).toBe(200);
+    expect((await f.agent.post(`/api/rentals/collections/${created.body.id}/reverse`).send({ reason: 'Prueba' })).status).toBe(200);
     const rows = (await history({ year: '2025', month: '04' })).body.rows;
     expect(rows.find(row => row.kind === 'rent')).toMatchObject({ state: 'overdue', executed: 0 });
     // The reversal event is dated when it happened (today), not at the period it reopened.

@@ -84,9 +84,9 @@ describe('GET /api/rentals/declarations/:id/periods', () => {
     const find = title => row.obligations.find(item => item.concept === title);
     expect(find('Impuesto municipal')).toMatchObject({ responsibility: 'owner', state: 'overdue', expected: 100, balance: 100, actions: ['pay'] });
     expect(find('Expensas')).toMatchObject({ responsibility: 'tenant', state: 'overdue', actions: ['resolve'] });
-    const paid = await f.agent.post(`/api/obligations/${owner.id}/occurrences/${owner.occurrences[0].id}/payments`).send({ amount: 100, accountId: payAccountId, categoryId, idempotencyKey: 'periods-route-pay-1' });
+    const paid = await f.agent.post(`/api/obligations/${owner.id}/occurrences/${owner.occurrences[0].id}/payments`).send({ amount: 100, accountId: payAccountId, categoryId, notes: 'Pago de prueba', idempotencyKey: 'periods-route-pay-1' });
     expect(paid.status).toBe(201);
-    const resolved = await f.agent.post(`/api/obligations/${tenant.id}/occurrences/${tenant.occurrences[0].id}/resolution`).send({ tenantEntityId: f.tenantId, period: '2025-03', amount: 80 });
+    const resolved = await f.agent.post(`/api/obligations/${tenant.id}/occurrences/${tenant.occurrences[0].id}/resolution`).send({ tenantEntityId: f.tenantId, notes: 'Resuelto', period: '2025-03', amount: 80 });
     expect(resolved.status).toBe(201);
     row = march((await periods(declaration.id, { from: '2025-03', to: '2025-03' })).body);
     expect(find('Impuesto municipal')).toMatchObject({ state: 'paid', executed: 100, balance: 0 });

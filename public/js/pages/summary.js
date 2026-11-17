@@ -261,39 +261,37 @@ const SummaryPage = {
     }
   },
 
-  renderIvaChart(trends) {
+  // "IVA mensual por titular": only the month of `summary`, one row per owner with its IVA total on the right
+  // (0 when the owner has none). `owners` are the legal owners with the owner role; holders that appear in
+  // `summary.ivaByHolder` but not in that list are appended so no IVA is hidden.
+  renderIvaByOwner(summary, owners = []) {
     const card = create('div', { className: 'chart-container' });
     card.dataset.favoriteType = 'trend-iva';
     card.dataset.favoriteKey = 'trend-iva';
     card.dataset.favoriteLabel = 'IVA mensual por titular';
     card.appendChild(create('div', { className: 'chart-title', textContent: 'IVA mensual por titular' }));
 
-    const monthlyData = trends?.monthlyData || [];
-    if (monthlyData.length === 0) {
-      card.appendChild(create('p', {
-        className: 'text-muted text-center',
-        textContent: 'No se pudieron cargar los totales mensuales de IVA.'
-      }));
+    const totals = (summary && summary.ivaByHolder) || [];
+    const rows = (owners || []).map(owner => ({ ownerId: owner.id, ownerName: owner.name }));
+    totals.forEach(total => {
+      if (!rows.some(row => row.ownerId === total.ownerId)) rows.push({ ownerId: total.ownerId, ownerName: total.ownerName });
+    });
+    if (!rows.length) {
+      card.appendChild(create('p', { className: 'text-muted text-center', textContent: 'Todavía no hay titulares cargados.' }));
       return card;
     }
-    monthlyData.forEach(item => {
-      const monthCard = create('section', { className: 'account-alert-row', 'aria-label': `IVA ${item.month}` });
-      const [year, month] = item.month.split('-');
-      const label = new Date(Number(year), Number(month) - 1).toLocaleDateString('es-AR', { month: 'long', year: 'numeric' });
-      monthCard.appendChild(create('strong', { textContent: label }));
-      const totals = item.ivaByHolder || [];
-      if (!totals.length) {
-        monthCard.appendChild(create('span', { className: 'text-muted', textContent: 'Sin ingresos con IVA registrado.' }));
-      } else {
-        const ownerRows = create('div', { style: { display: 'grid', gap: '4px', marginTop: '6px' } });
-        totals.forEach(total => ownerRows.appendChild(create('div', {
-          textContent: `${total.ownerName} · ${total.currency}: ${formatearMoneda(total.amount, total.currency)}`
-        })));
-        monthCard.appendChild(ownerRows);
-      }
-      card.appendChild(monthCard);
+    const fallbackCurrency = (summary && summary.activeCurrency) || 'ARS';
+    rows.forEach(row => {
+      const own = totals.filter(total => total.ownerId === row.ownerId && Number(total.amount) !== 0);
+      const amounts = own.length ? own.map(total => formatearMoneda(total.amount, total.currency)) : [formatearMoneda(0, fallbackCurrency)];
+      const line = create('section', {
+        className: 'account-alert-row', 'aria-label': `IVA ${row.ownerName}`,
+        style: { display: 'flex', justifyContent: 'space-between', gap: '12px' }
+      });
+      line.appendChild(create('strong', { textContent: row.ownerName }));
+      line.appendChild(create('span', { className: 'iva-owner-amount', textContent: amounts.join(' · ') }));
+      card.appendChild(line);
     });
-
     return card;
   },
 

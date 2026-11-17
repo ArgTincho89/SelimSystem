@@ -38,12 +38,12 @@ describe('Evolutivo 3 S4c month-level rent UI contract', () => {
     expect(periods).toContain("textContent: 'Registrar cobro'");
     expect(read('js/api.js')).toContain('/rentals/months');
   });
-  it('uses "Deshacer cobro" with inline confirmation on months, occurrences and the collections list', () => {
+  it('uses "Deshacer cobro" through the UndoDialog on months, occurrences and the collections list', () => {
     const periods = read('js/pages/rentalPeriods.js');
     expect(periods).not.toContain('Anular cobro');
     expect(periods.match(/this\.undoCollections\(/g).length).toBeGreaterThanOrEqual(1);
-    expect(read('js/pages/assetHistory.js')).toContain('AssetsPage.undoCollections(');
-    expect(periods).toContain('La conciliación de la cuenta quedó pendiente de revisar');
+    expect(read('js/pages/assetHistory.js')).toContain("type: 'rental.collection'");
+    expect(read('js/components/undoDialog.js')).toContain('La conciliación de la cuenta quedó pendiente de revisar');
   });
   it('Transacciones deletes a rent collection as "Deshacer cobro"', () => {
     const home = read('js/pages/home.js');

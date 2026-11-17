@@ -19,6 +19,7 @@ const goalRoutes = require('./routes/goals');
 const accountRoutes = require('./routes/accounts');
 const transferRoutes = require('./routes/transfers');
 const assetRoutes = require('./routes/assets');
+const assetKindRoutes = require('./routes/asset-kinds');
 const ownerRoutes = require('./routes/owners');
 const documentRoutes = require('./routes/documents').router;
 const wealthNoteRoutes = require('./routes/wealth-notes').router;
@@ -71,6 +72,7 @@ function createApp(options = {}) {
   app.use('/api/accounts', accountRoutes);
   app.use('/api/transfers', transferRoutes);
   app.use('/api/assets', assetRoutes);
+  app.use('/api/asset-kinds', assetKindRoutes);
   app.use('/api/owners', ownerRoutes);
   app.use('/api/documents', documentRoutes);
   app.use('/api/notes', wealthNoteRoutes);

@@ -13,7 +13,7 @@ describe('Obligation without payment method', () => {
   let providerId;
   const base = () => ({ title: 'Water', type: 'utility', currencyCode: 'ARS', estimatedAmount: 100, startDate: today });
   const pay = (obligationId, occurrenceId, extra = {}) => agent.post(`/api/obligations/${obligationId}/occurrences/${occurrenceId}/payments`)
-    .send({ amount: 100, accountId, idempotencyKey: `key-${Math.random()}-abcdef`, ...extra });
+    .send({ amount: 100, accountId, notes: 'Pago de prueba', idempotencyKey: `key-${Math.random()}-abcdef`, ...extra });
   const firstOccurrence = async id => (await agent.get(`/api/obligations/${id}`)).body.occurrences[0];
 
   beforeAll(async () => {

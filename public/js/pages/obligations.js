@@ -415,8 +415,21 @@ const ObligationsPage = {
     await this.runAction(() => API.obligations.updateOccurrence(obligation.id, occurrence.id, { actualDueAmount: amount, scope }));
   },
 
+  // Tenants offered by the resolve modal: those of the obligation's contract, else of the asset's active contract,
+  // else every tenant. The first one is preselected.
+  async resolveTenants(obligation) {
+    const allTenants = this.owners.filter(owner => (owner.roles || []).includes('tenant'));
+    let contract = null;
+    if (obligation.rentalContractId) {
+      try { contract = await API.rentals.get(obligation.rentalContractId); } catch { contract = null; }
+    }
+    if (!contract && obligation.assetId) contract = await this.activeContractFor(obligation.assetId);
+    const fromContract = contract ? allTenants.filter(owner => (contract.tenantIds || []).includes(owner.id)) : [];
+    return fromContract.length ? fromContract : allTenants;
+  },
+
   async showResolveModal(obligation, occurrence) {
-    const tenants = this.owners.filter(owner => (owner.roles || []).includes('tenant'));
+    const tenants = await this.resolveTenants(obligation);
     if (!tenants.length) { alert('Primero registrá un inquilino en Entidades.'); return; }
     const form = create('form', { style: { display: 'grid', gap: '10px', maxHeight: '70vh', overflowY: 'auto' } });
     const tenant = this.select(tenants.map(owner => [owner.id, owner.name]), tenants[0].id);
@@ -436,11 +449,13 @@ const ObligationsPage = {
     } catch { existingDocuments.appendChild(create('small', { className: 'text-muted', textContent: 'No se pudieron cargar los comprobantes.' })); }
     const files = create('input', { className: 'form-control', type: 'file', multiple: true, accept: '.pdf,.png,.jpg,.jpeg,.webp,.txt' });
     this.fieldWrap(form, 'Subir comprobantes nuevos', files);
-    const notes = this.field(form, 'Notas', { multiline: true });
+    const notes = this.field(form, 'Notas', { multiline: true, required: true });
+    notes.maxLength = 2000;
     form.appendChild(create('p', { className: 'text-muted', textContent: 'No crea ningún movimiento: no afecta saldos, KPIs ni gastos del propietario.' }));
     form.appendChild(create('button', { className: 'btn btn-primary', type: 'submit', textContent: 'Registrar resolución' }));
     on(form, 'submit', async event => {
       event.preventDefault();
+      if (!this.validNotes(notes)) return;
       if (!this.validMoney(amount)) return;
       try {
         const documentIds = [...existingDocuments.querySelectorAll('input:checked')].map(input => input.value);
@@ -449,7 +464,7 @@ const ObligationsPage = {
           documentIds.push(uploaded.id);
         }
         await API.obligations.createResolution(obligation.id, occurrence.id, {
-          tenantEntityId: tenant.value, period: period.value, amount: MoneyInput.value(amount), resolvedAt: resolvedAt.value, documentIds, notes: notes.value
+          tenantEntityId: tenant.value, period: period.value, amount: MoneyInput.value(amount), resolvedAt: resolvedAt.value, documentIds, notes: notes.value.trim()
         });
         Modal.hide();
         await this.refresh();
@@ -459,9 +474,10 @@ const ObligationsPage = {
   },
 
   async voidResolution(obligation, occurrence) {
-    const { confirmed } = await ConfirmDialog.open({ title: 'Anular resolución', danger: true, confirmLabel: 'Anular resolución', message: 'Vas a anular la resolución. La obligación volverá a figurar como pendiente. ¿Querés continuar?' });
-    if (!confirmed) return;
-    await this.runAction(() => API.obligations.voidResolution(obligation.id, occurrence.id));
+    await UndoDialog.open({
+      type: 'obligation.resolution', obligationId: obligation.id, occurrenceId: occurrence.id, title: 'Anular resolución', confirmLabel: 'Anular resolución',
+      message: 'Vas a anular la resolución. La obligación volverá a figurar como pendiente.'
+    }, { onDone: () => this.refresh() });
   },
 
   isTenantOnly(obligation, occurrence) {
@@ -496,22 +512,15 @@ const ObligationsPage = {
       return false;
     }
     const receipts = detail.documents.length ? detail.documents.map(item => item.title || item.fileName).join(', ') : 'Sin comprobante';
-    const { confirmed, reason } = await ConfirmDialog.open({
-      title: 'Revertir pago', danger: true, confirmLabel: 'Revertir pago', message: this.REVERT_COPY, reasonField: true, reasonLabel: 'Motivo (opcional)',
+    return UndoDialog.open({
+      type: 'obligation.payment', obligationId, occurrenceId, transactionId, title: 'Revertir pago', confirmLabel: 'Revertir pago', message: this.REVERT_COPY,
       details: [
         ['Fecha', detail.payment.date], ['Importe', formatearMonedaConCodigo(detail.payment.amount, detail.payment.currencyCode)],
         ['Cuenta', detail.account?.name || ''], ['Medio de pago', detail.paymentMethod], ['Obligación', detail.obligation.title],
         ['Vencimiento', detail.occurrence.date], ['Comprobante', receipts],
         ['Atención', detail.reconciliationWillReset ? 'La conciliación de la cuenta se va a reiniciar.' : '']
       ]
-    });
-    if (!confirmed) return false;
-    try {
-      const result = await API.obligations.revertPayment(obligationId, occurrenceId, transactionId, reason ? { reason } : {});
-      showToast(result.reconciliationReset ? 'Pago revertido. La conciliación de la cuenta quedó pendiente de revisar' : 'Pago revertido');
-      if (onDone) await onDone(result);
-      return true;
-    } catch (error) { showToast(error.message, 'error'); return false; }
+    }, { onDone });
   },
 
   // For entry points that only know the occurrence: reverts its only payment, or asks which one when there are several.
@@ -558,7 +567,7 @@ const ObligationsPage = {
     this.fieldWrap(form, 'Medio de pago (opcional)', method);
     const payTitle = this.field(form, 'Título (opcional)', { value: occurrence.title || obligation.title || '' });
     payTitle.maxLength = 100;
-    const payNotes = this.field(form, 'Notas (opcional)', { multiline: true });
+    const payNotes = this.field(form, 'Notas', { multiline: true, required: true });
     payNotes.maxLength = 1000;
     const file = create('input', { className: 'form-control', type: 'file', accept: '.pdf,.png,.jpg,.jpeg,.webp,.txt' });
     this.fieldWrap(form, 'Comprobante (opcional)', file);
@@ -568,6 +577,7 @@ const ObligationsPage = {
     on(form, 'submit', async event => {
       event.preventDefault();
       if (!category.value) { alert('Seleccioná una categoría'); return; }
+      if (!this.validNotes(payNotes)) return;
       if (!this.validMoney(amount)) return;
       submit.disabled = true;
       let result;
@@ -576,7 +586,7 @@ const ObligationsPage = {
           amount: MoneyInput.value(amount), accountId: accountSelect.value, categoryId: category.value, date: date.value,
           ...(method.value ? { paymentMethodId: method.value } : {}),
           ...(payTitle.value.trim() ? { title: payTitle.value.trim() } : {}),
-          ...(payNotes.value.trim() ? { notes: payNotes.value.trim() } : {}), idempotencyKey
+          notes: payNotes.value.trim(), idempotencyKey
         });
       } catch (error) { submit.disabled = false; alert(error.message); return; }
       Modal.hide();
@@ -651,6 +661,19 @@ const ObligationsPage = {
     const control = MoneyInput.create({ currency, value, required: true, ariaLabel: label });
     this.fieldWrap(container, label, control);
     return control;
+  },
+
+  // A required note: shows the inline error and blocks submit when it is empty after trimming.
+  validNotes(control) {
+    const empty = !control.value.trim();
+    if (!control.errorElement) {
+      control.errorElement = create('small', { className: 'text-danger', role: 'alert', dataset: { notesError: 'true' }, textContent: 'Las notas son obligatorias' });
+      control.errorElement.hidden = true;
+      if (control.parentNode) control.parentNode.appendChild(control.errorElement);
+    }
+    control.errorElement.hidden = !empty;
+    control.setAttribute('aria-invalid', empty ? 'true' : 'false');
+    return !empty;
   },
 
   // A required positive amount: shows the inline error and blocks submit otherwise.

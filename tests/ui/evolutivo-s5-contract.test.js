@@ -27,7 +27,7 @@ describe('Evolutivo S5 UI contract', () => {
     ['showResolveModal', "'Inquilino'", 'Período (AAAA-MM)', 'Importe pagado por el inquilino', 'Fecha de resolución', 'Subir comprobantes nuevos', "'Notas'", 'Registrar resolución'].forEach(text => expect(source).toContain(text));
     expect(source).toContain('API.obligations.createResolution');
     expect(source).toContain('API.documents.uploadTargets({ occurrenceId: occurrence.id, tenantEntityId: tenant.value }');
-    expect(source).toContain('API.obligations.voidResolution');
+    expect(source).toContain("type: 'obligation.resolution'");
   });
 
   it('bumps the service worker cache name to v22 or later', () => {

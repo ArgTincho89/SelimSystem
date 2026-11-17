@@ -65,7 +65,7 @@ describe('Alerts by responsibility (owner / tenant)', () => {
 
   it('marks partial payments and installments as owner alerts and keeps every previous field', async () => {
     const { obligation, occurrence } = await createObligation({ title: 'Seguro', startDate: day(-2), reminderLeadDays: 3, estimatedAmount: 100 });
-    expect((await agent.post(`/api/obligations/${obligation.id}/occurrences/${occurrence.id}/payments`).send({ amount: 40, idempotencyKey: 'resp-partial' })).status).toBe(201);
+    expect((await agent.post(`/api/obligations/${obligation.id}/occurrences/${occurrence.id}/payments`).send({ amount: 40, notes: 'Pago de prueba', idempotencyKey: 'resp-partial' })).status).toBe(201);
     const [partial] = forObligation(await alerts(), obligation);
     expect(partial).toMatchObject({ type: 'partial_payment', responsibility: 'owner', status: 'overdue', amount: 60, currencyCode: 'EUR', obligationId: obligation.id });
     ['id', 'type', 'date', 'title', 'message', 'status', 'assetId', 'assetName', 'occurrenceId', 'reminderLeadDays', 'daysUntil'].forEach(field => expect(partial).toHaveProperty(field));
@@ -73,13 +73,13 @@ describe('Alerts by responsibility (owner / tenant)', () => {
 
   it('document_pending follows the responsibility of its obligation (owner payments stay with the owner)', async () => {
     const { obligation, occurrence } = await createObligation({ title: 'Municipal', startDate: day(-1), reminderLeadDays: 3, estimatedAmount: 10 });
-    expect((await agent.post(`/api/obligations/${obligation.id}/occurrences/${occurrence.id}/payments`).send({ amount: 10, idempotencyKey: 'resp-doc' })).status).toBe(201);
+    expect((await agent.post(`/api/obligations/${obligation.id}/occurrences/${occurrence.id}/payments`).send({ amount: 10, notes: 'Pago de prueba', idempotencyKey: 'resp-doc' })).status).toBe(201);
     const [owner] = forObligation(await alerts('?type=document_pending'), obligation);
     expect(owner).toMatchObject({ type: 'document_pending', responsibility: 'owner' });
     // A shared obligation whose owner part was paid also asks the owner for the receipt.
     const shared = await createObligation({ title: 'Compartida', startDate: day(-1), reminderLeadDays: 3, estimatedAmount: 100, responsibilityType: 'shared', responsibilitySplit: { type: 'percentage', ownerPercent: 50, tenantPercent: 50 } });
-    expect((await agent.post(`/api/obligations/${shared.obligation.id}/occurrences/${shared.occurrence.id}/payments`).send({ amount: 50, idempotencyKey: 'resp-doc-shared' })).status).toBe(201);
-    expect((await agent.post(`/api/obligations/${shared.obligation.id}/occurrences/${shared.occurrence.id}/resolution`).send({ tenantEntityId: tenantId, period: day(-1).slice(0, 7), amount: 50 })).status).toBe(201);
+    expect((await agent.post(`/api/obligations/${shared.obligation.id}/occurrences/${shared.occurrence.id}/payments`).send({ amount: 50, notes: 'Pago de prueba', idempotencyKey: 'resp-doc-shared' })).status).toBe(201);
+    expect((await agent.post(`/api/obligations/${shared.obligation.id}/occurrences/${shared.occurrence.id}/resolution`).send({ tenantEntityId: tenantId, notes: 'Resuelto', period: day(-1).slice(0, 7), amount: 50 })).status).toBe(201);
     const [sharedAlert] = forObligation(await alerts('?type=document_pending'), shared.obligation);
     expect(sharedAlert).toMatchObject({ type: 'document_pending', responsibility: 'owner' });
   });
@@ -109,7 +109,7 @@ describe('Alerts by responsibility (owner / tenant)', () => {
   it('keeps excluding resolved tenant obligations, applies the limit and stays read-only', async () => {
     const { obligation, occurrence } = await createObligation({ title: 'Agua', responsibilityType: 'tenant', startDate: day(2) });
     expect(forObligation(await alerts('?responsibility=tenant'), obligation)).toHaveLength(1);
-    const resolved = await agent.post(`/api/obligations/${obligation.id}/occurrences/${occurrence.id}/resolution`).send({ tenantEntityId: tenantId, period: day(2).slice(0, 7), amount: 85 });
+    const resolved = await agent.post(`/api/obligations/${obligation.id}/occurrences/${occurrence.id}/resolution`).send({ tenantEntityId: tenantId, notes: 'Resuelto', period: day(2).slice(0, 7), amount: 85 });
     expect(resolved.status).toBe(201);
     expect(forObligation(await alerts('?responsibility=tenant'), obligation)).toHaveLength(0);
     expect(await alerts('?responsibility=owner&limit=1')).toHaveLength(1);

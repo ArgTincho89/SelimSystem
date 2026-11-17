@@ -73,7 +73,8 @@ const App = {
     });
     Router.register('/categories', () => {
       if (!this.user) return Router.navigate('/login');
-      CategoriesPage.render();
+      // Categories now live in Configuración.
+      Router.navigate('/settings?section=categories');
     });
     Router.register('/avisos', (params) => {
       if (!this.user) return Router.navigate('/login');
@@ -138,12 +139,7 @@ const App = {
         </svg>
         <span>Avisos</span>
       </button>
-      <button class="navbar-item" data-route="/categories">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/>
-        </svg>
-        <span>Categorías</span>
-      </button>
+
       <button class="navbar-item" data-route="/assets">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M3 10h18M5 10V5h14v5M5 10v9h14v-9M9 14h6"/>

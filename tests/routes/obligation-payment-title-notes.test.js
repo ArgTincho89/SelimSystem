@@ -19,7 +19,7 @@ describe('Obligation payment: title, notes and suggested payment method', () => 
     return { obligation: response.body, occurrence: response.body.occurrences[0] };
   };
   const pay = (o, occ, body = {}) => agent.post(`/api/obligations/${o.id}/occurrences/${occ.id}/payments`)
-    .send({ amount: 10, idempotencyKey: `title-notes-${n += 1}-abcdefgh`, accountId, categoryId, ...body });
+    .send({ amount: 10, notes: 'Pago de prueba', idempotencyKey: `title-notes-${n += 1}-abcdefgh`, accountId, categoryId, ...body });
 
   beforeAll(async () => {
     db = setupTestDb();
@@ -42,14 +42,16 @@ describe('Obligation payment: title, notes and suggested payment method', () => 
     expect(response.body.transaction).toMatchObject({ titulo: 'Tasa de noviembre', comments: 'Pagado en ventanilla' });
   });
 
-  it('defaults the title to the obligation title and the notes to empty', async () => {
+  it('defaults the title to the obligation title and keeps the required notes', async () => {
     const { obligation, occurrence } = await create({ title: 'Seguro hogar' });
     const response = await pay(obligation, occurrence);
     expect(response.status).toBe(201);
     expect(response.body.transaction.titulo).toBe('Seguro hogar');
-    expect(response.body.transaction.comments).toBe('');
-    const blank = await pay(obligation, occurrence, { title: '   ', notes: '' });
+    expect(response.body.transaction.comments).toBe('Pago de prueba');
+    const blank = await pay(obligation, occurrence, { title: '   ', notes: ' Con notas ' });
     expect(blank.body.transaction.titulo).toBe('Seguro hogar');
+    expect(blank.body.transaction.comments).toBe('Con notas');
+    expect((await pay(obligation, occurrence, { title: 'Sin notas', notes: '' })).status).toBe(400);
   });
 
   it('rejects a title over 100 characters and notes over 1000', async () => {

@@ -32,10 +32,10 @@ describe('Tenant obligation resolutions', () => {
 
   const resolveUrl = (obligation, occurrence) => `/api/obligations/${obligation.id}/occurrences/${occurrence.id}/resolution`;
   const resolve = (obligation, occurrence, body = {}) => agent.post(resolveUrl(obligation, occurrence)).send({
-    tenantEntityId: tenantId, period: month, amount: 1000, ...body
+    tenantEntityId: tenantId, notes: 'Resuelto', period: month, amount: 1000, ...body
   });
   const view = async obligation => (await agent.get(`/api/obligations/${obligation.id}`)).body.occurrences[0];
-  const pay = (obligation, occurrence, amount, key) => agent.post(`/api/obligations/${obligation.id}/occurrences/${occurrence.id}/payments`).send({ amount, idempotencyKey: key });
+  const pay = (obligation, occurrence, amount, key) => agent.post(`/api/obligations/${obligation.id}/occurrences/${occurrence.id}/payments`).send({ amount, notes: 'Pago de prueba', idempotencyKey: key });
   const upload = fields => {
     let req = agent.post('/api/documents');
     Object.entries(fields).forEach(([key, value]) => { req = req.field(key, value); });
@@ -134,7 +134,7 @@ describe('Tenant obligation resolutions', () => {
     const { obligation, occurrence } = await createObligation({ responsibilityType: 'tenant' });
     expect((await resolve(obligation, occurrence)).status).toBe(201);
     expect((await resolve(obligation, occurrence)).status).toBe(409);
-    expect((await agent.delete(resolveUrl(obligation, occurrence))).status).toBe(200);
+    expect((await agent.delete(resolveUrl(obligation, occurrence)).send({ reason: 'Prueba' })).status).toBe(200);
     expect((await resolve(obligation, occurrence)).status).toBe(201);
   });
 
@@ -185,11 +185,11 @@ describe('Tenant obligation resolutions', () => {
   it('voiding reopens the occurrence', async () => {
     const { obligation, occurrence } = await createObligation({ responsibilityType: 'tenant' });
     await resolve(obligation, occurrence);
-    const voided = await agent.delete(resolveUrl(obligation, occurrence));
+    const voided = await agent.delete(resolveUrl(obligation, occurrence)).send({ reason: 'Prueba' });
     expect(voided.status).toBe(200);
     expect(voided.body.resolution.status).toBe('voided');
     expect(voided.body.occurrence.status).toBe('expected');
-    expect((await agent.delete(resolveUrl(obligation, occurrence))).status).toBe(404);
+    expect((await agent.delete(resolveUrl(obligation, occurrence)).send({ reason: 'Prueba' })).status).toBe(404);
     expect((await agent.get('/api/obligations/resolutions').query({ occurrenceId: occurrence.id })).body).toEqual([]);
   });
 
@@ -198,7 +198,7 @@ describe('Tenant obligation resolutions', () => {
     await resolve(obligation, occurrence);
     expect((await agent.post(`/api/obligations/${obligation.id}/occurrences/${occurrence.id}/cancel`)).status).toBe(409);
     expect((await agent.put(`/api/obligations/${obligation.id}/occurrences/${occurrence.id}`).send({ notes: 'x' })).status).toBe(409);
-    await agent.delete(resolveUrl(obligation, occurrence));
+    await agent.delete(resolveUrl(obligation, occurrence)).send({ reason: 'Prueba' });
     expect((await agent.put(`/api/obligations/${obligation.id}/occurrences/${occurrence.id}`).send({ notes: 'x' })).status).toBe(200);
     expect((await agent.post(`/api/obligations/${obligation.id}/occurrences/${occurrence.id}/cancel`)).status).toBe(200);
     expect((await resolve(obligation, occurrence)).status).toBe(409);
@@ -238,7 +238,7 @@ describe('Tenant obligation resolutions', () => {
     expect((await resolve(obligation, occurrence)).status).toBe(201);
     const after = await snapshot();
     expect(after).toEqual(before);
-    await agent.delete(resolveUrl(obligation, occurrence));
+    await agent.delete(resolveUrl(obligation, occurrence)).send({ reason: 'Prueba' });
     expect(await snapshot()).toEqual(before);
   });
 

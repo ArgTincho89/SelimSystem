@@ -1,5 +1,19 @@
 const API = {
-  async request(method, url, body) {
+  // Writes in flight, keyed by method + url + body: an identical write issued while the first one is pending
+  // shares its promise, so a double click never sends two requests. GET is never deduplicated.
+  inflight: new Map(),
+
+  request(method, url, body) {
+    if (method === 'GET') return this.send(method, url, body);
+    const key = `${method} ${url} ${JSON.stringify(body === undefined ? null : body)}`;
+    if (this.inflight.has(key)) return this.inflight.get(key);
+    const pending = this.send(method, url, body);
+    const tracked = pending.finally(() => { if (this.inflight.get(key) === tracked) this.inflight.delete(key); });
+    this.inflight.set(key, tracked);
+    return tracked;
+  },
+
+  async send(method, url, body) {
     const opts = {
       method,
       headers: { 'Content-Type': 'application/json' },
@@ -21,7 +35,7 @@ const API = {
   post(url, body) { return this.request('POST', url, body); },
   put(url, body) { return this.request('PUT', url, body); },
   patch(url, body) { return this.request('PATCH', url, body); },
-  delete(url) { return this.request('DELETE', url); },
+  delete(url, body) { return this.request('DELETE', url, body); },
 
   auth: {
     me() { return API.get('/auth/me'); },
@@ -157,9 +171,15 @@ const API = {
     },
     create(data) { return API.post('/assets', data); },
     update(id, data) { return API.put(`/assets/${id}`, data); },
+    delete(id) { return API.delete(`/assets/${encodeURIComponent(id)}`); },
     saveForm(id, payload) { return id ? API.put(`/assets/${encodeURIComponent(id)}/form`, payload) : API.post('/assets/form', payload); },
     addOwnership(id, data) { return API.post(`/assets/${id}/ownerships`, data); },
     closeOwnership(id, ownershipId, endDate) { return API.patch(`/assets/${id}/ownerships/${ownershipId}`, { endDate }); }
+  },
+
+  assetKinds: {
+    list() { return API.get('/asset-kinds'); },
+    create(name) { return API.post('/asset-kinds', { name }); }
   },
 
   owners: {
@@ -259,7 +279,7 @@ const API = {
     revertPayment(id, occurrenceId, paymentId, data = {}) { return API.post(`/obligations/${encodeURIComponent(id)}/occurrences/${encodeURIComponent(occurrenceId)}/payments/${encodeURIComponent(paymentId)}/revert`, data); },
     pay(id, occurrenceId, data) { return API.post(`/obligations/${encodeURIComponent(id)}/occurrences/${encodeURIComponent(occurrenceId)}/payments`, data); },
     createResolution(id, occurrenceId, data) { return API.post(`/obligations/${encodeURIComponent(id)}/occurrences/${encodeURIComponent(occurrenceId)}/resolution`, data); },
-    voidResolution(id, occurrenceId) { return API.delete(`/obligations/${encodeURIComponent(id)}/occurrences/${encodeURIComponent(occurrenceId)}/resolution`); },
+    voidResolution(id, occurrenceId, data) { return API.delete(`/obligations/${encodeURIComponent(id)}/occurrences/${encodeURIComponent(occurrenceId)}/resolution`, data); },
     listResolutions(filters = {}) { return API.get(`/obligations/resolutions?${new URLSearchParams(filters)}`); }
   },
 
@@ -271,6 +291,7 @@ const API = {
       if (params.from) query.set('from', params.from);
       if (params.to) query.set('to', params.to);
       if (params.timezone) query.set('timezone', params.timezone);
+      ['assetId', 'ownerId', 'tenantId', 'categoryId'].forEach(key => { if (params[key]) query.set(key, params[key]); });
       const serialized = query.toString();
       return API.get(`/activity-logs${serialized ? `?${serialized}` : ''}`);
     }
@@ -297,7 +318,7 @@ const API = {
     schedule(assetId) { return API.get(`/rentals/schedule?assetId=${encodeURIComponent(assetId)}`); },
     collectMonth(data) { return API.post('/rentals/collections/month', data); },
     collectionView(id) { return API.get(`/rentals/collections/${encodeURIComponent(id)}/view`); },
-    reverseCollection(collectionId) { return API.post(`/rentals/collections/${encodeURIComponent(collectionId)}/reverse`, {}); },
+    reverseCollection(collectionId, data = {}) { return API.post(`/rentals/collections/${encodeURIComponent(collectionId)}/reverse`, data); },
     allocate(collectionId, data) { return API.post(`/rentals/collections/${encodeURIComponent(collectionId)}/allocations`, data); },
     declarations: {
       list(assetId) { return API.get(`/rentals/declarations${assetId ? `?assetId=${encodeURIComponent(assetId)}` : ''}`); },

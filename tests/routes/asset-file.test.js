@@ -138,7 +138,7 @@ describe('Asset file overview', () => {
     const { obligation: created, occurrence } = await obligation({
       title: 'Third fee', responsibilityType: 'third', responsibleThirdEntityId: third, startDate: addDaysDateOnly(today, -1)
     });
-    const paid = await agent.post(`/api/obligations/${created.id}/occurrences/${occurrence.id}/payments`).send({ amount: 100, idempotencyKey: 'asset-file-third' });
+    const paid = await agent.post(`/api/obligations/${created.id}/occurrences/${occurrence.id}/payments`).send({ amount: 100, notes: 'Pago de prueba', idempotencyKey: 'asset-file-third' });
     expect(paid.status).toBe(201);
     const snapshot = ['obligationOccurrences', 'rentOccurrences', 'transactions', 'documents'].map(name => JSON.stringify(db.findAll(name, userId)));
     const body = (await agent.get(url())).body;

@@ -82,6 +82,8 @@ class FakeElement {
 
   get firstChild() { return this.children[0] || null; }
 
+  get lastChild() { return this.children[this.children.length - 1] || null; }
+
   removeChild(child) { child.remove(); return child; }
 
   querySelector() { return null; }

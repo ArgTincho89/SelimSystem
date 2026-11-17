@@ -1,4 +1,4 @@
-const CACHE_NAME = 'selimsystem-v46';
+const CACHE_NAME = 'selimsystem-v47';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
@@ -22,6 +22,7 @@ const STATIC_ASSETS = [
   '/js/components/tabs.js',
   '/js/components/dataTable.js',
   '/js/components/confirmDialog.js',
+  '/js/components/undoDialog.js',
   '/js/components/transactionForm.js',
   '/js/components/charts.js',
   '/js/pages/login.js',

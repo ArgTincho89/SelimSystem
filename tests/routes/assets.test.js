@@ -90,6 +90,8 @@ describe('Assets and legal owners routes', () => {
     expect(updated.body.ownerships.map(item => item.endDate || null)).toEqual(['2024-12-31', null]);
     expect((await agent.get('/api/assets').query({ type: 'immovable', ownerId: owner.body.id, status: 'sold', usage: 'rented', location: 'Lake' })).body).toHaveLength(1);
     expect((await otherAgent.get(`/api/assets/${asset.body.id}`)).status).toBe(404);
-    expect((await agent.delete(`/api/assets/${asset.body.id}`)).status).toBe(404);
+    expect((await otherAgent.delete(`/api/assets/${asset.body.id}`)).status).toBe(404);
+    expect((await agent.delete(`/api/assets/${asset.body.id}`)).status).toBe(200);
+    expect((await agent.get(`/api/assets/${asset.body.id}`)).status).toBe(404);
   });
 });

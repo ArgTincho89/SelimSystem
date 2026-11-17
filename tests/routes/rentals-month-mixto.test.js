@@ -88,7 +88,7 @@ describe('Month-level rent: Mixto classification, month status, alerts and undo'
     fs.writeFileSync(`${storage.ensureUserDirectory(f.userId)}/${storageKey}`, 'receipt');
     const only = f.db.create('documents', { userId: f.userId, transactionId: res.body.transactionId, storageKey, originalName: 'only.txt' }, f.userId);
     const shared = f.db.create('documents', { userId: f.userId, transactionId: res.body.transactionId, assetId: f.assetId, originalName: 'shared.txt' }, f.userId);
-    const undone = await f.agent.post(`/api/rentals/collections/${res.body.id}/reverse`);
+    const undone = await f.agent.post(`/api/rentals/collections/${res.body.id}/reverse`).send({ reason: 'Prueba' });
     expect(undone.status).toBe(200);
     expect(undone.body.deletedDocumentIds).toEqual([only.id]);
     expect(f.db.findById('documents', only.id, f.userId)).toBeFalsy();
