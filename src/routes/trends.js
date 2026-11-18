@@ -127,7 +127,7 @@ router.get('/', (req, res) => {
        },
         ivaAcumulado: ledger.fromMinorUnits(ivaAcumuladoMinor, activeCurrency),
         incomeBreakdownByHolder,
-        ivaByHolder: incomeBreakdownByHolder.map(({ ownerId, ownerName, currency, iva }) => ({ ownerId, ownerName, currency, amount: iva })),
+        ivaByHolder: incomeAttribution.vatTotals(db, userId, allMonthTx),
        gastos: Math.round(gastos * 100) / 100,
        reembolsos: Math.round(reembolsos * 100) / 100,
        gastosNetos: Math.round(gastosNetosSeleccionados * 100) / 100,

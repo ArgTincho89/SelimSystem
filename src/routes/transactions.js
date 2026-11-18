@@ -11,6 +11,14 @@ const router = express.Router();
 
 router.use(requireAuth);
 
+// "Factura a nombre de" of an expense with IVA. Empty means the owner of the expense account.
+function expenseVatHolderFields(db, userId, ivaHolderId) {
+  if (ivaHolderId === undefined || ivaHolderId === null || ivaHolderId === '') return { fields: { ivaHolderId: null, ivaHolderName: null } };
+  const owner = typeof ivaHolderId === 'string' ? db.findById('legalOwners', ivaHolderId, userId) : null;
+  if (!owner) return { error: 'El titular de la factura no es válido' };
+  return { fields: { ivaHolderId: owner.id, ivaHolderName: owner.name } };
+}
+
 router.get('/', (req, res) => {
   const db = req.app.locals.db;
   const userId = req.session.userId;
@@ -155,8 +163,10 @@ router.post('/', (req, res) => {
     }
   } else if (montoA !== undefined || montoB !== undefined) {
     return res.status(400).json({ error: 'Los importes A y B solo son válidos para ingresos' });
-  } else if (ivaPorcentaje !== undefined && ivaPorcentaje !== null) {
-    return res.status(400).json({ error: 'El IVA solo es válido para ingresos' });
+  } else if (ivaPorcentaje !== undefined && ivaPorcentaje !== null && tipo !== 'expense') {
+    return res.status(400).json({ error: 'El IVA solo es válido para ingresos y gastos' });
+  } else if (ivaPorcentaje !== undefined && ivaPorcentaje !== null && (typeof ivaPorcentaje !== 'number' || !Number.isFinite(ivaPorcentaje) || ivaPorcentaje < 0 || ivaPorcentaje > 100)) {
+    return res.status(400).json({ error: 'El IVA debe ser un número entre 0 y 100' });
   } else if (clasificacion && !['fijo', 'variable'].includes(clasificacion)) {
     return res.status(400).json({ error: 'Clasificación inválida. Debe ser: fijo o variable' });
   }
@@ -190,6 +200,9 @@ router.post('/', (req, res) => {
   const paymentMethodId = req.body.paymentMethodId || null;
   if (paymentMethodId && !db.findById('paymentMethods', paymentMethodId, userId)) return res.status(400).json({ error: 'El medio de pago no es válido' });
   if (req.body.paymentMethod !== undefined && (typeof req.body.paymentMethod !== 'string' || req.body.paymentMethod.length > 120)) return res.status(400).json({ error: 'El medio de pago no es válido' });
+  const expenseIva = tipo === 'expense' && ivaPorcentaje !== undefined && ivaPorcentaje !== null && ivaPorcentaje > 0;
+  const vatHolder = expenseVatHolderFields(db, userId, expenseIva ? req.body.ivaHolderId : null);
+  if (vatHolder.error) return res.status(400).json({ error: vatHolder.error });
 
   const transaction = db.create('transactions', {
     userId,
@@ -211,7 +224,8 @@ router.post('/', (req, res) => {
     clasificacion: tipo === 'income' ? (clasificacion || null) : (clasificacion || 'variable'),
     montoA: tipo === 'income' && clasificacion === 'Mixto' ? roundCents(montoA) : null,
     montoB: tipo === 'income' && clasificacion === 'Mixto' ? roundCents(montoB) : null,
-    ivaPorcentaje: tipo === 'income' && ivaPorcentaje !== undefined && ivaPorcentaje !== null ? roundCents(ivaPorcentaje) : null,
+    ivaPorcentaje: (tipo === 'income' || expenseIva) && ivaPorcentaje !== undefined && ivaPorcentaje !== null ? roundCents(ivaPorcentaje) : null,
+    ...(tipo === 'expense' ? vatHolder.fields : {}),
     ...(comments !== undefined ? { comments } : {})
   }, userId);
 
@@ -276,7 +290,7 @@ router.put('/:id', (req, res) => {
     }
   }
   if (ivaPorcentaje !== undefined && ivaPorcentaje !== null) {
-    if (finalTipo !== 'income') return res.status(400).json({ error: 'El IVA solo es válido para ingresos' });
+    if (finalTipo !== 'income' && finalTipo !== 'expense') return res.status(400).json({ error: 'El IVA solo es válido para ingresos y gastos' });
     if (typeof ivaPorcentaje !== 'number' || !Number.isFinite(ivaPorcentaje) || ivaPorcentaje < 0 || ivaPorcentaje > 100) {
       return res.status(400).json({ error: 'El IVA debe ser un número entre 0 y 100' });
     }
@@ -321,6 +335,18 @@ router.put('/:id', (req, res) => {
   }
   if (ivaPorcentaje !== undefined) {
     updates.ivaPorcentaje = ivaPorcentaje === null ? null : roundCents(ivaPorcentaje);
+  }
+  if (finalTipo === 'expense') {
+    const finalIva = ivaPorcentaje !== undefined ? ivaPorcentaje : transaction.ivaPorcentaje;
+    if (!(Number(finalIva) > 0)) {
+      if (transaction.ivaHolderId || transaction.ivaPorcentaje) Object.assign(updates, { ivaPorcentaje: null, ivaHolderId: null, ivaHolderName: null });
+    } else if (req.body.ivaHolderId !== undefined) {
+      const vatHolder = expenseVatHolderFields(db, userId, req.body.ivaHolderId);
+      if (vatHolder.error) return res.status(400).json({ error: vatHolder.error });
+      Object.assign(updates, vatHolder.fields);
+    }
+  } else if (transaction.ivaHolderId) {
+    Object.assign(updates, { ivaHolderId: null, ivaHolderName: null });
   }
 
   const finalCategoryId = updates.categoryId !== undefined ? updates.categoryId : transaction.categoryId;

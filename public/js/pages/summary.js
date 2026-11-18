@@ -281,17 +281,28 @@ const SummaryPage = {
       return card;
     }
     const fallbackCurrency = (summary && summary.activeCurrency) || 'ARS';
+    // Older payloads only carry `amount` (the debit); credit then is 0 and the balance is -debit.
+    const debitOf = total => Number(total.debit ?? total.amount) || 0;
+    const creditOf = total => Number(total.credit) || 0;
+    const balanceOf = total => total.balance !== undefined ? Number(total.balance) || 0 : creditOf(total) - debitOf(total);
+    const header = create('div', { className: 'iva-owner-grid iva-owner-header', role: 'row' });
+    ['Titular', 'Débito fiscal', 'Crédito fiscal', 'Saldo'].forEach(label => header.appendChild(create('span', { role: 'columnheader', textContent: label })));
+    card.appendChild(header);
     rows.forEach(row => {
-      const own = totals.filter(total => total.ownerId === row.ownerId && Number(total.amount) !== 0);
-      const amounts = own.length ? own.map(total => formatearMoneda(total.amount, total.currency)) : [formatearMoneda(0, fallbackCurrency)];
-      const line = create('section', {
-        className: 'account-alert-row', 'aria-label': `IVA ${row.ownerName}`,
-        style: { display: 'flex', justifyContent: 'space-between', gap: '12px' }
+      const own = totals.filter(total => total.ownerId === row.ownerId && (debitOf(total) !== 0 || creditOf(total) !== 0));
+      const groups = own.length ? own : [{ currency: fallbackCurrency, debit: 0, credit: 0, balance: 0 }];
+      const cell = (value, className) => create('span', {
+        className, role: 'cell', textContent: groups.map(total => formatearMoneda(value(total), total.currency)).join(' · ')
       });
-      line.appendChild(create('strong', { textContent: row.ownerName }));
-      line.appendChild(create('span', { className: 'iva-owner-amount', textContent: amounts.join(' · ') }));
+      const balance = groups.reduce((sum, total) => sum + balanceOf(total), 0);
+      const line = create('section', { className: 'account-alert-row iva-owner-grid', role: 'row', 'aria-label': `IVA ${row.ownerName}` });
+      line.appendChild(create('strong', { role: 'cell', textContent: row.ownerName }));
+      line.appendChild(cell(debitOf, 'iva-owner-amount iva-owner-debit'));
+      line.appendChild(cell(creditOf, 'iva-owner-credit'));
+      line.appendChild(cell(balanceOf, `iva-owner-balance${balance < 0 ? ' is-negative' : balance > 0 ? ' is-positive' : ''}`));
       card.appendChild(line);
     });
+    card.appendChild(create('p', { className: 'iva-owner-note text-muted', textContent: 'Saldo = crédito fiscal − débito fiscal. Negativo: IVA a pagar; positivo: saldo a favor.' }));
     return card;
   },
 
