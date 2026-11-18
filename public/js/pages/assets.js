@@ -43,19 +43,26 @@ const AssetsPage = {
     }
 
     const form = create('form', { className: 'card filter-form', style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(145px, 1fr))', gap: '10px', marginBottom: '16px', alignItems: 'end' } });
-    const q = this.filterInput('Buscar nombre o detalle', filters.q || '');
     const type = this.filterSelect('Tipo de bien', [['', 'Todos'], ['movable', 'Mueble'], ['immovable', 'Inmueble']], filters.type || '');
+    // "Tipo de inmueble" only appears once "Inmueble" is chosen; options are the property kinds already defined.
+    const propertyKind = this.filterSelect('Tipo de inmueble', [['', 'Todos'], ...this.propertyKindOptions()], filters.propertyKind || '');
     const owner = this.filterSelect('Titular legal', [['', 'Todos'], ...this.owners.filter(item => (item.roles || ['owner']).includes('owner')).map(item => [item.id, item.name])], filters.ownerId || '');
-    const status = this.filterInput('Estado', filters.status || '');
-    const usage = this.filterSelect('Uso', [['', 'Todos'], ...this.usageOptions()], filters.usage || '');
-    const location = this.filterInput('Ubicación', filters.location || '');
-    [['Buscar', q], ['Tipo de bien', type], ['Titular legal', owner], ['Estado', status], ['Uso', usage], ['Ubicación', location]]
-      .forEach(([label, field]) => form.appendChild(labeledField(label, field)));
+    const condition = this.filterSelect('Estado', [['', 'Todos'], ['rented', 'Alquilado'], ['not_rented', 'No alquilado']], filters.condition || '');
+    const propertyKindField = labeledField('Tipo de inmueble', propertyKind);
+    const syncPropertyKind = () => {
+      const visible = type.value === 'immovable';
+      propertyKindField.style.display = visible ? '' : 'none';
+      if (!visible) propertyKind.value = '';
+    };
+    on(type, 'change', syncPropertyKind);
+    syncPropertyKind();
+    [labeledField('Tipo de bien', type), propertyKindField, labeledField('Titular legal', owner), labeledField('Estado', condition)]
+      .forEach(field => form.appendChild(field));
     form.appendChild(create('button', { className: 'btn btn-secondary', type: 'submit', textContent: 'Filtrar' }));
     form.appendChild(create('button', { className: 'btn btn-ghost', type: 'button', textContent: 'Limpiar', onClick: () => this.render() }));
     on(form, 'submit', event => {
       event.preventDefault();
-      this.render({ q: q.value.trim(), type: type.value, ownerId: owner.value, status: status.value.trim(), usage: usage.value, location: location.value.trim() });
+      this.render({ type: type.value, propertyKind: type.value === 'immovable' ? propertyKind.value : '', ownerId: owner.value, condition: condition.value });
     });
     content.appendChild(form);
 
@@ -65,15 +72,8 @@ const AssetsPage = {
     }
     const list = create('div', { style: { display: 'grid', gap: '10px' } });
     this.assets.forEach(asset => {
-      const meta = asset.type === 'immovable'
-        ? [this.optionLabel(this.propertyKindOptions(), asset.propertyKind) || asset.propertyType, this.optionLabel(this.conditionOptions(), asset.condition) || this.usageLabel(asset.usageStatus), asset.location || [asset.locality, asset.province, asset.country].filter(Boolean).join(', ')].filter(Boolean).join(' · ')
-        : [asset.brand, asset.plate, asset.subtype, asset.location].filter(Boolean).join(' · ');
       const card = create('article', { className: 'card', style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: 'wrap' } });
-      const details = create('div', {}, [
-        create('strong', { textContent: asset.name }),
-        create('div', { textContent: `${asset.type === 'immovable' ? 'Inmueble' : 'Mueble'}${meta ? ` · ${meta}` : ''}`, style: { color: 'var(--text-muted)', fontSize: 'var(--font-sm)', marginTop: '4px' } }),
-        create('div', { textContent: `Estado: ${statusLabel(asset.status || 'active')}${asset.owners?.length ? ` · Titular: ${asset.owners.map(item => item.name).join(', ')}` : ''}`, style: { color: 'var(--text-muted)', fontSize: 'var(--font-sm)', marginTop: '3px' } })
-      ]);
+      const details = create('div', {}, [create('strong', { textContent: asset.name }), ...this.assetCardLines(asset)]);
       const actions = create('div', { style: { display: 'flex', gap: '8px' } }, [
         create('button', { className: 'btn btn-ghost btn-sm', textContent: 'Ver', onClick: async () => { try { this.showAssetModal(await API.assets.get(asset.id), { readOnly: true }); } catch (error) { showToast(error.message, 'error'); } } }),
         create('button', { className: 'btn btn-ghost btn-sm', textContent: 'Ver historial', onClick: () => this.showHistory(asset.id) }),
@@ -85,6 +85,32 @@ const AssetsPage = {
       list.appendChild(card);
     });
     content.appendChild(list);
+  },
+
+  // "Alquilado" only when the asset has an active rental; everything else (movables, usufruct, unset) is "No alquilado".
+  rentalStateLabel(asset) {
+    return asset.condition === 'rented' ? 'Alquilado' : 'No alquilado';
+  },
+
+  // Summary lines of an asset card with the parameter names in bold:
+  // "Inmueble · Tipo: Galpón · Ubicación: …" and "Estado: Alquilado · Titular: …".
+  assetCardLines(asset) {
+    const line = (parts, marginTop) => {
+      const element = create('div', { className: 'asset-card-line', style: { color: 'var(--text-muted)', fontSize: 'var(--font-sm)', marginTop } });
+      parts.filter(([, value]) => value !== '' && value !== null && value !== undefined).forEach(([name, value], index) => {
+        if (index) element.appendChild(document.createTextNode(' · '));
+        element.appendChild(create('strong', { textContent: value === true ? name : `${name}:` }));
+        if (value !== true) element.appendChild(document.createTextNode(` ${value}`));
+      });
+      return element;
+    };
+    const immovable = asset.type === 'immovable';
+    const location = asset.location || [asset.locality, asset.province, asset.country].filter(Boolean).join(', ');
+    const first = immovable
+      ? [['Inmueble', true], ['Tipo', this.optionLabel(this.propertyKindOptions(), asset.propertyKind) || asset.propertyType || ''], ['Ubicación', location]]
+      : [['Mueble', true], ['Detalle', [asset.brand, asset.plate, asset.subtype].filter(Boolean).join(' · ')], ['Ubicación', asset.location || '']];
+    const second = [['Estado', this.rentalStateLabel(asset)], ['Titular', (asset.owners || []).map(item => item.name).join(', ')]];
+    return [line(first, '4px'), line(second, '3px')];
   },
 
   filterInput(label, value) {
