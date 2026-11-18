@@ -265,10 +265,8 @@ const SummaryPage = {
   // (0 when the owner has none). `owners` are the legal owners with the owner role; holders that appear in
   // `summary.ivaByHolder` but not in that list are appended so no IVA is hidden.
   renderIvaByOwner(summary, owners = []) {
-    const card = create('div', { className: 'chart-container' });
-    card.dataset.favoriteType = 'trend-iva';
-    card.dataset.favoriteKey = 'trend-iva';
-    card.dataset.favoriteLabel = 'IVA mensual por titular';
+    // Not favoritable: no data-favorite-* attributes, so Home adds no star to this card.
+    const card = create('div', { className: 'chart-container', dataset: { analyticsCard: 'iva-by-owner' } });
     card.appendChild(create('div', { className: 'chart-title', textContent: 'IVA mensual por titular' }));
 
     const totals = (summary && summary.ivaByHolder) || [];

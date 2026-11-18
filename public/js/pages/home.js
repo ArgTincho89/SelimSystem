@@ -415,8 +415,7 @@ const HomePage = {
       const allowedFavorites = new Set([
         'category-chart:expense-distribution',
         'expense-split:fixed-variable',
-        'income-split:income-ab',
-        'trend-iva:trend-iva'
+        'income-split:income-ab'
       ]);
       if (allowedFavorites.has(`${favorite?.type}:${favorite?.key}`)
         || favorite?.type === 'income-split' && String(favorite?.key || '').startsWith('income-ab:')) return favorite;
@@ -488,7 +487,6 @@ const HomePage = {
       'category-chart': 'donut',
       'expense-split': 'donut',
       'income-split': 'donut',
-      'trend-iva': 'bar',
     };
     const layout = favoriteLayouts[this.favorite.type];
     if (layout) favoriteCard.classList.add(`desktop-favorite-${layout}`);

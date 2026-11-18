@@ -1,6 +1,6 @@
 # SelimSystem — Documento funcional
 
-**Versión del producto:** 1.17.0
+**Versión del producto:** 1.17.1
 **Entorno productivo:** https://selimsystem.fly.dev
 **Fecha del documento:** 17/11/2026
 
@@ -228,7 +228,7 @@ Se calcula en la **moneda principal de la aplicación** (ARS por defecto) para e
 | **Ingresos A vs B** | Una dona por titular y moneda con el reparto A/B. |
 | **IVA mensual por titular** | IVA del **mes elegido** en cuatro columnas: **Titular**, **Débito fiscal** (IVA de los ingresos A del titular), **Crédito fiscal** (IVA de los gastos facturados a ese titular) y **Saldo** = crédito fiscal − débito fiscal (negativo: IVA a pagar; positivo: saldo a favor). Una fila por titular (0 si no tuvo IVA ese mes); con varias monedas se muestran separadas por "·". Sigue al selector de mes. |
 
-En la experiencia **Escritorio**, cada gráfico tiene una estrella (☆/★) para marcarlo como **favorito**; el favorito se muestra junto a las tarjetas de métricas. Solo puede haber un favorito, recordado en el dispositivo.
+En la experiencia **Escritorio**, cada gráfico tiene una estrella (☆/★) para marcarlo como **favorito**, salvo **IVA mensual por titular**, que no se puede fijar; el favorito se muestra junto a las tarjetas de métricas. Solo puede haber un favorito, recordado en el dispositivo.
 
 ---
 
@@ -351,8 +351,8 @@ Reglas generales: se consideran avisos hasta 90 días hacia adelante y se muestr
 ### 9.1 Lista de bienes
 
 - **Avisos de alquiler** (si existen): accesos rápidos a alquileres pendientes y vencimientos de contratos.
-- **Filtros:** cada campo tiene su etiqueta visible encima: **Buscar** (nombre o detalle), **Tipo de bien** (Mueble / Inmueble), **Titular legal**, **Estado**, **Uso** y **Ubicación**. Los buscadores de Obligaciones (Bien, Proveedor, Estado, Tipo, Desde, Hasta) y Avisos (Tipo de aviso, Responsable, Bien) también muestran etiquetas visibles.
-- Cada bien muestra nombre, tipo, datos principales, estado y titulares, con estos botones:
+- **Filtros:** cada campo tiene su etiqueta visible encima: **Tipo de bien** (Todos / Mueble / Inmueble), **Tipo de inmueble** (solo aparece al elegir Inmueble; ofrece los tipos ya creados: Departamento, Casa, Galpón, Lote y los agregados), **Titular legal** y **Estado** (Todos / Alquilado / No alquilado; "No alquilado" incluye todo bien sin alquiler vigente), con los botones **Filtrar** y **Limpiar**. Los buscadores de Obligaciones (Bien, Proveedor, Estado, Tipo, Desde, Hasta) y Avisos (Tipo de aviso, Responsable, Bien) también muestran etiquetas visibles.
+- Cada bien muestra su nombre y dos líneas con los nombres de los datos en negrita: "**Inmueble** · **Tipo:** Galpón · **Ubicación:** …" (en muebles, "**Mueble** · **Detalle:** …") y "**Estado:** Alquilado / No alquilado · **Titular:** …". Los datos vacíos no se muestran. Botones:
 
 | Botón | Qué hace |
 |---|---|
@@ -690,7 +690,7 @@ Sección con el contenido descrito en el capítulo 8 (alta, edición, subcategor
 
 - **Foto de perfil:** **Cambiar foto** (imagen de hasta 2 MB, se recorta cuadrada) y **Eliminar foto**. Sin foto se muestra la inicial del nombre. La foto se guarda en el servidor.
 - **Datos de la cuenta:** usuario y email.
-- **Apariencia:** **Modo oscuro** (predeterminado) o **Modo claro**. Se guarda en el dispositivo y se aplica al instante en toda la app.
+- **Apariencia:** **Modo oscuro** (predeterminado) o **Modo claro**. Se guarda en el dispositivo y se aplica al instante en toda la app. En modo claro, la sección actual del menú se resalta con fondo de color, texto en negrita y una barra de acento (a la izquierda en el menú lateral, arriba en la barra inferior).
 - **Logs:** abre la pantalla de Logs.
 - **Acciones de cuenta:**
   - **Cambiar email:** nuevo email y contraseña actual. El email no puede estar en uso.
@@ -706,7 +706,7 @@ Sección con el contenido descrito en el capítulo 8 (alta, edición, subcategor
 - Cada renglón tiene a la **izquierda la fecha y hora** y a la derecha la **descripción** de la acción (por ejemplo, "Creaste la subcuenta X de Y"; las acciones sobre obligaciones y cobros incluyen el bien, el importe, el vencimiento y, cuando existe, la cuota y el motivo). Si una acción falló, se agrega "· No se completó".
 - **Buscar:** filtra por palabras, sin distinguir mayúsculas ni acentos.
 - **Desde / Hasta:** rango de días opcional ("Desde" no puede ser posterior a "Hasta").
-- **Filtros:** un panel permite filtrar por **Bien**, **Titular**, **Inquilino** y **Categoría** (se combinan, y el filtro se aplica en el servidor antes de paginar); **Limpiar filtros** los quita junto con la búsqueda y las fechas. Sin resultados se muestra un mensaje de lista vacía. Las entradas anteriores a 1.15.0 no tienen estos datos y no aparecen al filtrar.
+- **Filtros:** una sola barra compacta (en una fila en pantallas anchas) reúne **Buscar**, **Desde**, **Hasta** y los filtros por **Bien**, **Titular**, **Inquilino** y **Categoría** (se combinan, y el filtro se aplica en el servidor antes de paginar); **Limpiar filtros** los quita junto con la búsqueda y las fechas. Sin resultados se muestra un mensaje de lista vacía. Las entradas anteriores a 1.15.0 no tienen estos datos y no aparecen al filtrar.
 - **Deshacer desde Logs:** los pagos, resoluciones y cobros de alquiler registrados ofrecen **Deshacer**, que pide el mismo **Motivo** obligatorio.
 - Botón **← Perfil** para volver.
 - Se registran todas las acciones de escritura (altas, ediciones, bajas, cobros, pagos, deshacer...). Se guardan solo el tipo de acción, la referencia y el mensaje, nunca contraseñas ni contenidos. Las entradas se conservan **12 meses**.

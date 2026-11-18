@@ -20,12 +20,14 @@ describe('IVA mensual por titular (débito, crédito y saldo)', () => {
   const rows = card => card.findAll(node => String(node.className).split(' ').includes('account-alert-row'));
   const cells = row => row.children.map(child => child.textContent);
 
-  it('keeps the title and the favorite attributes', () => {
+  it('keeps the title and cannot be pinned as the Home favorite (no star)', () => {
     const card = SummaryPage.renderIvaByOwner(summary, owners);
-    expect(card.dataset.favoriteType).toBe('trend-iva');
-    expect(card.dataset.favoriteKey).toBe('trend-iva');
-    expect(card.dataset.favoriteLabel).toBe('IVA mensual por titular');
+    expect(card.dataset.favoriteType).toBeUndefined();
+    expect(card.dataset.favoriteKey).toBeUndefined();
+    expect(card.dataset.analyticsCard).toBe('iva-by-owner');
     expect(card.textContent).toContain('IVA mensual por titular');
+    const home = read('js/pages/home.js');
+    expect(home).not.toContain('trend-iva');
   });
 
   it('shows the four columns Titular, Débito fiscal, Crédito fiscal and Saldo', () => {

@@ -263,9 +263,9 @@ Then('el selector muestra mes y año completos sin preposición', async function
   await homePage.expectMonthLabelHasFullMonthAndYear();
 });
 
-Then('la estrella del gráfico de IVA queda dentro de la tarjeta sin tapar el título', async function (this: SelimSystemWorld) {
+Then('el gráfico de IVA mensual por titular no tiene estrella de favorito', async function (this: SelimSystemWorld) {
   const homePage = new HomePage(this.page!);
-  await homePage.expectIvaFavoriteStarInsideChartCard();
+  await homePage.expectIvaCardIsNotFavoritable();
 });
 
 Then('la página no tiene desbordamiento horizontal', async function (this: SelimSystemWorld) {

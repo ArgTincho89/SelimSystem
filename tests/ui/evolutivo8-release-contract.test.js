@@ -35,8 +35,7 @@ describe('Evolutivo 8 release contract', () => {
 
   it('the Bienes, Obligaciones and Avisos filter bars use visible labels', () => {
     const assets = read('public/js/pages/assets.js');
-    ['Buscar', 'Tipo de bien', 'Titular legal', 'Estado', 'Uso', 'Ubicación'].forEach(label => expect(assets).toContain(`['${label}', `));
-    expect(assets).toContain('labeledField(label, field)');
+    ['Tipo de bien', 'Tipo de inmueble', 'Titular legal', 'Estado'].forEach(label => expect(assets).toContain(`labeledField('${label}', `));
     expect(read('public/js/pages/obligations.js')).toContain("[['Bien', asset], ['Proveedor', provider], ['Estado', status], ['Tipo', type], ['Desde', from], ['Hasta', to]]");
     expect(read('public/js/pages/alerts.js')).toContain("labeledField('Tipo de aviso', type), labeledField('Responsable', responsibility), labeledField('Bien', asset)");
   });

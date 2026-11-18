@@ -203,7 +203,8 @@ function matchesFilter(asset, query, owners, assetOwnerships) {
     && (!query.ownerId || ownerIds.includes(query.ownerId))
     && (!query.status || asset.status === query.status)
     && (!query.usage || asset.usageStatus === query.usage)
-    && (!query.condition || asset.condition === query.condition)
+    // "No alquilado" covers every asset without an active rental (movables, usufruct or no condition yet).
+    && (!query.condition || (query.condition === 'not_rented' ? asset.condition !== 'rented' : asset.condition === query.condition))
     && (!query.propertyKind || asset.propertyKind === query.propertyKind)
     && (!query.location || locationText.includes(query.location.toLocaleLowerCase()));
 }

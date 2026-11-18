@@ -90,29 +90,26 @@ const LogsPage = {
     const searchInput = create('input', { className: 'form-control', type: 'search', id: 'logs-search', placeholder: 'Buscar en las acciones...' });
     const fromInput = create('input', { className: 'form-control', type: 'date', id: 'logs-from' });
     const toInput = create('input', { className: 'form-control', type: 'date', id: 'logs-to' });
-    const filters = create('div', { style: { display: 'flex', gap: '8px', alignItems: 'flex-end', flexWrap: 'wrap', marginBottom: '12px' } });
-    [['Buscar', searchInput, '2 1 220px'], ['Desde', fromInput, '1 1 140px'], ['Hasta', toInput, '1 1 140px']].forEach(([label, input, flex]) => {
-      const group = create('div', { className: 'form-group', style: { flex, marginBottom: '0' } });
-      group.appendChild(create('label', { textContent: label, for: input.id }));
-      group.appendChild(input);
-      filters.appendChild(group);
-    });
-    content.appendChild(filters);
-
-    // Server-side filters: changing any selector reloads the list.
+    // One compact toolbar: text and dates filter locally, the selectors filter on the server (changing one reloads).
+    const toolbar = create('section', { className: 'logs-filters logs-toolbar', 'aria-label': 'Filtros de logs' });
+    const field = (label, control, modifier) => {
+      const group = create('div', { className: `logs-field${modifier ? ` logs-field-${modifier}` : ''}` });
+      group.appendChild(create('label', { textContent: label, for: control.id }));
+      group.appendChild(control);
+      toolbar.appendChild(group);
+    };
+    field('Buscar', searchInput, 'search');
+    field('Desde', fromInput, 'date');
+    field('Hasta', toInput, 'date');
     const selects = {};
-    const panel = create('div', { className: 'logs-filters', style: { display: 'flex', gap: '8px', alignItems: 'flex-end', flexWrap: 'wrap', marginBottom: '12px' } });
     this.FILTERS.forEach(([key, label, allLabel]) => {
-      const select = create('select', { className: 'form-control', id: `logs-filter-${key}` }, [create('option', { value: '', textContent: allLabel })]);
+      const select = create('select', { className: 'form-control', id: `logs-filter-${key}`, title: label }, [create('option', { value: '', textContent: allLabel })]);
       selects[key] = select;
-      const group = create('div', { className: 'form-group', style: { flex: '1 1 160px', marginBottom: '0' } });
-      group.appendChild(create('label', { textContent: label, for: select.id }));
-      group.appendChild(select);
-      panel.appendChild(group);
+      field(label, select);
     });
-    const clearButton = create('button', { className: 'btn btn-ghost btn-sm', type: 'button', id: 'logs-clear-filters', textContent: 'Limpiar filtros' });
-    panel.appendChild(clearButton);
-    content.appendChild(panel);
+    const clearButton = create('button', { className: 'btn btn-ghost btn-sm logs-clear', type: 'button', id: 'logs-clear-filters', textContent: 'Limpiar filtros' });
+    toolbar.appendChild(clearButton);
+    content.appendChild(toolbar);
 
     const list = create('div', { id: 'logs-list' });
     content.appendChild(list);

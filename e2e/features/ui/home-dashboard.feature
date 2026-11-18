@@ -102,11 +102,7 @@ Característica: Dashboard de inicio
     Cuando redimensiono el inicio al ancho de escritorio 1280
     Cuando quito el favorito analítico "Fijo vs Variable"
     Entonces no hay tarjeta de favorito en inicio
-    Cuando marco "IVA mensual por titular" como favorito analítico
-    Entonces el favorito analítico de inicio es "IVA mensual por titular"
-    Y la estrella del gráfico de IVA queda dentro de la tarjeta sin tapar el título
-    Cuando quito el favorito analítico "IVA mensual por titular"
-    Entonces no hay tarjeta de favorito en inicio
+    Y el gráfico de IVA mensual por titular no tiene estrella de favorito
     Cuando hago clic en el botón de ojo
     Entonces los valores de ingresos y ahorro aparecen difuminados
     Y la privacidad indica importes ocultos
