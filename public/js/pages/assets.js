@@ -42,14 +42,15 @@ const AssetsPage = {
       content.appendChild(reminders);
     }
 
-    const form = create('form', { className: 'card', style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(145px, 1fr))', gap: '10px', marginBottom: '16px' } });
+    const form = create('form', { className: 'card filter-form', style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(145px, 1fr))', gap: '10px', marginBottom: '16px', alignItems: 'end' } });
     const q = this.filterInput('Buscar nombre o detalle', filters.q || '');
-    const type = this.filterSelect('Tipo', [['', 'Todos'], ['movable', 'Mueble'], ['immovable', 'Inmueble']], filters.type || '');
+    const type = this.filterSelect('Tipo de bien', [['', 'Todos'], ['movable', 'Mueble'], ['immovable', 'Inmueble']], filters.type || '');
     const owner = this.filterSelect('Titular legal', [['', 'Todos'], ...this.owners.filter(item => (item.roles || ['owner']).includes('owner')).map(item => [item.id, item.name])], filters.ownerId || '');
     const status = this.filterInput('Estado', filters.status || '');
     const usage = this.filterSelect('Uso', [['', 'Todos'], ...this.usageOptions()], filters.usage || '');
     const location = this.filterInput('Ubicación', filters.location || '');
-    [q, type, owner, status, usage, location].forEach(field => form.appendChild(field));
+    [['Buscar', q], ['Tipo de bien', type], ['Titular legal', owner], ['Estado', status], ['Uso', usage], ['Ubicación', location]]
+      .forEach(([label, field]) => form.appendChild(labeledField(label, field)));
     form.appendChild(create('button', { className: 'btn btn-secondary', type: 'submit', textContent: 'Filtrar' }));
     form.appendChild(create('button', { className: 'btn btn-ghost', type: 'button', textContent: 'Limpiar', onClick: () => this.render() }));
     on(form, 'submit', event => {

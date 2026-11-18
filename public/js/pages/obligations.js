@@ -77,14 +77,15 @@ const ObligationsPage = {
     const upcomingAlerts = this.alerts.length - overdueAlerts;
     if (this.alerts.length) content.appendChild(create('div', { className: 'card', style: { marginBottom: '12px', borderLeft: `4px solid ${overdueAlerts ? 'var(--danger)' : 'var(--accent)'}` }, textContent: `Avisos: ${overdueAlerts} vencidas · ${upcomingAlerts} próximas a vencer` }));
 
-    const form = create('form', { className: 'card', style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(145px, 1fr))', gap: '10px', marginBottom: '16px' } });
+    const form = create('form', { className: 'card filter-form', style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(145px, 1fr))', gap: '10px', marginBottom: '16px', alignItems: 'end' } });
     const asset = this.filterSelect('Bien', [['', 'Todos los bienes'], ...this.assets.map(item => [item.id, item.name])], filters.assetId || '');
     const provider = this.filterSelect('Proveedor', [['', 'Todos los proveedores'], ...this.owners.filter(item => (item.roles || []).includes('provider')).map(item => [item.id, item.name])], filters.providerEntityId || '');
     const status = this.filterSelect('Estado', [['', 'Todos'], ['pending', 'Pendientes'], ['partial', 'Parciales'], ['paid', 'Pagadas'], ['resolved', 'Resueltas por inquilino'], ['overdue', 'Vencidas']], filters.status || '');
     const type = this.filterSelect('Tipo', [['', 'Todos los tipos'], ...OBLIGATION_TYPES], filters.type || '');
     const from = this.filterInput('Desde (AAAA-MM-DD)', filters.from || '', 'date');
     const to = this.filterInput('Hasta (AAAA-MM-DD)', filters.to || '', 'date');
-    [asset, provider, status, type, from, to].forEach(field => form.appendChild(field));
+    [['Bien', asset], ['Proveedor', provider], ['Estado', status], ['Tipo', type], ['Desde', from], ['Hasta', to]]
+      .forEach(([label, field]) => form.appendChild(labeledField(label, field)));
     form.append(create('button', { className: 'btn btn-secondary', type: 'submit', textContent: 'Filtrar' }), create('button', { className: 'btn btn-ghost', type: 'button', textContent: 'Limpiar', onClick: () => this.render() }));
     on(form, 'submit', event => {
       event.preventDefault();
