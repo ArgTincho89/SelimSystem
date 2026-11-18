@@ -2063,3 +2063,31 @@ body:not(.desktop-mode) .home-stats .stat-value-multi .stat-currency-amount:not(
 :root[data-theme="light"] .navbar-item:not(.active):hover {
   background: var(--bg-hover);
 }
+
+/* Logs: one compact filter toolbar (single row on wide screens, compact grid on narrow ones). */
+.logs-toolbar {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
+  gap: 6px 8px;
+  align-items: end;
+  margin-bottom: 12px;
+}
+.logs-field { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.logs-field label { font-size: var(--font-xs, 0.72rem); color: var(--text-muted); line-height: 1.2; }
+.logs-toolbar .form-control {
+  min-height: 32px;
+  height: 32px;
+  padding: 4px 8px;
+  font-size: var(--font-sm, 0.85rem);
+  min-width: 0;
+  width: 100%;
+  text-overflow: ellipsis;
+}
+.logs-toolbar .logs-clear { min-height: 32px; white-space: nowrap; }
+.logs-field-search { grid-column: span 2; }
+@media (min-width: 1200px) {
+  .logs-toolbar {
+    grid-template-columns: minmax(150px, 1.4fr) repeat(2, minmax(118px, 0.8fr)) repeat(4, minmax(100px, 1fr)) auto;
+  }
+  .logs-field-search { grid-column: auto; }
+}
