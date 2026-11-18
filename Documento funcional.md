@@ -690,7 +690,7 @@ Sección con el contenido descrito en el capítulo 8 (alta, edición, subcategor
 
 - **Foto de perfil:** **Cambiar foto** (imagen de hasta 2 MB, se recorta cuadrada) y **Eliminar foto**. Sin foto se muestra la inicial del nombre. La foto se guarda en el servidor.
 - **Datos de la cuenta:** usuario y email.
-- **Apariencia:** **Modo oscuro** (predeterminado) o **Modo claro**. Se guarda en el dispositivo y se aplica al instante en toda la app.
+- **Apariencia:** **Modo oscuro** (predeterminado) o **Modo claro**. Se guarda en el dispositivo y se aplica al instante en toda la app. En modo claro, la sección actual del menú se resalta con fondo de color, texto en negrita y una barra de acento (a la izquierda en el menú lateral, arriba en la barra inferior).
 - **Logs:** abre la pantalla de Logs.
 - **Acciones de cuenta:**
   - **Cambiar email:** nuevo email y contraseña actual. El email no puede estar en uso.
