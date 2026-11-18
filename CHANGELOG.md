@@ -5,6 +5,7 @@
 ### Changed
 - Bienes > filtros: quedan **Tipo de bien**, **Tipo de inmueble** (aparece al elegir Inmueble, con los tipos ya creados), **Titular legal** y **Estado** (Alquilado / No alquilado). Se quitan Buscar, Uso y Ubicación.
 - Inicio > Analítica: "IVA mensual por titular" ya no tiene la estrella para fijarlo como favorito; si estaba fijado, deja de mostrarse en el encabezado.
+- Logs: los filtros (Buscar, Desde, Hasta, Bien, Titular, Inquilino, Categoría y Limpiar filtros) quedan en una sola barra compacta, en una fila en pantallas anchas.
 - Modo claro: la sección activa del menú se resalta con fondo de color, texto en negrita y una barra de acento.
 - Tarjetas de Bienes: nombres de los datos en negrita (**Inmueble**, **Tipo**, **Ubicación**, **Estado**, **Titular**); el Estado muestra Alquilado o No alquilado en lugar de Activo.
 
