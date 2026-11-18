@@ -1,6 +1,6 @@
 # SelimSystem — Documento funcional
 
-**Versión del producto:** 1.17.0
+**Versión del producto:** 1.17.1
 **Entorno productivo:** https://selimsystem.fly.dev
 **Fecha del documento:** 17/11/2026
 
@@ -351,8 +351,8 @@ Reglas generales: se consideran avisos hasta 90 días hacia adelante y se muestr
 ### 9.1 Lista de bienes
 
 - **Avisos de alquiler** (si existen): accesos rápidos a alquileres pendientes y vencimientos de contratos.
-- **Filtros:** cada campo tiene su etiqueta visible encima: **Buscar** (nombre o detalle), **Tipo de bien** (Mueble / Inmueble), **Titular legal**, **Estado**, **Uso** y **Ubicación**. Los buscadores de Obligaciones (Bien, Proveedor, Estado, Tipo, Desde, Hasta) y Avisos (Tipo de aviso, Responsable, Bien) también muestran etiquetas visibles.
-- Cada bien muestra nombre, tipo, datos principales, estado y titulares, con estos botones:
+- **Filtros:** cada campo tiene su etiqueta visible encima: **Tipo de bien** (Todos / Mueble / Inmueble), **Tipo de inmueble** (solo aparece al elegir Inmueble; ofrece los tipos ya creados: Departamento, Casa, Galpón, Lote y los agregados), **Titular legal** y **Estado** (Todos / Alquilado / No alquilado; "No alquilado" incluye todo bien sin alquiler vigente), con los botones **Filtrar** y **Limpiar**. Los buscadores de Obligaciones (Bien, Proveedor, Estado, Tipo, Desde, Hasta) y Avisos (Tipo de aviso, Responsable, Bien) también muestran etiquetas visibles.
+- Cada bien muestra su nombre y dos líneas con los nombres de los datos en negrita: "**Inmueble** · **Tipo:** Galpón · **Ubicación:** …" (en muebles, "**Mueble** · **Detalle:** …") y "**Estado:** Alquilado / No alquilado · **Titular:** …". Los datos vacíos no se muestran. Botones:
 
 | Botón | Qué hace |
 |---|---|

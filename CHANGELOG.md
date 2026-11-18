@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.17.1] - 2026-11-18
+
+### Changed
+- Bienes > filtros: quedan **Tipo de bien**, **Tipo de inmueble** (aparece al elegir Inmueble, con los tipos ya creados), **Titular legal** y **Estado** (Alquilado / No alquilado). Se quitan Buscar, Uso y Ubicación.
+- Tarjetas de Bienes: nombres de los datos en negrita (**Inmueble**, **Tipo**, **Ubicación**, **Estado**, **Titular**); el Estado muestra Alquilado o No alquilado en lugar de Activo.
+
 ## [1.17.0] - 2026-11-18
 
 ### Added
