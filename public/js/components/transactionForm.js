@@ -16,9 +16,10 @@ const TransactionForm = {
   },
 
   async show(onSave, transaction = null, options = {}) {
-    const [categories, accounts, transactions, assets, obligations, rentals, paymentMethods, associationData] = await Promise.all([
+    const [categories, accounts, transactions, assets, obligations, rentals, paymentMethods, owners, associationData] = await Promise.all([
       API.categories.list(), API.accounts.list(), API.transactions.list(), API.assets.list(),
       API.obligations.list(), API.rentals.list(), API.finance.paymentMethods(),
+      API.owners.list().catch(() => []),
       transaction && !transaction.isRecurringInstance ? API.finance.associations(transaction.id).catch(() => null) : Promise.resolve(null)
     ]);
     const isEdit = !!transaction;
@@ -252,7 +253,10 @@ const TransactionForm = {
         checkbox.checked = value === currentClassification;
       });
       incomeSplitGroup.style.display = selectedType === 'income' && currentClassification === 'Mixto' ? 'block' : 'none';
-      ivaGroup.style.display = selectedType === 'income' && (currentClassification === 'A' || currentClassification === 'Mixto') ? 'block' : 'none';
+      const incomeIva = selectedType === 'income' && (currentClassification === 'A' || currentClassification === 'Mixto');
+      ivaGroup.style.display = incomeIva || selectedType === 'expense' ? 'block' : 'none';
+      ivaLabel.textContent = selectedType === 'expense' ? 'IVA (%) de la factura — crédito fiscal' : 'IVA (%) — débito fiscal';
+      ivaHolderGroup.style.display = selectedType === 'expense' ? 'block' : 'none';
     }
     updateCategoryVisibility();
 
@@ -306,7 +310,8 @@ const TransactionForm = {
     });
 
     const ivaGroup = create('div', { className: 'form-group', style: { display: 'none' } });
-    ivaGroup.appendChild(create('label', { textContent: 'IVA (%)' }));
+    const ivaLabel = create('label', { textContent: 'IVA (%)' });
+    ivaGroup.appendChild(ivaLabel);
     const ivaInput = create('input', {
       className: 'form-control',
       type: 'number',
@@ -319,6 +324,19 @@ const TransactionForm = {
     ivaGroup.querySelector('label').setAttribute('for', ivaInput.id);
     ivaInput.value = transaction?.ivaPorcentaje ?? '';
     ivaGroup.appendChild(ivaInput);
+    // Expenses only: the owner the invoice is issued to; that owner receives the credit VAT.
+    const ivaHolderGroup = create('div', { style: { display: 'none', marginTop: '8px' } });
+    const ivaHolderLabel = create('label', { textContent: 'Factura a nombre de', for: 'transaction-iva-holder' });
+    const ivaHolderSelect = create('select', { className: 'form-control', id: 'transaction-iva-holder' });
+    ivaHolderSelect.appendChild(create('option', { value: '', textContent: 'Titular de la cuenta' }));
+    (owners || []).filter(owner => (owner.roles || ['owner']).includes('owner')).forEach(owner => ivaHolderSelect.appendChild(create('option', { value: owner.id, textContent: owner.name })));
+    if (transaction?.ivaHolderId && ![...ivaHolderSelect.options].some(option => option.value === transaction.ivaHolderId)) {
+      ivaHolderSelect.appendChild(create('option', { value: transaction.ivaHolderId, textContent: transaction.ivaHolderName || 'Titular archivado' }));
+    }
+    ivaHolderSelect.value = transaction?.ivaHolderId || '';
+    ivaHolderGroup.appendChild(ivaHolderLabel);
+    ivaHolderGroup.appendChild(ivaHolderSelect);
+    ivaGroup.appendChild(ivaHolderGroup);
     form.appendChild(ivaGroup);
 
     const dateGroup = create('div', { className: 'form-group' });
@@ -517,7 +535,7 @@ const TransactionForm = {
         data.montoB = MoneyInput.value(amountBInput) ?? NaN;
       }
 
-      if (selectedType === 'income' && (clasifSelect.value === 'A' || clasifSelect.value === 'Mixto')) {
+      if (selectedType === 'expense' || (selectedType === 'income' && (clasifSelect.value === 'A' || clasifSelect.value === 'Mixto'))) {
         const ivaRaw = ivaInput.value.trim();
         if (ivaRaw === '') {
           data.ivaPorcentaje = null;
@@ -528,6 +546,7 @@ const TransactionForm = {
           }
           data.ivaPorcentaje = ivaValue;
         }
+        if (selectedType === 'expense') data.ivaHolderId = data.ivaPorcentaje > 0 ? (ivaHolderSelect.value || null) : null;
       }
 
       if (selectedType !== 'income') {

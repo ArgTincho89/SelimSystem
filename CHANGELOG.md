@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.17.0] - 2026-11-18
+
+### Added
+- Gastos con factura: campo opcional "IVA (%) de la factura" y "Factura a nombre de" (por defecto, el titular de la cuenta). Ese IVA es crédito fiscal del titular.
+- Etiquetas visibles encima de cada campo en los buscadores de Bienes, Obligaciones y Avisos.
+
+### Changed
+- Inicio > "IVA mensual por titular": cuatro columnas **Titular**, **Débito fiscal** (IVA de ingresos A), **Crédito fiscal** (IVA de gastos con factura) y **Saldo** (crédito fiscal − débito fiscal; en rojo si hay IVA a pagar, en verde si hay saldo a favor).
+- La API de resumen y tendencias devuelve `debit`, `credit` y `balance` por titular en `ivaByHolder` (`amount` sigue siendo el débito).
+
 ## [1.16.0] - 2026-11-17
 
 ### Added

@@ -4,7 +4,7 @@ const { FakeElement, loadBrowser } = require('../helpers/fake-dom');
 
 const read = file => fs.readFileSync(path.join(__dirname, '../../public', file), 'utf8');
 
-describe('Evolutivo 6 IVA mensual por titular', () => {
+describe('IVA mensual por titular (débito, crédito y saldo)', () => {
   const { SummaryPage } = loadBrowser(['js/pages/summary.js'], ['SummaryPage'], {
     formatearMoneda: (value, currency) => `${currency} ${value}`, API: {}, Router: {}
   });
@@ -12,13 +12,13 @@ describe('Evolutivo 6 IVA mensual por titular', () => {
   const summary = {
     activeCurrency: 'ARS',
     ivaByHolder: [
-      { ownerId: 'o1', ownerName: 'Marta', currency: 'ARS', amount: 150 },
-      { ownerId: 'o2', ownerName: 'Juan', currency: 'ARS', amount: 0 },
-      { ownerId: 'o2', ownerName: 'Juan', currency: 'USD', amount: 20 }
+      { ownerId: 'o1', ownerName: 'Marta', currency: 'ARS', amount: 210000, debit: 210000, credit: 210000, balance: 0 },
+      { ownerId: 'o2', ownerName: 'Juan', currency: 'ARS', amount: 0, debit: 0, credit: 0, balance: 0 },
+      { ownerId: 'o2', ownerName: 'Juan', currency: 'USD', amount: 20, debit: 20, credit: 5, balance: -15 }
     ]
   };
-  const rows = card => card.findAll(node => node.className === 'account-alert-row');
-  const text = row => row.textContent;
+  const rows = card => card.findAll(node => String(node.className).split(' ').includes('account-alert-row'));
+  const cells = row => row.children.map(child => child.textContent);
 
   it('keeps the title and the favorite attributes', () => {
     const card = SummaryPage.renderIvaByOwner(summary, owners);
@@ -28,16 +28,34 @@ describe('Evolutivo 6 IVA mensual por titular', () => {
     expect(card.textContent).toContain('IVA mensual por titular');
   });
 
-  it('lists every owner with the month total on the right and 0 when absent', () => {
-    const lines = rows(SummaryPage.renderIvaByOwner(summary, owners));
-    expect(lines.map(text)).toEqual(['MartaARS 150', 'JuanUSD 20', 'Sin IVAARS 0']);
-    expect(lines[0].children[1].className).toBe('iva-owner-amount');
+  it('shows the four columns Titular, Débito fiscal, Crédito fiscal and Saldo', () => {
+    const card = SummaryPage.renderIvaByOwner(summary, owners);
+    const header = card.findAll(node => String(node.className).includes('iva-owner-header'))[0];
+    expect(cells(header)).toEqual(['Titular', 'Débito fiscal', 'Crédito fiscal', 'Saldo']);
   });
 
-  it('follows the selected month: the rows come from the summary of that month', () => {
+  it('lists every owner with debit, credit and balance (credit minus debit), 0 when absent', () => {
+    const lines = rows(SummaryPage.renderIvaByOwner(summary, owners));
+    expect(lines.map(cells)).toEqual([
+      ['Marta', 'ARS 210000', 'ARS 210000', 'ARS 0'],
+      ['Juan', 'USD 20', 'USD 5', 'USD -15'],
+      ['Sin IVA', 'ARS 0', 'ARS 0', 'ARS 0']
+    ]);
+    expect(lines[0].children[1].className).toContain('iva-owner-amount');
+    expect(lines[1].children[3].className).toContain('is-negative');
+  });
+
+  it('accepts older payloads that only carry the debit as amount', () => {
     const other = { activeCurrency: 'ARS', ivaByHolder: [{ ownerId: 'o3', ownerName: 'Sin IVA', currency: 'ARS', amount: 42 }] };
-    expect(rows(SummaryPage.renderIvaByOwner(other, owners)).map(text)).toEqual(['MartaARS 0', 'JuanARS 0', 'Sin IVAARS 42']);
-    expect(rows(SummaryPage.renderIvaByOwner({ activeCurrency: 'ARS' }, owners)).map(text)).toEqual(['MartaARS 0', 'JuanARS 0', 'Sin IVAARS 0']);
+    expect(rows(SummaryPage.renderIvaByOwner(other, owners)).map(cells)[2]).toEqual(['Sin IVA', 'ARS 42', 'ARS 0', 'ARS -42']);
+    expect(rows(SummaryPage.renderIvaByOwner({ activeCurrency: 'ARS' }, owners)).map(row => cells(row)[0])).toEqual(['Marta', 'Juan', 'Sin IVA']);
+  });
+
+  it('shows a holder with only credit VAT', () => {
+    const credit = { activeCurrency: 'ARS', ivaByHolder: [{ ownerId: 'o1', ownerName: 'Marta', currency: 'ARS', amount: 0, debit: 0, credit: 30, balance: 30 }] };
+    const line = rows(SummaryPage.renderIvaByOwner(credit, owners))[0];
+    expect(cells(line)).toEqual(['Marta', 'ARS 0', 'ARS 30', 'ARS 30']);
+    expect(line.children[3].className).toContain('is-positive');
   });
 
   it('never shows a historical months list', () => {
@@ -46,8 +64,8 @@ describe('Evolutivo 6 IVA mensual por titular', () => {
   });
 
   it('appends holders that are not in the owners list so no IVA is hidden', () => {
-    const lines = rows(SummaryPage.renderIvaByOwner({ activeCurrency: 'ARS', ivaByHolder: [{ ownerId: 'gone', ownerName: 'Ex titular', currency: 'ARS', amount: 5 }] }, [{ id: 'o1', name: 'Marta' }]));
-    expect(lines.map(text)).toEqual(['MartaARS 0', 'Ex titularARS 5']);
+    const lines = rows(SummaryPage.renderIvaByOwner({ activeCurrency: 'ARS', ivaByHolder: [{ ownerId: 'gone', ownerName: 'Ex titular', currency: 'ARS', amount: 5, debit: 5, credit: 0, balance: -5 }] }, [{ id: 'o1', name: 'Marta' }]));
+    expect(lines.map(row => cells(row)[0])).toEqual(['Marta', 'Ex titular']);
   });
 
   it('shows an empty state without owners', () => {
@@ -63,6 +81,13 @@ describe('Evolutivo 6 IVA mensual por titular', () => {
     expect(home.match(/SummaryPage\.renderIvaByOwner\(summary, /g)).toHaveLength(2);
     expect(home).toContain("(owner.roles || ['owner']).includes('owner')");
     expect(home).toContain('API.summary.get(this.currentMonth)');
+  });
+
+  it('the transaction form offers IVA and "Factura a nombre de" on expenses', () => {
+    const form = read('js/components/transactionForm.js');
+    expect(form).toContain('Factura a nombre de');
+    expect(form).toContain('crédito fiscal');
+    expect(form).toContain('data.ivaHolderId');
   });
 
   it('is a FakeElement tree', () => {

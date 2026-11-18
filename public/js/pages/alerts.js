@@ -53,14 +53,14 @@ const AlertsPage = {
       create('span', { className: 'text-muted', textContent: `${this.alerts.length} pendientes` })
     ]));
 
-    const form = create('form', { className: 'card', style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '10px', marginBottom: '16px' } });
+    const form = create('form', { className: 'card filter-form', style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '10px', marginBottom: '16px', alignItems: 'end' } });
     const type = this.select([['', 'Todos los tipos'], ...Object.entries(this.TYPE_LABELS)], this.filters.type);
     type.setAttribute('aria-label', 'Tipo de aviso');
     const asset = this.select([['', 'Todos los bienes'], ...this.assets.map(item => [item.id, item.name])], this.filters.assetId);
     asset.setAttribute('aria-label', 'Bien');
     const responsibility = this.select([['', 'Todos los responsables'], ['owner', 'Titular'], ['tenant', 'Inquilino']], this.filters.responsibility);
     responsibility.setAttribute('aria-label', 'Responsable');
-    form.append(type, responsibility, asset, create('button', { className: 'btn btn-secondary', type: 'submit', textContent: 'Filtrar' }));
+    form.append(labeledField('Tipo de aviso', type), labeledField('Responsable', responsibility), labeledField('Bien', asset), create('button', { className: 'btn btn-secondary', type: 'submit', textContent: 'Filtrar' }));
     on(form, 'submit', event => {
       event.preventDefault();
       this.filters = { type: type.value, assetId: asset.value, responsibility: responsibility.value };

@@ -245,10 +245,11 @@ describe('Transactions Routes', () => {
       expect(nonNumeric.status).toBe(400);
     });
 
-    it('should reject IVA on non-income records', async () => {
+    it('should accept invoice IVA on expenses and reject it on refunds', async () => {
       const expenseRes = await agent.post('/api/transactions').send({ tipo: 'expense', monto: 50, titulo: 'IVA expense', categoryId, fecha: '2024-03-26', ivaPorcentaje: 21 });
       const refundRes = await agent.post('/api/transactions').send({ tipo: 'refund', monto: 50, titulo: 'IVA refund', categoryId, fecha: '2024-03-26', ivaPorcentaje: 21 });
-      expect(expenseRes.status).toBe(400);
+      expect(expenseRes.status).toBe(201);
+      expect(expenseRes.body.ivaPorcentaje).toBe(21);
       expect(refundRes.status).toBe(400);
     });
 
@@ -517,12 +518,14 @@ describe('Transactions Routes', () => {
       expect(negativeRes.status).toBe(400);
     });
 
-    it('should reject IVA on non-income updates', async () => {
+    it('should accept IVA on expense updates and reject it on refund updates', async () => {
       const createRes = await agent.post('/api/transactions').send({
         tipo: 'expense', monto: 50, titulo: 'IVA ExpUpd', categoryId, fecha: '2024-03-15'
       });
       const res = await agent.put(`/api/transactions/${createRes.body.id}`).send({ ivaPorcentaje: 21 });
-      expect(res.status).toBe(400);
+      expect(res.status).toBe(200);
+      const refund = await agent.post('/api/transactions').send({ tipo: 'refund', monto: 5, titulo: 'IVA RefUpd', categoryId, fecha: '2024-03-15' });
+      expect((await agent.put(`/api/transactions/${refund.body.id}`).send({ ivaPorcentaje: 21 })).status).toBe(400);
     });
 
     it('should keep IVA when updating mixed income splits', async () => {

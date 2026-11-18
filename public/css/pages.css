@@ -2009,3 +2009,24 @@ body:not(.desktop-mode) .home-stats .stat-value-multi .stat-currency-amount:not(
 
 /* Unpaid rent alerts in Ver alquiler: red and bold. */
 .alert-critical { color: var(--danger, #c0392b); font-weight: 700; }
+
+/* IVA mensual por titular: Titular | Débito fiscal | Crédito fiscal | Saldo */
+.iva-owner-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  align-items: baseline;
+}
+.iva-owner-grid > :not(:first-child) { text-align: right; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.iva-owner-grid > :first-child { overflow-wrap: anywhere; }
+.iva-owner-header { font-size: 0.75rem; color: var(--text-muted); font-weight: 600; padding: 4px 0; }
+.iva-owner-balance.is-negative { color: var(--danger); }
+.iva-owner-balance.is-positive { color: var(--success); }
+.iva-owner-note { font-size: 0.75rem; margin-top: 8px; }
+@media (max-width: 480px) {
+  .iva-owner-grid { font-size: 0.8rem; gap: 4px; }
+}
+
+/* Filter bars (Bienes, Obligaciones, Avisos): visible label above each control */
+.filter-form .filter-field { margin-bottom: 0; min-width: 0; }
+.filter-field-label { display: block; font-size: var(--font-sm, 0.8rem); color: var(--text-muted); margin-bottom: 4px; }

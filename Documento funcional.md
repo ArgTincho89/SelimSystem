@@ -1,6 +1,6 @@
 # SelimSystem — Documento funcional
 
-**Versión del producto:** 1.16.0
+**Versión del producto:** 1.17.0
 **Entorno productivo:** https://selimsystem.fly.dev
 **Fecha del documento:** 17/11/2026
 
@@ -226,7 +226,7 @@ Se calcula en la **moneda principal de la aplicación** (ARS por defecto) para e
 | **Gastos por categoría** | Desplegable con barras por categoría y subcategoría y su porcentaje sobre el gasto neto. |
 | **Fijo vs Variable** | Dona con el reparto de gastos fijos y variables y sus porcentajes. |
 | **Ingresos A vs B** | Una dona por titular y moneda con el reparto A/B. |
-| **IVA mensual por titular** | IVA del **mes elegido**, una fila por titular y moneda (0 si el titular no tuvo IVA ese mes). Sigue al selector de mes. |
+| **IVA mensual por titular** | IVA del **mes elegido** en cuatro columnas: **Titular**, **Débito fiscal** (IVA de los ingresos A del titular), **Crédito fiscal** (IVA de los gastos facturados a ese titular) y **Saldo** = crédito fiscal − débito fiscal (negativo: IVA a pagar; positivo: saldo a favor). Una fila por titular (0 si no tuvo IVA ese mes); con varias monedas se muestran separadas por "·". Sigue al selector de mes. |
 
 En la experiencia **Escritorio**, cada gráfico tiene una estrella (☆/★) para marcarlo como **favorito**; el favorito se muestra junto a las tarjetas de métricas. Solo puede haber un favorito, recordado en el dispositivo.
 
@@ -240,7 +240,7 @@ En la experiencia **Escritorio**, cada gráfico tiene una estrella (☆/★) par
 
 | Tipo | Efecto | Campos propios |
 |---|---|---|
-| **Gasto** | Resta del saldo; suma a gastos. | Categoría (obligatoria), Clasificación Fijo/Variable (por defecto Variable), Recurrente. |
+| **Gasto** | Resta del saldo; suma a gastos. | Categoría (obligatoria), Clasificación Fijo/Variable (por defecto Variable), Recurrente, IVA (%) de la factura y **Factura a nombre de** (crédito fiscal). |
 | **Ingreso** | Suma al saldo; suma a ingresos. | Clasificación A / B / Mixto (por defecto A), desglose Mixto, IVA (%). |
 | **Reembolso** | Suma al saldo; **reduce** el gasto de su categoría. No es ingreso. | Categoría (obligatoria), Gasto de origen (opcional). |
 | **Transferencia** | Solo mueve saldo entre cuentas. | Cuenta de salida, Cuenta de ingreso, Monto, Monto recibido, Fecha, Título, Nota. Solo en altas. |
@@ -267,6 +267,12 @@ En la experiencia **Escritorio**, cada gráfico tiene una estrella (☆/★) par
 - **A:** ingreso declarado (facturado). Admite **IVA (%)** entre 0 y 100.
 - **B:** ingreso no declarado (en efectivo, sin facturar). No admite IVA.
 - **Mixto:** se reparte en importe A + importe B, que deben sumar exactamente el monto total. Al escribir A, B se completa con el resto. El IVA aplica solo sobre la parte A.
+- El IVA de un ingreso es **débito fiscal** del titular de la cuenta de destino.
+
+**Gasto con factura (IVA)**
+- Opcional: **IVA (%) de la factura** entre 0 y 100. El IVA se calcula sobre el monto del gasto (1.000.000 al 21% = 210.000) y es **crédito fiscal**.
+- **Factura a nombre de:** titular que recibe el crédito fiscal. Por defecto, "Titular de la cuenta" (el titular de la cuenta con la que se paga).
+- Sin IVA (vacío o 0) el gasto no afecta al IVA mensual.
 
 **Compra en cuotas (tarjeta de crédito)**
 - Aparece solo en gastos nuevos pagados con un medio reutilizable de tipo tarjeta de crédito.
@@ -345,7 +351,7 @@ Reglas generales: se consideran avisos hasta 90 días hacia adelante y se muestr
 ### 9.1 Lista de bienes
 
 - **Avisos de alquiler** (si existen): accesos rápidos a alquileres pendientes y vencimientos de contratos.
-- **Filtros:** texto (nombre o detalle), tipo (Mueble / Inmueble), titular legal, estado, uso y ubicación.
+- **Filtros:** cada campo tiene su etiqueta visible encima: **Buscar** (nombre o detalle), **Tipo de bien** (Mueble / Inmueble), **Titular legal**, **Estado**, **Uso** y **Ubicación**. Los buscadores de Obligaciones (Bien, Proveedor, Estado, Tipo, Desde, Hasta) y Avisos (Tipo de aviso, Responsable, Bien) también muestran etiquetas visibles.
 - Cada bien muestra nombre, tipo, datos principales, estado y titulares, con estos botones:
 
 | Botón | Qué hace |
@@ -727,7 +733,7 @@ Un reembolso reduce el gasto de su categoría y el gasto total; nunca suma a ing
 ### 14.3 Clasificación A / B / Mixto e IVA
 
 - **A** = ingreso declarado; **B** = ingreso no declarado (efectivo, sin factura); **Mixto** = A + B, que deben sumar el total.
-- Solo la parte A admite IVA (0 a 100%).
+- Solo la parte A admite IVA (0 a 100%) en ingresos: es débito fiscal. Los gastos con factura admiten IVA (0 a 100%): es crédito fiscal del titular de la factura.
 - En alquileres: locación → A (con el IVA del contrato), comodato y mutuo → B; se puede cambiar línea por línea al cobrar.
 
 ### 14.4 Cuentas, sub-cuentas y monedas
@@ -835,7 +841,10 @@ Todas verificadas en el código de la versión 1.15.0:
 | **Gasto neto** | Gastos menos reembolsos. |
 | **Gasto recuperable** | Gasto que un tercero (por ejemplo, el inquilino) debe reintegrar. |
 | **Inquilino** | Persona u organización que alquila un inmueble. |
-| **IVA** | Impuesto al valor agregado; se aplica solo a ingresos A y a la locación. |
+| **IVA** | Impuesto al valor agregado. En ingresos A y en la locación es débito fiscal; en gastos con factura es crédito fiscal. |
+| **Débito fiscal** | IVA generado por los ingresos A de un titular en el mes. |
+| **Crédito fiscal** | IVA de los gastos facturados a un titular en el mes. |
+| **Saldo de IVA** | Crédito fiscal − débito fiscal del titular en el mes. |
 | **Locación (contrato de)** | Modalidad de alquiler declarada, con IVA opcional, clasificada por defecto como A. |
 | **Mixto** | Ingreso dividido entre parte A y parte B. |
 | **Modalidad** | Cada componente de un alquiler: locación, comodato o mutuo. |

@@ -91,6 +91,16 @@ function getIncomeIva(transaction) {
   return fromCents(divideRound(amountCents * rateBasisPoints, 10000n));
 }
 
+// Credit VAT of an invoiced expense: the full monto is the taxable base unless ivaIncluded.
+function getExpenseIva(transaction) {
+  const ivaPorcentaje = Number(transaction.ivaPorcentaje);
+  const amountCents = toCents(Number(transaction.monto) || 0) || 0n;
+  if (!Number.isFinite(ivaPorcentaje) || ivaPorcentaje <= 0 || amountCents <= 0n) return 0;
+  const rateBasisPoints = toCents(ivaPorcentaje) || 0n;
+  if (transaction.ivaIncluded) return fromCents(divideRound(amountCents * rateBasisPoints, 10000n + rateBasisPoints));
+  return fromCents(divideRound(amountCents * rateBasisPoints, 10000n));
+}
+
 function percentOf(amount, percentage) {
   const amountCents = toCents(amount);
   const percentageBasisPoints = toCents(percentage);
@@ -98,4 +108,4 @@ function percentOf(amount, percentage) {
   return fromCents(divideRound(amountCents * percentageBasisPoints, 10000n));
 }
 
-module.exports = { getIncomeBreakdown, getIncomePercentages, getIncomeIva, roundCents, sumCents, percentOf };
+module.exports = { getIncomeBreakdown, getIncomePercentages, getIncomeIva, getExpenseIva, roundCents, sumCents, percentOf };

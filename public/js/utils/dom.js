@@ -27,6 +27,16 @@ function create(tag, attrs = {}, children = []) {
   return el;
 }
 
+// Search/filter field with a visible label above the control (label is linked through `for`/`id`).
+let labeledFieldSeq = 0;
+function labeledField(label, control) {
+  if (!control.id) control.id = `filter-field-${++labeledFieldSeq}`;
+  return create('div', { className: 'form-group filter-field' }, [
+    create('label', { className: 'filter-field-label', for: control.id, textContent: label }),
+    control
+  ]);
+}
+
 // Duplicate-action guard. A click or submit handler that returns a promise puts its control in a busy state
 // (disabled + aria-busy="true") until the promise settles, success or failure; a second click or submit meanwhile
 // does nothing. Opt out with data-repeatable on the control (or on the form). Synchronous handlers are untouched.
