@@ -1,6 +1,6 @@
 # SelimSystem — Documento funcional
 
-**Versión del producto:** 1.16.0
+**Versión del producto:** 1.17.0
 **Entorno productivo:** https://selimsystem.fly.dev
 **Fecha del documento:** 17/11/2026
 
