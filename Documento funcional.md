@@ -228,7 +228,7 @@ Se calcula en la **moneda principal de la aplicación** (ARS por defecto) para e
 | **Ingresos A vs B** | Una dona por titular y moneda con el reparto A/B. |
 | **IVA mensual por titular** | IVA del **mes elegido** en cuatro columnas: **Titular**, **Débito fiscal** (IVA de los ingresos A del titular), **Crédito fiscal** (IVA de los gastos facturados a ese titular) y **Saldo** = crédito fiscal − débito fiscal (negativo: IVA a pagar; positivo: saldo a favor). Una fila por titular (0 si no tuvo IVA ese mes); con varias monedas se muestran separadas por "·". Sigue al selector de mes. |
 
-En la experiencia **Escritorio**, cada gráfico tiene una estrella (☆/★) para marcarlo como **favorito**; el favorito se muestra junto a las tarjetas de métricas. Solo puede haber un favorito, recordado en el dispositivo.
+En la experiencia **Escritorio**, cada gráfico tiene una estrella (☆/★) para marcarlo como **favorito**, salvo **IVA mensual por titular**, que no se puede fijar; el favorito se muestra junto a las tarjetas de métricas. Solo puede haber un favorito, recordado en el dispositivo.
 
 ---
 
