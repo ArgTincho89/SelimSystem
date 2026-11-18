@@ -2030,3 +2030,36 @@ body:not(.desktop-mode) .home-stats .stat-value-multi .stat-currency-amount:not(
 /* Filter bars (Bienes, Obligaciones, Avisos): visible label above each control */
 .filter-form .filter-field { margin-bottom: 0; min-width: 0; }
 .filter-field-label { display: block; font-size: var(--font-sm, 0.8rem); color: var(--text-muted); margin-bottom: 4px; }
+
+/* Light theme: the active menu entry gets a tinted background and an accent bar so the current section stands out. */
+:root[data-theme="light"] .navbar-item {
+  border-radius: var(--radius-sm, 8px);
+  transition: color var(--transition), background-color var(--transition);
+}
+:root[data-theme="light"] .navbar-item.active {
+  background: var(--accent-light);
+  color: var(--accent);
+  font-weight: 600;
+}
+:root[data-theme="light"] .navbar-item.active::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 20%;
+  right: 20%;
+  height: 3px;
+  border-radius: 0 0 3px 3px;
+  background: var(--accent);
+}
+:root[data-theme="light"] body.desktop-mode .navbar-item.active::before {
+  top: 10%;
+  bottom: 10%;
+  left: 0;
+  right: auto;
+  width: 4px;
+  height: auto;
+  border-radius: 0 4px 4px 0;
+}
+:root[data-theme="light"] .navbar-item:not(.active):hover {
+  background: var(--bg-hover);
+}
