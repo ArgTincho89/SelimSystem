@@ -222,30 +222,11 @@ export class HomePage extends BasePage {
     expect(label).not.toContain(' de ');
   }
 
-  async expectIvaFavoriteStarInsideChartCard(): Promise<void> {
-    const source = this.page.locator('.desktop-favorite-source[data-favorite-type="trend-iva"]');
-    await expect(source).toContainText('IVA mensual por titular');
-    const star = source.locator('.analytics-favorite-toggle');
-    await expect(star).toBeVisible();
-    const metrics = await source.evaluate(element => {
-      const button = element.querySelector('.analytics-favorite-toggle')!;
-      const title = element.querySelector('.chart-title')!;
-      const range = document.createRange();
-      range.selectNodeContents(title);
-      const textRects = Array.from(range.getClientRects());
-      const card = element.getBoundingClientRect();
-      const star = button.getBoundingClientRect();
-      return {
-        cardHeight: card.height,
-        starInside: star.left >= card.left && star.right <= card.right && star.top >= card.top && star.bottom <= card.bottom,
-        textAndStarSeparated: textRects.length > 0 && textRects.every(text =>
-          star.right <= text.left || star.left >= text.right || star.bottom <= text.top || star.top >= text.bottom
-        ),
-      };
-    });
-    expect(metrics.cardHeight).toBeGreaterThanOrEqual(52);
-    expect(metrics.starInside).toBe(true);
-    expect(metrics.textAndStarSeparated).toBe(true);
+  async expectIvaCardIsNotFavoritable(): Promise<void> {
+    const card = this.page.locator('.chart-container[data-analytics-card="iva-by-owner"]');
+    await expect(card).toContainText('IVA mensual por titular');
+    await expect(card.locator('.analytics-favorite-toggle')).toHaveCount(0);
+    await expect(this.page.getByRole('button', { name: 'Marcar IVA mensual por titular como favorito' })).toHaveCount(0);
   }
 
   async expectNoHorizontalPageOverflow(): Promise<void> {
