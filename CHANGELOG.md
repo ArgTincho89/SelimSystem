@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.19.0] - 2026-11-20
+
+### Added
+- Configuración > Inquilino > **Agregar inquilino**: además de crear uno nuevo, se puede **Elegir un titular existente**. Se le agrega el rol Inquilino al mismo registro (sin duplicarlo) y figura en las dos listas. La misma opción existe en Titular (desde inquilinos o proveedores) y en Proveedor (desde titulares o inquilinos).
+- **Gasto espejo automático**: al registrar un cobro de alquiler cuyo inquilino es un titular, se crea también el **gasto del inquilino** con el mismo importe, moneda, fecha (con cheque, la fecha de cobro del cheque) y medio de cobro, título "Alquiler pagado — <bien> <mes/año>" y categoría Alquiler si existe.
+- Formulario de cobro: **Cuenta del inquilino (titular)** (solo si el inquilino es titular) con sus cuentas activas en la moneda de la línea y la nota "Se registrará el gasto del inquilino <nombre> con su crédito fiscal". Sin cuenta en esa moneda, el cobro se bloquea hasta crearla.
+- **IVA por titular**: en un cobro A con IVA, el gasto espejo lleva el mismo IVA a nombre del titular-inquilino, que lo ve como **crédito fiscal** en "IVA mensual por titular"; el titular que cobra mantiene su débito fiscal. Las líneas B no llevan IVA.
+- Inicio: el gasto espejo figura como **Gasto espejo del cobro de alquiler**, con **Ver** y sin Editar ni Eliminar.
+
+### Changed
+- **Deshacer cobro** también elimina el gasto espejo (y lo indica en Logs).
+- Un titular **no puede alquilar su propio bien**: la declaración o el contrato se rechazan con un mensaje claro, y la lista de inquilinos de la declaración no muestra a los titulares vigentes del inmueble.
+
 ## [1.18.2] - 2026-11-20
 
 ### Changed

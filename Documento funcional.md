@@ -1,6 +1,6 @@
 # SelimSystem — Documento funcional
 
-**Versión del producto:** 1.18.2
+**Versión del producto:** 1.19.0
 **Entorno productivo:** https://selimsystem.fly.dev
 **Fecha del documento:** 20/11/2026
 
@@ -449,7 +449,7 @@ Un mismo alquiler puede componerse de **una, dos o las tres** modalidades. El me
 ### 10.2 Declarar un alquiler (paso a paso)
 
 1. En Bienes, pulsar **Declarar alquiler** en un inmueble (o desde su ficha).
-2. Elegir uno o varios **Inquilinos** (los cargados en Configuración > Inquilino).
+2. Elegir uno o varios **Inquilinos** (los cargados en Configuración > Inquilino, incluidos los **titulares que también son inquilinos**). Los titulares vigentes del inmueble no aparecen en la lista.
 3. Marcar las **modalidades** con sus casillas; para cada una se abre su bloque de datos. Moneda por defecto: ARS. Al desmarcar una modalidad con datos se pide confirmación ("Descartar datos" / "Mantener").
 4. En **Obligaciones del bien**, indicar para cada obligación si está **a cargo del Titular o del Inquilino**. Con **Nueva obligación** se abre el formulario de obligación encima de la declaración, sin perder lo cargado.
 5. Escribir **Notas** compartidas.
@@ -457,6 +457,7 @@ Un mismo alquiler puede componerse de **una, dos o las tres** modalidades. El me
 
 **Reglas**
 - Se requiere al menos una modalidad, al menos un inquilino, y un monto original positivo y una fecha de inicio para cada modalidad.
+- **Un titular no puede alquilar su propio bien:** si un inquilino es titular vigente del inmueble, se rechaza con "<Nombre> es titular de este inmueble: un titular no puede alquilar su propio bien". Un titular sí puede ser inquilino de un bien de otro titular.
 - Los meses de alquiler son mensuales y vencen el **mismo día del mes que la fecha de inicio**.
 - Un inmueble no puede tener dos alquileres con fechas superpuestas. Si ocurre, el error ofrece **Declarar la finalización del alquiler vigente**. Sí se puede declarar un alquiler nuevo que no se superponga (**Declarar nuevo alquiler**).
 - Al **editar** la declaración se pide confirmación: los períodos sin cobrar se regeneran con los nuevos datos. Los períodos ya cobrados no se reescriben.
@@ -481,6 +482,15 @@ Se abre desde **Avisos** (Registrar cobro), desde los meses de alquiler o desde 
 **Cheque.** Con el medio de cobro **Cheque** se pide **Días** (obligatorio, de 1 a 365). La fecha de cobro del cheque es la fecha de cobro más esos días, y el ingreso se registra en esa fecha. Cuando faltan 7 días o menos (o la fecha ya pasó) y el cheque no está marcado como cobrado, aparece el aviso **Cheques por cobrar**, desde donde se puede **Marcar como cobrado** (se puede deshacer desde Logs, con motivo).
 
 Desde la tarjeta de un contrato también existe **Registrar cobro** multi-período: se marcan uno o varios períodos, se reparte el importe total recibido y la parte no asignada queda visible.
+
+**Inquilino titular: gasto espejo automático.** Cuando el inquilino del alquiler es también un **titular**, cada cobro registra además el **gasto del inquilino**:
+- El formulario de cobro muestra **Cuenta del inquilino (titular)** con las cuentas activas de ese titular en la moneda de la línea (se preselecciona su cuenta principal o la primera) y la nota "Se registrará el gasto del inquilino <nombre> con su crédito fiscal" (sin "con su crédito fiscal" en las líneas B o sin IVA).
+- Si el titular-inquilino no tiene una cuenta activa en esa moneda, el cobro no se registra: primero hay que crearle la cuenta.
+- El gasto se crea con el mismo importe, moneda, fecha (con cheque, la fecha de cobro del cheque) y medio de cobro que el ingreso; título "Alquiler pagado — <bien> <mes/año>" y categoría **Alquiler** si existe.
+- **IVA:** si la línea es A con IVA, el gasto lleva el mismo IVA y su **Factura a nombre de** es el titular-inquilino, por lo que el IVA es **crédito fiscal** del inquilino (y débito fiscal del titular que cobra). Las líneas B no llevan IVA. En el cobro multi-período de la tarjeta del contrato, un cobro Mixto genera el gasto sin IVA.
+- Con varios inquilinos titulares, el gasto es del **primero** del contrato.
+- El gasto espejo es de solo lectura: en Inicio figura como **Gasto espejo del cobro de alquiler**, con **Ver** (el cobro) y sin Editar ni Eliminar. Al **deshacer el cobro** también se elimina el gasto espejo (queda en Logs).
+- En los totales cuentan los dos movimientos: el ingreso del titular que cobra y el gasto del titular-inquilino.
 
 ### 10.5 Ventana del alquiler ("Ver alquiler")
 
@@ -696,6 +706,8 @@ Tres secciones con la misma estructura sobre un único registro de personas y or
 
 Acciones: **Agregar**, **Ver ficha** (datos, documentos y notas), **Editar** y **Eliminar**. No se puede eliminar un registro en uso en cuentas, bienes, contratos, obligaciones o documentos.
 
+**Agregar desde un registro existente.** Al **Agregar** se elige entre crear un registro nuevo o **elegir uno existente**: en Inquilino se ofrecen los titulares que todavía no son inquilinos (**Elegir un titular existente**); en Titular, los inquilinos y proveedores; en Proveedor, los titulares e inquilinos. Elegir uno le agrega el rol al **mismo registro** (no se duplica): por ejemplo, un titular pasa a figurar también en Inquilino y su tarjeta muestra los dos roles.
+
 **Dónde se usan:** los titulares en cuentas y bienes; los inquilinos en declaraciones de alquiler; los proveedores en obligaciones.
 
 Al crear un proveedor, la lista de categorías de gasto siempre se carga desde el servidor; si no hay categorías de gasto, se indica "Primero creá una categoría de gastos en Configuración → Categorías.".
@@ -757,6 +769,7 @@ Un reembolso reduce el gasto de su categoría y el gasto total; nunca suma a ing
 - **A** = ingreso declarado; **B** = ingreso no declarado (efectivo, sin factura); **Mixto** = A + B, que deben sumar el total.
 - Solo la parte A admite IVA (0 a 100%) en ingresos: es débito fiscal. Los gastos con factura admiten IVA (0 a 100%): es crédito fiscal del titular de la factura.
 - En alquileres: locación → A (con el IVA del contrato), comodato y mutuo → B; se puede cambiar línea por línea al cobrar.
+- **IVA por titular en un alquiler entre titulares:** si el inquilino es otro titular, el IVA del cobro A es débito fiscal del titular de la cuenta que cobra y el mismo IVA es crédito fiscal del titular-inquilino (por su gasto espejo).
 
 ### 14.4 Cuentas, sub-cuentas y monedas
 
@@ -860,9 +873,10 @@ Todas verificadas en el código de la versión 1.15.0:
 | **Declaración de alquiler** | Registro de que un inmueble está alquilado, con modalidades e inquilinos. |
 | **Deshacer cobro** | Anular un cobro de alquiler: el mes vuelve a pendiente de cobro. |
 | **Fijo / Variable** | Clasificación de los gastos. |
+| **Gasto espejo** | Gasto que se crea solo al cobrar un alquiler cuyo inquilino es un titular: es el alquiler pagado por ese titular, con su crédito fiscal si el cobro es A con IVA. Se deshace con el cobro. |
 | **Gasto neto** | Gastos menos reembolsos. |
 | **Gasto recuperable** | Gasto que un tercero (por ejemplo, el inquilino) debe reintegrar. |
-| **Inquilino** | Persona u organización que alquila un inmueble. |
+| **Inquilino** | Persona u organización que alquila un inmueble. Puede ser también un titular (nunca de su propio bien). |
 | **IVA** | Impuesto al valor agregado. En ingresos A y en la locación es débito fiscal; en gastos con factura es crédito fiscal. |
 | **Débito fiscal** | IVA generado por los ingresos A de un titular en el mes. |
 | **Crédito fiscal** | IVA de los gastos facturados a un titular en el mes. |
