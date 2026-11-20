@@ -4,6 +4,9 @@
 const RentalModal = {
   TABS: [['resumen', 'Resumen'], ['periodos', 'Períodos'], ['contratos', 'Contratos'], ['documentos', 'Documentos'], ['notas', 'Notas']],
   CLASSIFICATION_TEXT: { A: 'A', B: 'B' },
+  // "Ver alquiler" keeps its size (1100px × 1.3 = 1430px): it is the only dialog that does not take the global
+  // modal width factor. Dialogs pushed on top of it (update, history, monthly sheet, period detail) do.
+  WIDTH_SCALE: 1.3,
   ALERT_ACTIONS: { collect: 'Registrar cobro', pay: 'Registrar pago', resolve: 'Resolver', 'attach-receipt': 'Adjuntar comprobante', edit: 'Editar alquiler', update: 'Actualizar alquiler' },
 
   async open(declarationId, options = {}) {
@@ -28,7 +31,7 @@ const RentalModal = {
       tabs: this.TABS.map(([id, label]) => ({ id, label, render: () => this.renderTab(id, ctx) }))
     });
     this.renderHeader(ctx);
-    Modal.show(ctx.overview.header.assetName || ctx.asset.name, ctx.tabs.element, { layout: 'panel', header: ctx.header, width: '1100px', fullscreenOnMobile: true, onClose: options.onClose });
+    Modal.show(ctx.overview.header.assetName || ctx.asset.name, ctx.tabs.element, { layout: 'panel', header: ctx.header, width: '1100px', widthScale: this.WIDTH_SCALE, fullscreenOnMobile: true, onClose: options.onClose });
     return ctx;
   },
 

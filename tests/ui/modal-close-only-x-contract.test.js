@@ -19,14 +19,21 @@ describe('Modal closes only through its own buttons', () => {
   });
 });
 
-describe('Modal widths are 30% wider', () => {
+describe('Modal widths are 49.5% wider (30%, then 15% more), except "Ver alquiler"', () => {
   const { loadBrowser } = require('../helpers/fake-dom');
   const { Modal } = loadBrowser(['js/components/modal.js'], ['Modal'], {});
 
   it('scales pixel widths and keeps other units', () => {
-    expect(Modal.scaledWidth()).toBe('572px');
-    expect(Modal.scaledWidth('480px')).toBe('624px');
-    expect(Modal.scaledWidth('1100px')).toBe('1430px');
+    expect(Modal.WIDTH_SCALE).toBe(1.495);
+    expect(Modal.scaledWidth()).toBe('658px');
+    expect(Modal.scaledWidth('480px')).toBe('718px');
+    expect(Modal.scaledWidth('1100px')).toBe('1645px');
     expect(Modal.scaledWidth('90vw')).toBe('90vw');
+  });
+
+  it('lets one dialog keep its own factor: "Ver alquiler" stays at 1100px × 1.3 = 1430px', () => {
+    expect(Modal.scaledWidth('1100px', 1.3)).toBe('1430px');
+    expect(Modal.scaledWidth('1100px', 0)).toBe('1645px');
+    expect(Modal.scaledWidth('1100px', 'x')).toBe('1645px');
   });
 });

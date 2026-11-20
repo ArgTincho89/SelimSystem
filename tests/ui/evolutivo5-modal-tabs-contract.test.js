@@ -17,7 +17,7 @@ describe('Evolutivo 5 panel modal and tabs contract', () => {
       Modal.show('Titulo', 'texto');
       const [dialog] = dialogs();
       expect(dialog.className).toBe('card fade-in');
-      expect(dialog.style.maxWidth).toBe('572px');
+      expect(dialog.style.maxWidth).toBe('658px');
       expect(dialog.style.overflowY).toBe('auto');
       expect(dialog.style.display).toBeUndefined();
       expect(root.findAll(element => element.className.includes('modal-panel'))).toHaveLength(0);
@@ -27,7 +27,7 @@ describe('Evolutivo 5 panel modal and tabs contract', () => {
       const header = context.document.createElement('div');
       header.className = 'rental-header';
       const body = context.document.createElement('div');
-      Modal.show('Titulo', body, { layout: 'panel', header, width: '1100px', fullscreenOnMobile: true });
+      Modal.show('Titulo', body, { layout: 'panel', header, width: '1100px', widthScale: 1.3, fullscreenOnMobile: true });
       const [dialog] = dialogs();
       expect(dialog.className).toBe('card fade-in modal-panel modal-fullscreen-mobile');
       expect(dialog.style).toMatchObject({ maxWidth: '1430px', overflowY: 'hidden', display: 'flex', flexDirection: 'column' });
@@ -114,7 +114,8 @@ describe('Evolutivo 5 panel modal and tabs contract', () => {
     });
 
     it('opens as a wide panel with a fixed header and full screen on mobile', () => {
-      expect(source).toContain("layout: 'panel', header: ctx.header, width: '1100px', fullscreenOnMobile: true");
+      expect(source).toContain("layout: 'panel', header: ctx.header, width: '1100px', widthScale: this.WIDTH_SCALE, fullscreenOnMobile: true");
+      expect(source).toContain('WIDTH_SCALE: 1.3,');
     });
 
     it('has the global header actions, with "Finalizar alquiler" in red and separated', () => {
