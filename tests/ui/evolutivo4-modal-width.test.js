@@ -28,18 +28,18 @@ function buildModal() {
 }
 
 describe('Modal width option', () => {
-  it('keeps the 440px default', () => {
+  it('keeps the 440px default, 30% wider (572px)', () => {
     const { Modal, elements } = buildModal();
     Modal.show('T', 'x');
     const dialog = elements.find(el => el.props.role === 'dialog');
-    expect(dialog.style.maxWidth).toBe('440px');
+    expect(dialog.style.maxWidth).toBe('572px');
   });
 
-  it('applies a custom width', () => {
+  it('applies a custom width, 30% wider', () => {
     const { Modal, elements } = buildModal();
     Modal.show('T', 'x', { width: '760px' });
     const dialog = elements.find(el => el.props.role === 'dialog');
-    expect(dialog.style.maxWidth).toBe('760px');
+    expect(dialog.style.maxWidth).toBe('988px');
   });
 
   it('still fires onClose', () => {
