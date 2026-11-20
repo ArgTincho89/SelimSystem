@@ -5,6 +5,9 @@
 ### Added
 - Configuración > Cuentas: campo **Últimos 4 dígitos** (opcional, exactamente 4 números) al crear o editar una cuenta. La tarjeta de la cuenta muestra **Dígitos: xxxx** debajo de "Titular".
 
+### Changed
+- Inicio: las **sub-cuentas** se muestran debajo de su cuenta (con "↳"), en lugar de al lado.
+
 ## [1.18.0] - 2026-11-20
 
 ### Added

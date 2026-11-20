@@ -192,6 +192,7 @@ Permite ir a meses anteriores y **futuros** (para ver lo programado). Al tocar e
 ### 5.4 Cuentas
 
 - Una tarjeta por cuenta activa con nombre, marca "Principal", moneda y saldo.
+- Las **sub-cuentas** se muestran debajo de su cuenta, con "↳" y una tarjeta más compacta, para ver la relación de un vistazo.
 - El saldo solo se muestra si la cuenta está **conciliada**; si no, aparece "—" (Saldo sin conciliar). Ver 12.1.
 - **Ver cuenta** lleva a Configuración > Cuentas.
 - **Ocultar importes / Mostrar importes** (y el botón con forma de ojo): son dos preferencias independientes que se recuerdan en el dispositivo. El ojo de Inicio oculta con "••••••" las tarjetas de **Ingresos, Gastos y Ahorro** (y los importes de Inicio); el botón **Ocultar importes** de Configuración oculta solo los **saldos de las cuentas**. Uno no modifica al otro.
