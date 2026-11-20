@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.18.2] - 2026-11-20
+
+### Changed
+- Configuración > Proveedor: un proveedor puede tener **varias categorías de gasto** (selección múltiple con casillas; al menos una para organizaciones). La tarjeta muestra todas y la primera se precarga al crear obligaciones.
+
 ## [1.18.1] - 2026-11-20
 
 ### Added
