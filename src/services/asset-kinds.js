@@ -1,6 +1,6 @@
 // User-defined asset kinds. Built-in kinds stay in code; custom ones live in `assetKinds` and are stored on assets as `custom-<slug>`.
 const COLLECTION = 'assetKinds';
-const BUILT_IN = [['departamento', 'Departamento'], ['casa', 'Casa'], ['galpon', 'Galpón'], ['lote', 'Lote']];
+const BUILT_IN = [['departamento', 'Departamento'], ['casa', 'Casa'], ['galpon', 'Galpón'], ['local', 'Local'], ['lote', 'Lote']];
 const MAX_NAME = 50;
 
 function normalize(value) {

@@ -44,7 +44,7 @@ function safeDetails(value) {
 }
 
 const VEHICLE_TYPES = new Set(['automovil']);
-const PROPERTY_KINDS = new Set(['departamento', 'casa', 'galpon', 'lote']);
+const PROPERTY_KINDS = new Set(['departamento', 'casa', 'galpon', 'local', 'lote']);
 const CONDITIONS = new Set(['rented', 'not_rented', 'usufruct']);
 
 function pick(body, existing, field, fallback) {

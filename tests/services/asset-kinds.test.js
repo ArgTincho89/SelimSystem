@@ -27,6 +27,8 @@ describe('asset-kinds service', () => {
     expect(assetKinds.create(db, 'u1', 'LOCAL COMERCIAL')).toMatchObject({ status: 409, error: 'Ese tipo ya existe' });
     expect(assetKinds.create(db, 'u1', 'galpon')).toMatchObject({ status: 409 });
     expect(assetKinds.create(db, 'u1', 'Galpón')).toMatchObject({ status: 409 });
+    expect(assetKinds.create(db, 'u1', 'Local')).toMatchObject({ status: 409 });
+    expect(assetKinds.isValidKey(db, 'u1', 'local')).toBe(true);
   });
 
   it('isolates kinds per user', () => {

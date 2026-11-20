@@ -32,6 +32,13 @@ describe('Composite asset form: rental and obligation responsibilities', () => {
 
   afterAll(() => cleanupTestDb());
 
+  it('creates a commercial contract for a Local', async () => {
+    const res = await create(rental(), 'rented', { propertyKind: 'local' });
+    expect(res.status).toBe(201);
+    expect(res.body.propertyKind).toBe('local');
+    expect(res.body.activeContract.type).toBe('commercial');
+  });
+
   it('creates the contract with defaults and returns it in the response', async () => {
     const res = await create(rental(), 'rented', { propertyKind: 'galpon' });
     expect(res.status).toBe(201);

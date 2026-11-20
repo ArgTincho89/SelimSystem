@@ -157,7 +157,7 @@ const AssetsPage = {
   },
 
   propertyKindOptions() {
-    return [['departamento', 'Departamento'], ['casa', 'Casa'], ['galpon', 'Galpón'], ['lote', 'Lote'], ...(this.kinds || []).map(kind => [kind.key, kind.name])];
+    return [['departamento', 'Departamento'], ['casa', 'Casa'], ['galpon', 'Galpón'], ['local', 'Local'], ['lote', 'Lote'], ...(this.kinds || []).map(kind => [kind.key, kind.name])];
   },
 
   conditionOptions() {

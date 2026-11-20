@@ -88,7 +88,7 @@ function validate(db, userId, body, existing, validateAsset) {
 }
 
 const fail = (error, status = 400) => ({ error, status });
-const CONTRACT_TYPE_BY_KIND = { galpon: 'industrial', lote: 'other' };
+const CONTRACT_TYPE_BY_KIND = { galpon: 'industrial', local: 'commercial', lote: 'other' };
 
 /**
  * Decide what happens to the asset's contract without writing anything.
