@@ -136,4 +136,59 @@ function migrateRentalResponsibilities(db) {
   return { updated: require('./obligations').runResponsibilityMaintenance(db) };
 }
 
-module.exports = { migrateEvolutivo, migrateEvolutivo2, migrateEvolutivo3, migrateRentalResponsibilities };
+/**
+ * Idempotent backfill: rent collection incomes saved without a classification were shown as A
+ * (locación) on the rental screen but counted as B by the A vs B analytics. Persist the same
+ * classification the rental screen derives (allocation, collection, then contract modality).
+ */
+function rentLineClass(db, userId, allocation, collection) {
+  if (allocation.clasificacion) return allocation.clasificacion;
+  if (collection.clasificacion === 'A' || collection.clasificacion === 'B') return collection.clasificacion;
+  const rentals = require('./rentals');
+  const occurrence = db.findById('rentOccurrences', allocation.occurrenceId, userId);
+  const contract = occurrence ? db.findById('rentalContracts', occurrence.contractId, userId) : null;
+  const modality = occurrence?.modality || (contract ? rentals.modalityOf(contract) : null);
+  if (!modality) return null;
+  return modality === 'locacion' ? 'A' : 'B';
+}
+
+function rentClassificationPatch(db, userId, transaction) {
+  const ledger = require('./account-ledger');
+  const collections = db.findAll('rentCollections', userId)
+    .filter(item => item.transactionId === transaction.id || item.id === transaction.rentCollectionId);
+  if (!collections.length) return null;
+  const allocations = db.findAll('rentCollectionAllocations', userId);
+  const lines = [];
+  collections.forEach(collection => allocations
+    .filter(item => item.collectionId === collection.id)
+    .forEach(allocation => lines.push({ amountMinor: allocation.amountMinor || 0, cls: rentLineClass(db, userId, allocation, collection) })));
+  if (!lines.length || lines.some(line => !line.cls)) return null;
+  const hasA = lines.some(line => line.cls === 'A');
+  const hasB = lines.some(line => line.cls === 'B');
+  if (!(hasA && hasB)) return { clasificacion: hasA ? 'A' : 'B', montoA: null, montoB: null };
+  const currency = transaction.currencyCode || collections[0].currencyCode;
+  const totalMinor = Number.isSafeInteger(transaction.amountMinor) ? transaction.amountMinor : ledger.toMinorUnits(transaction.monto, currency);
+  const aMinor = lines.filter(line => line.cls === 'A').reduce((sum, line) => sum + line.amountMinor, 0);
+  if (totalMinor === null || aMinor > totalMinor) return null;
+  return { clasificacion: 'Mixto', montoA: ledger.fromMinorUnits(aMinor, currency), montoB: ledger.fromMinorUnits(totalMinor - aMinor, currency) };
+}
+
+function migrateRentCollectionClassification(db) {
+  let updated = 0;
+  for (const user of db.findAll('users')) {
+    const pending = db.findAll('transactions', user.id)
+      .filter(item => item.tipo === 'income' && item.rentCollectionId && !item.clasificacion);
+    pending.forEach(transaction => {
+      const patch = rentClassificationPatch(db, user.id, transaction);
+      if (!patch) return;
+      db.update('transactions', transaction.id, patch, user.id);
+      db.findAll('rentCollections', user.id)
+        .filter(item => (item.transactionId === transaction.id || item.id === transaction.rentCollectionId) && !item.clasificacion)
+        .forEach(item => db.update('rentCollections', item.id, { clasificacion: patch.clasificacion }, user.id));
+      updated += 1;
+    });
+  }
+  return { updated };
+}
+
+module.exports = { migrateEvolutivo, migrateEvolutivo2, migrateEvolutivo3, migrateRentalResponsibilities, migrateRentCollectionClassification };
