@@ -102,7 +102,9 @@ export class AssetsPage extends BasePage {
   async expectModalityEndsToday(assetName: string, modality: string): Promise<void> {
     await this.modal.getByRole('tab', { name: 'Contratos' }).click();
     const today = await this.page.evaluate(() => (window as unknown as { getToday: () => string }).getToday());
-    await expect(this.modal.locator('[data-contract-card]', { hasText: modality }).first()).toContainText(`— ${today}`);
+    // Dates are displayed as DD-MM-AAAA.
+    const shown = today.split('-').reverse().join('-');
+    await expect(this.modal.locator('[data-contract-card]', { hasText: modality }).first()).toContainText(`— ${shown}`);
   }
 
   private get topModal(): Locator {
