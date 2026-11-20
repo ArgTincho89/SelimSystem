@@ -77,7 +77,7 @@ describe('Evolutivo 14 paying a due date from the transaction form', () => {
     const [d, m, y] = [occurrence.date.slice(8), occurrence.date.slice(5, 7), occurrence.date.slice(0, 4)];
     const entry = latestLog();
     expect(entry.action).toBe('obligation.payment');
-    expect(entry.message).toBe(`Registraste un pago de la obligación Seguro hogar de la propiedad Casa Sur, por un monto de ARS 100, con vencimiento ${d}/${m}/${y}`);
+    expect(entry.message).toBe(`Registraste un pago de la obligación Seguro hogar de la propiedad Casa Sur, por un monto de ARS 100, con vencimiento ${d}-${m}-${y}`);
     expect(entry).toMatchObject({ assetId, ownerIds: [ownerId], categoryId, entityType: 'transaction', entityId: response.body.id });
     expect(entry.undo).toEqual({ type: 'obligation.payment', obligationId: obligation.id, occurrenceId: occurrence.id, transactionId: response.body.id });
   });

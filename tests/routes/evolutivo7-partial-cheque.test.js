@@ -90,7 +90,7 @@ describe('Evolutivo 7: partial rent collections and cheques', () => {
       expect(collection).toMatchObject({ date: due, receivedDate: today(), method: 'Cheque', cheque: { days: 30, dueDate: due, cashedAt: null } });
       expect(f.db.findById('transactions', collection.transactionId, f.userId)).toMatchObject({ fecha: due, paymentMethod: 'Cheque', monto: 121000 });
       expect(res.body.lines[0].cheque).toMatchObject({ days: 30, dueDate: due });
-      expect(lastLog().message).toContain(`cheque a 30 días, se cobra el ${due.split('-').reverse().join('/')}`);
+      expect(lastLog().message).toContain(`cheque a 30 días, se cobra el ${due.split('-').reverse().join('-')}`);
     });
 
     test('validates the días of a cheque and rejects días on other methods', async () => {

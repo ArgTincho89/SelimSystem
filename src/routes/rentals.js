@@ -9,6 +9,7 @@ const rentMirror = require('../services/rent-mirror');
 const rentSchedule = require('../services/rent-schedule');
 const { parseReason, REASON_ERROR } = require('../services/reasons');
 const activityLog = require('../services/activity-log');
+const { formatDisplayDate } = require('../utils/date-format');
 
 const router = express.Router();
 router.use(requireAuth);
@@ -325,7 +326,7 @@ function collectionDetails(detail, balance) {
   if (balance.partial) details.push(`saldo pendiente ${balance.pending.map(money).join(' + ')}`);
   const cheques = new Map();
   detail.lines.filter(line => line.cheque).forEach(line => cheques.set(line.collectionId, line.cheque));
-  cheques.forEach(cheque => details.push(`cheque a ${cheque.days} días, se cobra el ${cheque.dueDate.split('-').reverse().join('/')}`));
+  cheques.forEach(cheque => details.push(`cheque a ${cheque.days} días, se cobra el ${formatDisplayDate(cheque.dueDate)}`));
   if (detail.mirrorTransactionIds && detail.mirrorTransactionIds.length) details.push(`con el gasto espejo de ${detail.mirrorTenant || 'el inquilino'}`);
   return details;
 }

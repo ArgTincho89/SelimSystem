@@ -1,5 +1,7 @@
 // Audit log: maps authenticated write requests to plain Spanish messages and stores them per user.
 // Only the route pattern, entity reference and message are stored: never bodies, queries, headers or credentials.
+const { formatDisplayDate } = require('../utils/date-format');
+
 const COLLECTION = 'activityLogs';
 const RETENTION_MONTHS = 12;
 const MONTHS = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
@@ -179,11 +181,6 @@ function formatAmount(value) {
   return `${value < 0 ? '-' : ''}${grouped}${fraction ? `,${fraction}` : ''}`;
 }
 
-function formatDueDate(value) {
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value || ''));
-  return match ? `${match[3]}/${match[2]}/${match[1]}` : '';
-}
-
 // Builds the descriptive label of a log entry from the facts a route provides. A missing fact drops its fragment,
 // so the message never contains "undefined" or empty brackets. Facts: title, assetName, period, amount + currencyCode
 // (or amounts[]), dueDate, installment ({ number, total }), details (extra short fragments, e.g. the pending balance).
@@ -197,7 +194,7 @@ function describe(route, facts = {}, base = '') {
     .filter(Boolean).join(' + ');
   const installment = facts.installment && Number.isInteger(facts.installment.number) && Number.isInteger(facts.installment.total) && facts.installment.number > 0 && facts.installment.total >= facts.installment.number
     ? `cuota ${facts.installment.number}/${facts.installment.total}` : '';
-  const due = formatDueDate(facts.dueDate);
+  const due = formatDisplayDate(facts.dueDate);
   const details = (Array.isArray(facts.details) ? facts.details : []).filter(item => typeof item === 'string' && item.trim()).map(item => item.trim());
   return [head, amounts && `por un monto de ${amounts}`, due && `con vencimiento ${due}`, installment, ...details].filter(Boolean).join(', ').slice(0, 300);
 }
