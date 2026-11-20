@@ -1,6 +1,6 @@
 # SelimSystem — Documento funcional
 
-**Versión del producto:** 1.18.1
+**Versión del producto:** 1.18.2
 **Entorno productivo:** https://selimsystem.fly.dev
 **Fecha del documento:** 20/11/2026
 
@@ -489,7 +489,7 @@ Se abre desde la tarjeta de alquiler de la ficha (y desde los avisos de alquiler
 - **Encabezado:** estado del alquiler (Activo, Por vencer, Por comenzar o Finalizado, con texto e ícono), inquilinos, vigencia, monto mensual vigente por moneda, próximo cobro, próximo vencimiento y las acciones **Editar alquiler**, **Actualizar alquiler** y **Finalizar alquiler**.
 - **Resumen:** una tarjeta por modalidad (estado, vigencia, monto original y vigente, clasificación, IVA, ajuste y próximo ajuste), el progreso de cobros (esperados, cobrados, parciales, vencidos, pendientes y cancelados) y las alertas del alquiler con su acción; las alertas de alquiler vencido se muestran en rojo y negrita.
 - **Períodos:** una fila por mes con el vencimiento, una columna por modalidad, las obligaciones del titular y del inquilino de ese mes, el total por moneda, el estado consolidado y las acciones **Registrar cobro**, **Deshacer cobro** (con confirmación), **Cancelar período** (con confirmación; solo sin cobros) y **Ver detalle**. Filtros por año, mes, estado, tipo, responsable, modalidad, proveedor y texto. Las obligaciones del mes ofrecen **Registrar pago**, **Resolver**, **Anular resolución** y **Revertir pago**. Sin períodos que coincidan: "No hay períodos pendientes de cobro." u otro mensaje con **Limpiar filtros**.
-- **Contratos:** una tarjeta por modalidad con su vigencia, importes, clasificación y ajuste; si el contrato tiene un documento adjunto, la tarjeta ofrece **Ver documento** (abre el visor) y **Descargar documento**. **Registrar cobro** no aparece aquí (queda en Resumen y Períodos). **Actualizar alquiler** registra un ajuste (importe manual, porcentaje o índice) eligiendo entre los próximos vencimientos y muestra antes una vista previa ("Desde <mes>, el alquiler pasa de X a Y. Se actualizarán N períodos futuros no cobrados."); los períodos ya cobrados no se modifican. **Finalizar contrato** termina solo esa modalidad (pide la fecha y una confirmación que lista los períodos que se cancelan); si el contrato ya estaba finalizado, el servidor responde "No se puede finalizar este contrato porque ya está finalizado.".
+- **Contratos:** una tarjeta por modalidad con su vigencia, importes, clasificación y ajuste; si el contrato tiene un documento adjunto, la tarjeta ofrece **Ver documento** (abre el visor) y **Descargar documento**. **Registrar cobro** no aparece aquí (queda en Resumen y Períodos). **Actualizar alquiler** registra un ajuste (importe manual, porcentaje o índice) eligiendo entre los próximos vencimientos o, de forma **retroactiva**, uno de los **últimos 3 vencimientos pasados** (marcados "retroactivo"; una fecha anterior se rechaza), y muestra antes una vista previa ("Desde <mes>, el alquiler pasa de X a Y. Se actualizarán N períodos futuros no cobrados."); los períodos ya cobrados no se modifican y los períodos pasados sin cobrar toman el nuevo importe. **Finalizar contrato** termina solo esa modalidad (pide la fecha y una confirmación que lista los períodos que se cancelan); si el contrato ya estaba finalizado, el servidor responde "No se puede finalizar este contrato porque ya está finalizado.".
 - **Documentos:** ver 10.8.
 - **Notas:** ver 10.8.
 
@@ -568,7 +568,7 @@ Cada fila indica también "Pagado X/Y moneda" y, si la obligación es compartida
 2. Completar:
    - **Nombre** (obligatorio) y **Tipo**.
    - **Bien** (opcional).
-   - **Proveedor** (de Configuración > Proveedor). Al elegirlo, la **Categoría** se precarga con la categoría de gasto del proveedor.
+   - **Proveedor** (de Configuración > Proveedor). Al elegirlo, la **Categoría** se precarga con la primera categoría de gasto del proveedor.
    - **Cuenta o contrato** y **Número de cuenta o contrato**.
    - **Frecuencia**, **Primer vencimiento** (obligatorio) y **Último vencimiento** (opcional).
    - **Moneda** (ARS, EUR o USD) e **Importe estimado** (formato monetario).
@@ -692,13 +692,13 @@ Tres secciones con la misma estructura sobre un único registro de personas y or
 | **Persona** | Nombre y Apellido (obligatorios), DNI (solo números y puntos), Teléfono, Correo electrónico |
 | **Organización** | Razón social (obligatoria), CUIL/CUIT, Teléfono, Correo electrónico, Dirección |
 | **Ambos** | Roles (al menos uno), Notas generales |
-| **Proveedor** | **Categoría de gasto**, obligatoria para organizaciones proveedoras; se precarga al crear obligaciones |
+| **Proveedor** | **Categorías de gasto** (selección múltiple con casillas; al menos una para organizaciones proveedoras). La tarjeta muestra todas; la primera se precarga al crear obligaciones |
 
 Acciones: **Agregar**, **Ver ficha** (datos, documentos y notas), **Editar** y **Eliminar**. No se puede eliminar un registro en uso en cuentas, bienes, contratos, obligaciones o documentos.
 
 **Dónde se usan:** los titulares en cuentas y bienes; los inquilinos en declaraciones de alquiler; los proveedores en obligaciones.
 
-Al crear un proveedor, el selector de categoría de gasto siempre se carga desde el servidor; si no hay categorías de gasto, se indica "Primero creá una categoría de gastos en Configuración → Categorías.".
+Al crear un proveedor, la lista de categorías de gasto siempre se carga desde el servidor; si no hay categorías de gasto, se indica "Primero creá una categoría de gastos en Configuración → Categorías.".
 
 ### 12.4 Categorías
 
@@ -874,7 +874,7 @@ Todas verificadas en el código de la versión 1.15.0:
 | **Obligación** | Compromiso de pago (impuesto, servicio, etc.) que genera vencimientos. |
 | **Ocurrencia** | Cada repetición de un gasto recurrente. |
 | **Pendiente** | Vencimiento impago; en naranja si vence este mes. |
-| **Proveedor** | Organización o persona que cobra una obligación; tiene una categoría de gasto. |
+| **Proveedor** | Organización o persona que cobra una obligación; tiene una o más categorías de gasto. |
 | **Reembolso** | Devolución de un gasto; reduce el gasto, no es ingreso. |
 | **Resolver** | Registrar que el inquilino pagó una obligación a su cargo; no mueve dinero. |
 | **Sub-cuenta** | Cuenta hija de otra cuenta, con moneda propia. |

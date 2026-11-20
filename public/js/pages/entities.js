@@ -40,11 +40,11 @@ const EntitiesPage = {
     const muted = { color: 'var(--text-muted)', fontSize: 'var(--font-sm)', marginTop: '4px' };
     this.entities.forEach(entity => {
       const kind = entity.kind === 'person' ? 'Persona' : 'Organización';
-      const category = this.categories.find(item => item.id === entity.expenseCategoryId);
+      const categoryNames = this.entityCategoryIds(entity).map(id => this.categories.find(item => item.id === id)?.nombre).filter(Boolean);
       const details = create('div', {}, [
         create('strong', { textContent: entity.name }),
         create('div', { textContent: `${kind} · ${this.roleLabels(entity.roles)}`, style: muted }),
-        create('div', { textContent: [entity.email, entity.phone, category && `Categoría: ${category.nombre}`].filter(Boolean).join(' · '), style: muted })
+        create('div', { textContent: [entity.email, entity.phone, categoryNames.length && `${categoryNames.length > 1 ? 'Categorías' : 'Categoría'}: ${categoryNames.join(', ')}`].filter(Boolean).join(' · '), style: muted })
       ]);
       list.appendChild(create('article', { className: 'settings-card', style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: 'wrap' } }, [
         details,
@@ -91,10 +91,16 @@ const EntitiesPage = {
     const email = this.addField(form, 'Correo electrónico', entity?.email || '', 'email');
     form.appendChild(addressBox);
     const address = this.addField(addressBox, 'Dirección', entity?.address || '');
-    const category = create('select', { className: 'form-control' });
-    category.appendChild(create('option', { value: '', textContent: 'Seleccionar categoría' }));
-    this.categories.forEach(item => category.appendChild(create('option', { value: item.id, textContent: item.nombre })));
-    category.value = entity?.expenseCategoryId || '';
+    // Multiple selection: one checkbox per category (subcategories show their parent).
+    const selectedCategories = new Set(this.entityCategoryIds(entity));
+    const category = create('div', { className: 'category-multiselect', role: 'group', 'aria-label': 'Categorías de gasto' });
+    const categoryInputs = this.categories.map(item => {
+      const parent = item.parentId ? this.categories.find(other => other.id === item.parentId) : null;
+      const checkbox = create('input', { type: 'checkbox', value: item.id });
+      checkbox.checked = selectedCategories.has(item.id);
+      category.appendChild(create('label', { className: 'checkbox-label' }, [checkbox, document.createTextNode(` ${parent ? `${parent.nombre} › ` : ''}${item.nombre}`)]));
+      return checkbox;
+    });
     const roleInputs = {};
     const roles = create('div', { style: { display: 'grid', gap: '6px', margin: '10px 0' } }, [create('strong', { textContent: 'Roles' })]);
     [['owner', 'Propietario'], ['tenant', 'Inquilino'], ['provider', 'Proveedor'], ['payment_responsible', 'Responsable de pago'], ['other', 'Otro']].forEach(([value, label]) => {
@@ -103,7 +109,7 @@ const EntitiesPage = {
       roleInputs[value] = checkbox;
       roles.appendChild(create('label', { style: { display: 'flex', gap: '8px', alignItems: 'center' } }, [checkbox, document.createTextNode(label)]));
     });
-    const categoryGroup = create('div', { className: 'form-group' }, [create('label', { textContent: 'Categoría de gasto (obligatoria para organizaciones proveedoras)' }), category]);
+    const categoryGroup = create('div', { className: 'form-group' }, [create('label', { textContent: 'Categorías de gasto (al menos una para organizaciones proveedoras)' }), category]);
     const categoryHint = categoriesError
       ? `No se pudieron cargar las categorías: ${categoriesError}`
       : (this.categories.length ? '' : 'Primero creá una categoría de gastos en Configuración → Categorías.');
@@ -128,7 +134,7 @@ const EntitiesPage = {
       const data = this.buildPayload({
         kind: kind.value, roles: selectedRoles, firstName: firstName.value, lastName: lastName.value, dni: dni.value,
         businessName: businessName.value, taxId: taxId.value, email: email.value, phone: phone.value,
-        address: address.value, categoryId: category.value, notes: notes.value
+        address: address.value, categoryIds: categoryInputs.filter(input => input.checked).map(input => input.value), notes: notes.value
       });
       const problem = this.validate(data);
       if (problem) return showToast(problem, 'error');
@@ -143,9 +149,15 @@ const EntitiesPage = {
     Modal.show(editing ? `Editar ${this.ROLE_TITLES[role] || 'contacto'}` : `Nuevo ${this.ROLE_TITLES[role] || 'contacto'}`, form, { footer });
   },
 
+  entityCategoryIds(entity) {
+    if (!entity) return [];
+    if (Array.isArray(entity.expenseCategoryIds) && entity.expenseCategoryIds.length) return entity.expenseCategoryIds;
+    return entity.expenseCategoryId ? [entity.expenseCategoryId] : [];
+  },
+
   buildPayload(values) {
     const base = { kind: values.kind, roles: values.roles, email: values.email.trim(), phone: values.phone.trim(), notes: values.notes.trim() };
-    if (values.roles.includes('provider')) base.expenseCategoryId = values.categoryId || null;
+    if (values.roles.includes('provider')) base.expenseCategoryIds = values.categoryIds || [];
     if (values.kind === 'person') {
       const firstName = values.firstName.trim();
       const lastName = values.lastName.trim();
@@ -158,7 +170,7 @@ const EntitiesPage = {
     if (!data.roles.length) return 'Selecciona al menos un rol';
     if (data.kind === 'person' && (!data.firstName || !data.lastName)) return 'Nombre y apellido son obligatorios';
     if (data.kind !== 'person' && !data.name) return 'La razón social es obligatoria';
-    if (data.kind !== 'person' && data.roles.includes('provider') && !data.expenseCategoryId) return 'La categoría de gasto es obligatoria para proveedores';
+    if (data.kind !== 'person' && data.roles.includes('provider') && !(data.expenseCategoryIds || []).length) return 'Elegí al menos una categoría de gasto para el proveedor';
     return null;
   },
 

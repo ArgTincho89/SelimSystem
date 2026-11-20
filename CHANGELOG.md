@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.18.2] - 2026-11-20
+
+### Changed
+- Actualizar alquiler: ahora se puede aplicar de forma **retroactiva** desde uno de los **últimos 3 vencimientos pasados**. Los períodos ya cobrados conservan su importe; los pasados sin cobrar toman el nuevo valor.
+- Todas las ventanas (modales) son un **30% más anchas** (en el celular siguen ocupando el ancho de la pantalla).
+- Configuración > Proveedor: un proveedor puede tener **varias categorías de gasto** (selección múltiple con casillas; al menos una para organizaciones). La tarjeta muestra todas y la primera se precarga al crear obligaciones.
+
+### Fixed
+- Declaración de alquiler: una obligación creada desde el modal mostraba "Sin proveedor" aunque el proveedor estaba asignado (el dato se guardaba bien). Ahora se muestra el nombre del proveedor.
+
 ## [1.18.1] - 2026-11-20
 
 ### Added

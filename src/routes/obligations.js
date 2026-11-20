@@ -17,8 +17,10 @@ function responseFor(db, userId, obligation, options) {
   const occurrences = obligations.occurrencesFor(db, userId, obligation, options);
   const today = ledger.localDateForUser(db, userId);
   const actionable = occurrences.filter(item => item.status !== 'cancelled' && item.remainingAmount > 0);
+  const provider = obligation.providerEntityId ? db.findById('legalOwners', obligation.providerEntityId, userId) : null;
   return {
     ...obligation,
+    providerName: provider?.name || null,
     nextDue: actionable.find(item => item.date >= today) || null,
     overdue: actionable.some(item => item.status === 'overdue'),
     occurrences

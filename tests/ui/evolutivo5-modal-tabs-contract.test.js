@@ -17,7 +17,7 @@ describe('Evolutivo 5 panel modal and tabs contract', () => {
       Modal.show('Titulo', 'texto');
       const [dialog] = dialogs();
       expect(dialog.className).toBe('card fade-in');
-      expect(dialog.style.maxWidth).toBe('440px');
+      expect(dialog.style.maxWidth).toBe('572px');
       expect(dialog.style.overflowY).toBe('auto');
       expect(dialog.style.display).toBeUndefined();
       expect(root.findAll(element => element.className.includes('modal-panel'))).toHaveLength(0);
@@ -30,7 +30,7 @@ describe('Evolutivo 5 panel modal and tabs contract', () => {
       Modal.show('Titulo', body, { layout: 'panel', header, width: '1100px', fullscreenOnMobile: true });
       const [dialog] = dialogs();
       expect(dialog.className).toBe('card fade-in modal-panel modal-fullscreen-mobile');
-      expect(dialog.style).toMatchObject({ maxWidth: '1100px', overflowY: 'hidden', display: 'flex', flexDirection: 'column' });
+      expect(dialog.style).toMatchObject({ maxWidth: '1430px', overflowY: 'hidden', display: 'flex', flexDirection: 'column' });
       const wrapper = dialog.children.find(child => child.className === 'modal-panel-header');
       const scroll = dialog.children.find(child => child.className === 'modal-panel-body');
       expect(wrapper.children[0]).toBe(header);

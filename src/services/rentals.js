@@ -199,6 +199,12 @@ function conditionsFor(db, userId, contractId) {
   return db.findAll('rentalConditions', userId).filter(item => item.contractId === contractId).sort((a, b) => a.effectiveDate.localeCompare(b.effectiveDate));
 }
 
+// A rent adjustment may start on one of the last RETRO_DUE_DATES past due dates (collected periods still keep their amount).
+const RETRO_DUE_DATES = 3;
+function retroDueDates(db, userId, contract, today) {
+  return occurrenceDates(contract, today, conditionsFor(db, userId, contract.id)).filter(date => date < today).slice(-RETRO_DUE_DATES);
+}
+
 /**
  * Pure plan of a rent adjustment ("Actualizar alquiler"): validates the input and computes the new amount, the
  * uncollected occurrences it supersedes and the collected ones it skips. Writes nothing, so it also backs the
@@ -210,7 +216,10 @@ function planCondition(db, userId, contract, input) {
   if (input.periodicity !== undefined && !PERIODICITIES.has(input.periodicity)) return { error: 'La periodicidad del ajuste no es válida' };
   const dueDates = occurrenceDates(contract, input.effectiveDate, conditionsFor(db, userId, contract.id));
   if (!dueDates.includes(input.effectiveDate)) return { error: 'La fecha efectiva debe coincidir con un vencimiento del contrato' };
-  if (input.effectiveDate < ledger.localDateForUser(db, userId)) return { error: 'No se puede registrar una condición de alquiler de forma retroactiva', status: 409 };
+  const today = ledger.localDateForUser(db, userId);
+  if (input.effectiveDate < today && !retroDueDates(db, userId, contract, today).includes(input.effectiveDate)) {
+    return { error: `Solo se puede actualizar de forma retroactiva hasta ${RETRO_DUE_DATES} vencimientos anteriores`, status: 409 };
+  }
   const old = conditionsFor(db, userId, contract.id);
   if (old.some(item => item.effectiveDate === input.effectiveDate)) return { error: 'Ya existe una condición para esa fecha efectiva' };
   const occurrences = db.findAll('rentOccurrences', userId).filter(item => item.contractId === contract.id && item.date >= input.effectiveDate);
@@ -552,7 +561,7 @@ function rentAlerts(db, userId, { today, leadDays = 5, expiryDays = 30, adjustme
 module.exports = {
   rentAlerts,
   CONTRACT_TYPES, CONTRACT_STATES, PERIODICITIES, CONDITION_METHODS, validDate, hash,
-  validateContract, conditionsFor, applyCondition, planCondition, previewCondition, generateOccurrences, occurrenceView,
+  validateContract, conditionsFor, applyCondition, planCondition, previewCondition, generateOccurrences, occurrenceView, retroDueDates, RETRO_DUE_DATES,
   validateAllocations, collectionView, reverseCollection, intervalMonths, classifyCollection, monthViews,
   CONTRACT_KINDS, MODALITIES, KIND_BY_MODALITY, modalityOf, grossMinor, decimalScaled, activeContractsFor, activeContractFor, hasOccurrences, afterContractWrite, cancelUnpaidOccurrences
 };

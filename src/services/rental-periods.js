@@ -148,7 +148,9 @@ function modalityCards(db, userId, view, contracts, today) {
       classification: rentals.modalityOf(contract) === 'locacion' ? 'A' : 'B', ivaPercent: contract.ivaPercent ?? null,
       adjustmentFrequencyMonths: contract.adjustmentFrequencyMonths ?? null, adjustmentCriterion: contract.adjustmentCriterion ?? null,
       nextAdjustmentDate: nextAdjustment(db, userId, contract, today),
-      futureDueDates: live.filter(item => item.date >= today).map(item => item.date)
+      futureDueDates: live.filter(item => item.date >= today).map(item => item.date),
+      // Last past due dates a rent adjustment may start on (retroactive "Actualizar alquiler").
+      pastDueDates: contract.status === 'active' ? rentals.retroDueDates(db, userId, contract, today) : []
     };
   });
 }

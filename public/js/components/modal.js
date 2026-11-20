@@ -17,6 +17,14 @@ const Modal = {
     this.open(title, content, options);
   },
 
+  // Every dialog is 30% wider than its requested width (default 440px → 572px); still capped by the
+  // viewport through `width: 100%`. Non-pixel widths (e.g. '90vw') are used as given.
+  WIDTH_SCALE: 1.3,
+  scaledWidth(width) {
+    const match = /^(\d+(?:\.\d+)?)px$/.exec(String(width || '440px').trim());
+    return match ? `${Math.round(Number(match[1]) * this.WIDTH_SCALE)}px` : width;
+  },
+
   open(title, content, options) {
     // A handler waiting on this dialog must not keep its button locked (see guard in utils/dom.js).
     if (typeof releaseGuards === 'function') releaseGuards();
@@ -42,8 +50,8 @@ const Modal = {
       'aria-labelledby': titleId,
       tabindex: '-1',
       style: panel
-        ? { width: '100%', maxWidth: options.width || '440px', maxHeight: '92vh', overflowY: 'hidden', display: 'flex', flexDirection: 'column' }
-        : { width: '100%', maxWidth: options.width || '440px', maxHeight: '90vh', overflowY: 'auto' }
+        ? { width: '100%', maxWidth: this.scaledWidth(options.width), maxHeight: '92vh', overflowY: 'hidden', display: 'flex', flexDirection: 'column' }
+        : { width: '100%', maxWidth: this.scaledWidth(options.width), maxHeight: '90vh', overflowY: 'auto' }
     });
 
     // A dialog opened on top of another one gets a top-left "Atrás" button that returns to the dialog below.

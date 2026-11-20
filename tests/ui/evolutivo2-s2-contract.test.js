@@ -23,8 +23,8 @@ describe('Evolutivo 2 S2 party UI contract', () => {
   });
 
   it('requires an expense category for organization providers', () => {
-    expect(entities).toContain('La categoría de gasto es obligatoria para proveedores');
-    expect(entities).toContain('expenseCategoryId');
+    expect(entities).toContain('Elegí al menos una categoría de gasto para el proveedor');
+    expect(entities).toContain('expenseCategoryIds');
   });
 
   it('filters by role and offers delete through the API', () => {

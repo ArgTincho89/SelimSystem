@@ -11,6 +11,16 @@ function pick(body, existing, field) {
   return body[field] === undefined ? existing?.[field] : body[field];
 }
 
+// Requested expense categories: `expenseCategoryIds` wins, then the legacy single `expenseCategoryId`,
+// then the stored ones. Returns undefined (nothing to set), null (clear) or the raw array to validate.
+function expenseCategoryIdsFrom(body, existing) {
+  if (body.expenseCategoryIds !== undefined) return body.expenseCategoryIds === null ? null : body.expenseCategoryIds;
+  if (body.expenseCategoryId !== undefined) return body.expenseCategoryId === null ? null : [body.expenseCategoryId];
+  if (!existing) return undefined;
+  if (Array.isArray(existing.expenseCategoryIds) && existing.expenseCategoryIds.length) return existing.expenseCategoryIds;
+  return existing.expenseCategoryId ? [existing.expenseCategoryId] : undefined;
+}
+
 function validatePersonFields(body, existing) {
   const first = pick(body, existing, 'firstName');
   const last = pick(body, existing, 'lastName');
@@ -45,14 +55,19 @@ function validateOwner(body, existing = null, db = null, userId = null) {
   const value = { name: name.trim(), kind, roles: [...new Set(roles)] };
   if (personValue) Object.assign(value, { firstName: personValue.firstName, lastName: personValue.lastName, dni: personValue.dni });
   if (kind === 'entity' && existing?.firstName !== undefined && existing?.firstName !== null) Object.assign(value, { firstName: null, lastName: null, dni: null });
-  const expenseCategoryId = pick(body, existing, 'expenseCategoryId');
-  if (expenseCategoryId !== undefined && expenseCategoryId !== null) {
-    if (typeof expenseCategoryId !== 'string' || !expenseCategoryId) return { error: 'La categoría de gasto no es válida' };
-    if (!value.roles.includes('provider')) return { error: 'La categoría de gasto solo aplica a proveedores' };
-    if (db && !db.findById('categories', expenseCategoryId, userId)) return { error: 'La categoría de gasto no existe' };
-    value.expenseCategoryId = expenseCategoryId;
-  } else if (expenseCategoryId === null) {
+  // A provider can have several expense categories (`expenseCategoryIds`); `expenseCategoryId` mirrors
+  // the first one for older clients and for the obligation's default category.
+  const categoryIds = expenseCategoryIdsFrom(body, existing);
+  if (categoryIds === null) {
+    value.expenseCategoryIds = [];
     value.expenseCategoryId = null;
+  } else if (categoryIds !== undefined) {
+    if (!Array.isArray(categoryIds) || categoryIds.some(id => typeof id !== 'string' || !id)) return { error: 'La categoría de gasto no es válida' };
+    const unique = [...new Set(categoryIds)];
+    if (unique.length && !value.roles.includes('provider')) return { error: 'La categoría de gasto solo aplica a proveedores' };
+    if (db && unique.some(id => !db.findById('categories', id, userId))) return { error: 'La categoría de gasto no existe' };
+    value.expenseCategoryIds = unique;
+    value.expenseCategoryId = unique[0] || null;
   }
   const roleLabel = body.roleLabel === undefined ? existing?.roleLabel : body.roleLabel;
   if (roleLabel !== undefined && roleLabel !== null) {

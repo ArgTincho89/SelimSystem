@@ -242,7 +242,9 @@ const AssetsPage = {
   },
 
   obligationLine(item) {
-    const provider = item.providerName || 'Sin proveedor';
+    // Fresh obligations (stacked "Nueva obligación") may only carry the id: look the name up as a fallback.
+    const lookup = item.providerEntityId ? (this.owners || []).find(owner => owner.id === item.providerEntityId)?.name : null;
+    const provider = item.providerName || lookup || 'Sin proveedor';
     return item.externalIdentifier ? `${provider} - ${this.identifierLabel(item.externalIdentifierType)}: ${item.externalIdentifier}` : `${provider} - ${item.title}`;
   },
 

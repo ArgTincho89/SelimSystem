@@ -156,24 +156,29 @@ const RentalModal = {
   },
 
   // "Actualizar alquiler": shows the current value, lets the user pick a manual amount, a percentage or an index
-  // and a future due date, and previews the effect (read-only endpoint) before confirming. No retroactive dates.
+  // and a due date (one of the last 3 past ones, marked "retroactivo", or a future one; the next due date is
+  // preselected), and previews the effect (read-only endpoint) before confirming. Collected periods keep their amount.
   openCondition(ctx, contractId) {
     const card = ctx.overview.modalities.find(item => item.contractId === contractId);
     if (!card) return null;
+    const pastDueDates = card.pastDueDates || [];
     const body = create('div', { className: 'rental-condition', style: { display: 'grid', gap: '10px' } });
     body.appendChild(create('p', { style: { margin: '0' }, textContent: `${card.modalityLabel}. Valor actual: ${formatearMonedaConCodigo(card.currentAmount, card.currencyCode)}` }));
     const method = create('select', { className: 'form-control', 'aria-label': 'Tipo de actualización' });
     [['manual', 'Nuevo importe'], ['percentage', 'Porcentaje de aumento'], ['index', 'Índice o criterio']].forEach(([value, label]) => method.appendChild(create('option', { value, textContent: label })));
     const date = create('select', { className: 'form-control', 'aria-label': 'Fecha efectiva' });
+    pastDueDates.forEach(value => date.appendChild(create('option', { value, textContent: `${value.split('-').reverse().join('/')} (retroactivo)` })));
     card.futureDueDates.forEach(value => date.appendChild(create('option', { value, textContent: value.split('-').reverse().join('/') })));
+    date.value = card.futureDueDates[0] || pastDueDates[pastDueDates.length - 1] || '';
     const amount = MoneyInput.create({ currency: card.currencyCode, ariaLabel: `Nuevo alquiler (${card.currencyCode})` });
     const percentage = create('input', { className: 'form-control', type: 'number', step: '0.01', 'aria-label': 'Porcentaje de aumento' });
     const indexValue = create('input', { className: 'form-control', type: 'number', min: '0.000001', step: '0.000001', 'aria-label': 'Valor de índice actual' });
     const baseIndex = create('input', { className: 'form-control', type: 'number', min: '0.000001', step: '0.000001', 'aria-label': 'Valor de índice base' });
     const field = (label, control) => create('label', { className: 'form-group', style: { display: 'grid', gap: '4px', margin: '0' } }, [create('span', { textContent: label }), control]);
     const rows = { manual: field(`Nuevo importe (${card.currencyCode})`, amount), percentage: field('Porcentaje de aumento', percentage), index: create('div', { style: { display: 'grid', gap: '10px' } }, [field('Índice actual', indexValue), field('Índice base', baseIndex)]) };
-    body.append(field('Tipo de actualización', method), field('Fecha efectiva (próximo vencimiento)', date), rows.manual, rows.percentage, rows.index);
-    const note = create('p', { className: 'text-muted', role: 'status', style: { margin: '0' }, textContent: card.futureDueDates.length ? 'Completá los datos para ver la previsualización.' : 'Este contrato no tiene vencimientos futuros para ajustar.' });
+    body.append(field('Tipo de actualización', method), field('Fecha efectiva (vencimiento)', date), rows.manual, rows.percentage, rows.index);
+    if (pastDueDates.length) body.appendChild(create('small', { className: 'text-muted', textContent: 'Podés elegir hasta 3 vencimientos anteriores. Los períodos ya cobrados conservan su importe.' }));
+    const note = create('p', { className: 'text-muted', role: 'status', style: { margin: '0' }, textContent: card.futureDueDates.length || pastDueDates.length ? 'Completá los datos para ver la previsualización.' : 'Este contrato no tiene vencimientos para ajustar.' });
     body.appendChild(note);
     const save = create('button', { className: 'btn btn-primary', type: 'button', textContent: 'Guardar ajuste', disabled: true });
     let valid = false;
@@ -226,7 +231,9 @@ const RentalModal = {
     const month = formatMonthLabel(preview.effectiveDate.slice(0, 7));
     const count = preview.affectedDates.length;
     const skipped = preview.skippedCollectedDates.length;
-    const periods = `${count} período${count === 1 ? '' : 's'} futuro${count === 1 ? '' : 's'} no cobrado${count === 1 ? '' : 's'}`;
+    // Retroactive when the effective date is one of the past due dates offered in the dialog.
+    const retro = (card.pastDueDates || []).includes(preview.effectiveDate);
+    const periods = `${count} período${count === 1 ? '' : 's'}${retro ? '' : ` futuro${count === 1 ? '' : 's'}`} no cobrado${count === 1 ? '' : 's'}${retro ? ' (incluye vencimientos pasados)' : ''}`;
     const text = `Desde ${month.charAt(0).toLowerCase()}${month.slice(1)}, el alquiler pasa de ${formatearMonedaConCodigo(preview.previousAmount, card.currencyCode)} a ${formatearMonedaConCodigo(preview.newAmount, card.currencyCode)}. Se actualizarán ${periods}.`;
     return skipped ? `${text} ${skipped === 1 ? 'Un período ya cobrado se mantiene' : `${skipped} períodos ya cobrados se mantienen`} sin cambios.` : text;
   },
