@@ -8,6 +8,8 @@ const rentals = require('../services/rentals');
 const finance = require('../services/finance');
 const incomeAttribution = require('../services/income-attribution');
 const installments = require('../services/transaction-installments');
+const obligations = require('../services/obligations');
+const obligationPayments = require('../services/obligation-payments');
 const { isPendingTransaction } = require('../utils/transaction-status');
 
 const router = express.Router();
@@ -239,6 +241,10 @@ router.post('/', (req, res) => {
     ...(comments !== undefined ? { comments } : {})
   };
 
+  if (req.body.obligationPayment !== undefined && req.body.obligationPayment !== null) {
+    return createObligationPayment(req, res, { tipo, account, plan, base });
+  }
+
   if (!plan.records) {
     const transaction = db.create('transactions', base, userId);
     ledger.refreshAlerts(db, userId);
@@ -255,6 +261,40 @@ router.post('/', (req, res) => {
   ledger.refreshAlerts(db, userId);
   res.status(201).json({ ...created[0], installments: created });
 });
+
+// "Atribución del movimiento" of a new expense pointing at a due date (vencimiento): the expense is saved as a payment
+// of that occurrence through the same service as "Registrar pago" (same record, validation and audit entry). The whole
+// movement is the payment, so it pays one occurrence; it is reverted with "Revertir pago", like any other payment.
+function createObligationPayment(req, res, { tipo, account, plan, base }) {
+  const db = req.app.locals.db;
+  const userId = req.session.userId;
+  const input = req.body.obligationPayment;
+  if (tipo !== 'expense') return res.status(400).json({ error: 'Solo un gasto puede registrar el pago de un vencimiento' });
+  if (!input || typeof input !== 'object' || Array.isArray(input) || typeof input.occurrenceId !== 'string') return res.status(400).json({ error: 'El vencimiento a pagar no es válido' });
+  if (plan.records) return res.status(400).json({ error: 'Las cuotas no se pueden combinar con el pago de un vencimiento' });
+  if (req.body.recurrente) return res.status(400).json({ error: 'El pago de un vencimiento no puede ser recurrente' });
+  const occurrence = db.findById('obligationOccurrences', input.occurrenceId, userId);
+  const obligation = occurrence ? db.findById('obligations', occurrence.obligationId, userId) : null;
+  if (!occurrence || !obligation) return res.status(400).json({ error: 'El vencimiento a pagar no es válido' });
+  if (typeof req.body.comments !== 'string' || !req.body.comments.trim()) return res.status(400).json({ error: 'Los comentarios son obligatorios para registrar el pago de un vencimiento' });
+  const userTitle = typeof req.body.titulo === 'string' ? req.body.titulo.trim() : '';
+  const result = obligationPayments.register(db, userId, {
+    obligation, occurrence,
+    input: {
+      amount: req.body.monto, accountId: account.id, categoryId: req.body.categoryId, date: base.fecha,
+      // An empty title falls back to the due date title, as in "Registrar pago".
+      paymentMethod: base.paymentMethod, title: userTitle, notes: req.body.comments,
+      idempotencyKey: typeof input.idempotencyKey === 'string' ? input.idempotencyKey : crypto.randomUUID()
+    },
+    extraFields: { clasificacion: base.clasificacion, ivaPorcentaje: base.ivaPorcentaje, ivaHolderId: base.ivaHolderId, ivaHolderName: base.ivaHolderName }
+  });
+  if (result.error) return res.status(result.status).json({ error: result.error });
+  const occurrenceView = obligations.occurrenceView(db, userId, occurrence, ledger.localDateForUser(db, userId));
+  if (result.replayed) return res.json({ ...result.transaction, paidOccurrence: occurrenceView, replayed: true });
+  res.locals.activityMeta = { ...obligationPayments.activityMeta(db, userId, obligation, occurrence, result), action: 'obligation.payment' };
+  ledger.refreshAlerts(db, userId);
+  res.status(201).json({ ...result.transaction, paidOccurrence: occurrenceView });
+}
 
 // Installment flows of a new transaction. Returns {} (single transaction), { records(base, title), assetId } or { error }.
 function installmentPlan(db, userId, body, { tipo, paymentMethod, amountMinor, currency, purchaseDate }) {

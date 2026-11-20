@@ -18,6 +18,9 @@ const ROUTES = [
   r('PUT', '/categories/:id', 'category.update', 'Modificaste la categoría', 'modificar una categoría', 'category', { id: 'id', join: '' }),
   r('DELETE', '/categories/:id', 'category.delete', 'Eliminaste la categoría', 'eliminar una categoría', 'category', { id: 'id', join: '' }),
   r('POST', '/transactions', 'transaction.create', 'Registraste una transacción', 'registrar una transacción', 'transaction'),
+  // Same request as above, selected by the route (res.locals.activityMeta.action) when the expense pays a due date:
+  // the entry reads like the one of "Registrar pago".
+  r('POST', '/transactions', 'obligation.payment', 'Registraste un pago de la obligación', 'registrar un pago de una obligación', 'transaction', { join: '' }),
   r('POST', '/transactions/:id/occurrences/:date/post', 'transaction.occurrence-post', 'Contabilizaste una ocurrencia de la transacción recurrente', 'contabilizar una ocurrencia de una transacción recurrente', 'transaction', { id: 'id' }),
   r('PUT', '/transactions/:id/occurrences/:date', 'transaction.occurrence-update', 'Modificaste una ocurrencia de la transacción recurrente', 'modificar una ocurrencia de una transacción recurrente', 'transaction', { id: 'id' }),
   r('DELETE', '/transactions/:id/occurrences/:date', 'transaction.occurrence-delete', 'Eliminaste una ocurrencia de la transacción recurrente', 'eliminar una ocurrencia de una transacción recurrente', 'transaction', { id: 'id' }),

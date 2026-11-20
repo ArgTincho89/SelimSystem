@@ -192,6 +192,108 @@ const TransactionForm = {
     };
   },
 
+  // "Atribución del movimiento": a first select "Bien" (assets only) and a second, optional one with what belongs to
+  // the chosen asset. Obligations without an asset are reached through the "Obligaciones sin bien" entry.
+  NO_ASSET: '__no-asset__',
+  PAYMENT_HINT: 'Se registrará como pago de este vencimiento',
+  EDIT_PAYMENT_HINT: 'Para registrar el pago de un movimiento existente usá Registrar pago',
+
+  // "2026-03-05" -> "05/03/2026".
+  dueDateLabel(date) {
+    const [year, month, day] = String(date || '').split('-');
+    return day ? `${day}/${month}/${year}` : String(date || '');
+  },
+
+  // [value, label] options of "Bien". "Obligaciones sin bien" only for expenses and when such obligations exist.
+  attributionAssetOptions(assets = [], obligations = [], type = 'expense') {
+    const options = [['', 'Sin atribución'], ...assets.map(asset => [asset.id, asset.name])];
+    if (type === 'expense' && obligations.some(item => !item.assetId)) options.push([TransactionForm.NO_ASSET, 'Obligaciones sin bien']);
+    return options;
+  },
+
+  // { value, label, disabled, dueDate } options of "Obligación o período (opcional)" for the chosen asset. Expenses list the
+  // obligations of the asset and their pending due dates; incomes list its rental contracts and rent periods. Due dates
+  // only become payments on a new expense: when editing they stay informational and only the stored one (`keep`) is enabled.
+  attributionDetailOptions({ assetId, type, obligations = [], rentals = [], isEdit = false, keep = '' }) {
+    if (!assetId) return [];
+    const noAsset = assetId === TransactionForm.NO_ASSET;
+    const options = [{ value: '', label: noAsset ? 'Elegí una obligación' : 'Solo el bien', disabled: false }];
+    if (type === 'expense') {
+      obligations.filter(item => (noAsset ? !item.assetId : item.assetId === assetId)).forEach(item => {
+        options.push({ value: `obligation:${item.id}`, label: `Obligación · ${item.title}`, disabled: false });
+        (item.occurrences || []).forEach(occurrence => {
+          const value = `obligationOccurrence:${item.id}:${occurrence.id}`;
+          const pending = Number(occurrence.remainingAmount) || 0;
+          if ((occurrence.status === 'cancelled' || pending <= 0) && value !== keep) return;
+          options.push({
+            value, disabled: isEdit && value !== keep, dueDate: true,
+            label: `Vencimiento · ${item.title} · ${TransactionForm.dueDateLabel(occurrence.date)} · pendiente ${formatearMoneda(pending, occurrence.currencyCode || item.currencyCode || 'ARS')}`
+          });
+        });
+      });
+    }
+    if (type === 'income' && !noAsset) {
+      rentals.filter(item => item.assetId === assetId).forEach(item => {
+        options.push({ value: `contract:${item.id}`, label: `Contrato · ${item.tenants?.map(tenant => tenant.name).join(', ') || item.asset?.name || 'Alquiler'}`, disabled: false });
+        (item.occurrences || []).forEach(occurrence => options.push({ value: `rentOccurrence:${item.id}:${occurrence.id}`, label: `Período de alquiler · ${TransactionForm.dueDateLabel(occurrence.date)}`, disabled: false }));
+      });
+    }
+    return options;
+  },
+
+  // Hint under the detail select: a due date chosen on a new expense becomes a payment; when editing it cannot.
+  attributionHint({ type, isEdit, detail = '', hasDueDates = false }) {
+    if (type !== 'expense') return '';
+    if (isEdit) return hasDueDates ? TransactionForm.EDIT_PAYMENT_HINT : '';
+    return String(detail).startsWith('obligationOccurrence:') ? TransactionForm.PAYMENT_HINT : '';
+  },
+
+  // Stored allocation -> { assetId, detail } of the two selects.
+  attributionSelection(record = {}) {
+    const detail = record.occurrenceId ? `obligationOccurrence:${record.obligationId}:${record.occurrenceId}`
+      : record.rentOccurrenceId ? `rentOccurrence:${record.contractId}:${record.rentOccurrenceId}`
+        : record.obligationId ? `obligation:${record.obligationId}`
+          : record.contractId ? `contract:${record.contractId}` : '';
+    const assetId = record.assetId || (record.obligationId ? TransactionForm.NO_ASSET : '');
+    return { assetId, detail };
+  },
+
+  // Rows [{ assetId, detail, amount }] -> { allocations } (payloads of the allocations API) or { error }.
+  // Rows without a target or without an amount are skipped, as before.
+  allocationPayloads(entries = []) {
+    const allocations = [];
+    for (const entry of entries) {
+      if (!entry.assetId || entry.amount === null || entry.amount === undefined) continue;
+      if (entry.assetId === TransactionForm.NO_ASSET && !entry.detail) return { error: 'Elegí la obligación o el vencimiento de «Obligaciones sin bien»' };
+      const payload = entry.assetId === TransactionForm.NO_ASSET ? {} : { assetId: entry.assetId };
+      const [kind, id, childId] = String(entry.detail || '').split(':');
+      if (kind === 'obligation') payload.obligationId = id;
+      if (kind === 'obligationOccurrence') Object.assign(payload, { obligationId: id, occurrenceId: childId });
+      if (kind === 'contract') payload.contractId = id;
+      if (kind === 'rentOccurrence') Object.assign(payload, { contractId: id, rentOccurrenceId: childId });
+      allocations.push({ ...payload, amount: entry.amount });
+    }
+    return { allocations };
+  },
+
+  // A new expense whose attribution points at a due date is saved as a payment of it ("Registrar pago" rules).
+  // The whole movement is the payment: one due date per expense, as the only attribution and for the full amount.
+  // Returns {} (no payment), { obligationId, occurrenceId } or { error }.
+  obligationPaymentFor({ type, isEdit, entries = [], total, currency = 'ARS' }) {
+    if (type !== 'expense' || isEdit) return {};
+    const used = entries.filter(entry => entry.assetId);
+    const payments = used.filter(entry => String(entry.detail || '').startsWith('obligationOccurrence:'));
+    if (!payments.length) return {};
+    if (payments.length > 1) return { error: 'Un gasto puede pagar un solo vencimiento: registrá un gasto por cada vencimiento' };
+    if (used.length > 1) return { error: 'El pago de un vencimiento debe ser la única atribución del gasto' };
+    const factor = TransactionForm.minorFactor(currency);
+    if (!(payments[0].amount > 0) || Math.round(payments[0].amount * factor) !== Math.round(Number(total) * factor)) {
+      return { error: 'El importe atribuido al vencimiento debe ser igual al monto: el gasto completo se registra como pago' };
+    }
+    const [, obligationId, occurrenceId] = payments[0].detail.split(':');
+    return { obligationId, occurrenceId };
+  },
+
   async show(onSave, transaction = null, options = {}) {
     const [categories, accounts, transactions, assets, obligations, rentals, owners, associationData] = await Promise.all([
       API.categories.list(), API.accounts.list(), API.transactions.list(), API.assets.list(),
@@ -230,6 +332,7 @@ const TransactionForm = {
         refreshPaymentMethodOptions();
         updateInstallmentVisibility();
         updateTransferMode();
+        refreshAllocationRows();
       });
       typeSelector.appendChild(btn);
     });
@@ -284,33 +387,65 @@ const TransactionForm = {
 
     const allocationSection = create('section', { className: 'form-group', style: { borderTop: '1px solid var(--border-color)', paddingTop: '10px' } });
     allocationSection.appendChild(create('strong', { textContent: 'Atribución del movimiento' }));
-    allocationSection.appendChild(create('small', { textContent: 'Las asignaciones describen el destino del importe; no crean movimientos ni alteran los totales.' }));
-    const allocationRows = create('div', { style: { display: 'grid', gap: '6px', marginTop: '8px' } });
-    const allocationTargets = [['', 'Sin atribución']];
-    assets.forEach(item => allocationTargets.push([`asset:${item.id}`, `Bien · ${item.name}`]));
-    obligations.forEach(item => {
-      allocationTargets.push([`obligation:${item.id}`, `Obligación · ${item.title}`]);
-      (item.occurrences || []).forEach(occurrence => allocationTargets.push([`obligationOccurrence:${item.id}:${occurrence.id}`, `Vencimiento · ${item.title} · ${occurrence.date}`]));
-    });
-    rentals.forEach(item => {
-      allocationTargets.push([`contract:${item.id}`, `Contrato · ${item.asset?.name || 'Inmueble'} · ${item.tenants?.map(tenant => tenant.name).join(', ') || ''}`]);
-      (item.occurrences || []).forEach(occurrence => allocationTargets.push([`rentOccurrence:${item.id}:${occurrence.id}`, `Período de alquiler · ${item.asset?.name || 'Inmueble'} · ${occurrence.date}`]));
-    });
+    allocationSection.appendChild(create('small', { textContent: 'Las asignaciones describen el destino del importe; no crean movimientos ni alteran los totales. En un gasto nuevo, elegir un vencimiento lo registra como pago de ese vencimiento.' }));
+    const allocationRows = create('div', { style: { display: 'grid', gap: '10px', marginTop: '8px' } });
+    let allocationSeq = 0;
+    // One row: "Bien" + "Importe" + "Quitar", and below "Obligación o período (opcional)" once a bien is chosen.
+    // The fields wrap, so they stack at phone width.
     const addAllocationRow = (record = {}) => {
-      const row = create('div', { style: { display: 'grid', gridTemplateColumns: 'minmax(150px, 1fr) minmax(90px, 140px) auto', gap: '6px' } });
-      const target = create('select', { className: 'form-control' });
-      allocationTargets.forEach(([value, label]) => target.appendChild(create('option', { value, textContent: label })));
-      const selected = record.occurrenceId ? `obligationOccurrence:${record.obligationId}:${record.occurrenceId}`
-        : record.rentOccurrenceId ? `rentOccurrence:${record.contractId}:${record.rentOccurrenceId}`
-          : record.obligationId ? `obligation:${record.obligationId}`
-            : record.contractId ? `contract:${record.contractId}` : record.assetId ? `asset:${record.assetId}` : '';
-      target.value = selected;
-      const amount = MoneyInput.create({ currency: activeAccounts.find(account => account.id === accountSelect.value)?.currency || 'EUR', value: record.amount != null ? record.amount : null, placeholder: 'Importe', ariaLabel: 'Importe atribuido' });
+      const initial = TransactionForm.attributionSelection(record);
+      const number = allocationSeq += 1;
+      const row = create('div', { className: 'attribution-row', dataset: { attributionRow: String(number) }, style: { display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'flex-end' } });
+      const assetSelect = create('select', { className: 'form-control', id: `attribution-asset-${number}` });
+      const detailSelect = create('select', { className: 'form-control', id: `attribution-detail-${number}` });
+      const hint = create('small', { className: 'account-status-note', dataset: { attributionHint: 'true' }, 'aria-live': 'polite' });
+      const amount = MoneyInput.create({ currency: accountCurrency(), value: record.amount != null ? record.amount : null, placeholder: 'Importe', ariaLabel: 'Importe atribuido', id: `attribution-amount-${number}` });
       const remove = create('button', { className: 'btn btn-ghost btn-sm', type: 'button', textContent: 'Quitar', onClick: () => row.remove() });
-      row.append(target, amount, remove);
-      row._allocationFields = { target, amount };
+      const cell = (label, control, flex) => create('div', { style: { flex, minWidth: '0' } }, [create('label', { textContent: label, for: control.id }), control]);
+      const detailGroup = create('div', { dataset: { attributionDetail: 'true' }, style: { flex: '1 1 100%', minWidth: '0' } }, [
+        create('label', { textContent: 'Obligación o período (opcional)', for: detailSelect.id }), detailSelect, hint
+      ]);
+      row.append(cell('Bien', assetSelect, '1 1 200px'), cell('Importe', amount, '1 1 120px'), remove, detailGroup);
+      let detailOptions = [];
+      const updateHint = () => {
+        hint.textContent = TransactionForm.attributionHint({ type: selectedType, isEdit, detail: detailSelect.value, hasDueDates: detailOptions.some(option => option.dueDate) });
+        hint.style.display = hint.textContent ? '' : 'none';
+      };
+      const renderAssets = current => {
+        const assetOptions = TransactionForm.attributionAssetOptions(assets, obligations, selectedType);
+        assetSelect.replaceChildren(...assetOptions.map(([value, label]) => create('option', { value, textContent: label })));
+        assetSelect.value = assetOptions.some(([value]) => value === current) ? current : '';
+      };
+      const renderDetail = keepValue => {
+        detailOptions = TransactionForm.attributionDetailOptions({ assetId: assetSelect.value, type: selectedType, obligations, rentals, isEdit, keep: initial.detail });
+        detailSelect.replaceChildren(...detailOptions.map(option => create('option', { value: option.value, textContent: option.label, disabled: Boolean(option.disabled) })));
+        detailSelect.value = detailOptions.some(option => option.value === keepValue && !option.disabled) ? keepValue : '';
+        detailGroup.style.display = assetSelect.value ? '' : 'none';
+        updateHint();
+      };
+      on(assetSelect, 'change', () => renderDetail(''));
+      on(detailSelect, 'change', () => {
+        // A due date on a new expense is paid with the whole movement: the amount follows the "Monto" of the form.
+        if (TransactionForm.attributionHint({ type: selectedType, isEdit, detail: detailSelect.value }) === TransactionForm.PAYMENT_HINT && MoneyInput.value(amount) === null && MoneyInput.value(amountInput) > 0) {
+          MoneyInput.setValue(amount, MoneyInput.value(amountInput));
+        }
+        updateHint();
+      });
+      renderAssets(initial.assetId);
+      renderDetail(initial.detail);
+      row._allocationFields = { asset: assetSelect, detail: detailSelect, amount, hint, refresh: () => { renderAssets(assetSelect.value); renderDetail(detailSelect.value); } };
       allocationRows.appendChild(row);
     };
+    // Rows of the form as { assetId, detail, amount } (amount null when empty).
+    const allocationEntries = () => [...allocationRows.children].filter(row => row._allocationFields).map(row => ({
+      assetId: row._allocationFields.asset.value, detail: row._allocationFields.detail.value, amount: MoneyInput.value(row._allocationFields.amount)
+    }));
+    // The type changes what the detail select offers (obligations for expenses, rentals for incomes).
+    function refreshAllocationRows() {
+      [...allocationRows.children].forEach(row => row._allocationFields?.refresh());
+    }
+    // Idempotency key of the payment a new expense may register (a double click replays instead of paying twice).
+    const paymentKey = globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`;
     (associationData?.allocations || []).forEach(addAllocationRow);
     const addAllocation = create('button', { className: 'btn btn-ghost btn-sm', type: 'button', textContent: '+ Añadir atribución', onClick: () => addAllocationRow() });
     const allocationCompleteLabel = create('label', { className: 'checkbox-label' });
@@ -727,13 +862,27 @@ const TransactionForm = {
       const installmentMode = chequeMode() || creditMode();
       if (installmentMode) {
         if (data.clasificacion === 'Mixto') return showToast('La clasificación Mixto no admite cuotas', 'error');
-        const targets = [...allocationRows.children].map(row => row._allocationFields.target.value).filter(Boolean);
+        // Installments only take one asset-level attribution (no obligation, due date or rental detail).
+        const targets = allocationEntries().filter(entry => entry.assetId).map(entry => (entry.detail || entry.assetId === TransactionForm.NO_ASSET ? `detail:${entry.detail}` : `asset:${entry.assetId}`));
         if (targets.some(value => !value.startsWith('asset:')) || targets.length > 1) return showToast('Las cuotas solo admiten la atribución a un bien', 'error');
         if (targets[0]) data.attributionAssetId = targets[0].split(':')[1];
         const collected = chequeMode() ? chequeFields.collect(data.monto) : creditFields.collect();
         if (collected.error) return showToast(collected.error, 'error');
         if (chequeMode()) data.chequeInstallments = collected.rows;
         else data.creditInstallments = collected;
+      }
+
+      const allocationResult = TransactionForm.allocationPayloads(allocationEntries());
+      if (allocationResult.error) return showToast(allocationResult.error, 'error');
+      // Second payment path: a new expense attributed to a due date is registered as a payment of it.
+      const payment = TransactionForm.obligationPaymentFor({ type: selectedType, isEdit, entries: allocationEntries(), total: data.monto, currency: accountCurrency() });
+      if (payment.error) return showToast(payment.error, 'error');
+      if (payment.occurrenceId) {
+        if (data.recurrente) return showToast('El pago de un vencimiento no puede ser recurrente', 'error');
+        if (!String(data.comments || '').trim()) return showToast('Los comentarios son obligatorios para registrar el pago de un vencimiento', 'error');
+        // An empty title takes the due date title, as in "Registrar pago".
+        data.titulo = titleInput.value.trim();
+        data.obligationPayment = { occurrenceId: payment.occurrenceId, idempotencyKey: paymentKey };
       }
 
       try {
@@ -753,26 +902,20 @@ const TransactionForm = {
           const created = await API.transactions.create(data);
           savedTransactionId = created.id;
         }
-        if (!transaction?.isRecurringInstance && selectedType !== 'refund' && !installmentMode) {
-          const allocations = [...allocationRows.querySelectorAll(':scope > div')].map(row => {
-            const { target, amount } = row._allocationFields;
-            const value = MoneyInput.value(amount);
-            if (!target.value || value === null) return null;
-            const [kind, id, occurrenceId] = target.value.split(':');
-            if (kind === 'asset') return { assetId: id, amount: value };
-            if (kind === 'obligation') return { obligationId: id, amount: value };
-            if (kind === 'contract') return { contractId: id, amount: value };
-            if (kind === 'obligationOccurrence') return { obligationId: id, occurrenceId, amount: value };
-            return { contractId: id, rentOccurrenceId: occurrenceId, amount: value };
-          }).filter(Boolean);
-          await API.finance.setAllocations(savedTransactionId, { allocations, complete: allocationComplete.checked });
+        // A payment carries no movement allocation (it would block "Revertir pago"): the payment link attributes it.
+        if (!transaction?.isRecurringInstance && selectedType !== 'refund' && !installmentMode && !payment.occurrenceId) {
+          await API.finance.setAllocations(savedTransactionId, { allocations: allocationResult.allocations, complete: allocationComplete.checked });
         }
         if (attachment.files().length && savedTransactionId) {
-          DocumentViewer.reportFailures((await DocumentViewer.uploadAll(attachment.files(), { transactionId: savedTransactionId })).failed, 'El movimiento');
+          // Receipts of a payment also belong to its due date, as with "Registrar pago".
+          const uploaded = payment.occurrenceId
+            ? await DocumentViewer.uploadAll(attachment.files(), { transactionId: savedTransactionId, occurrenceId: payment.occurrenceId })
+            : await DocumentViewer.uploadAll(attachment.files(), { transactionId: savedTransactionId });
+          DocumentViewer.reportFailures(uploaded.failed, 'El movimiento');
         }
         if (onSave) await onSave();
         Modal.hide();
-        showToast(isEdit ? 'Transacción actualizada' : installmentMode ? 'Cuotas guardadas' : 'Transacción guardada');
+        showToast(isEdit ? 'Transacción actualizada' : installmentMode ? 'Cuotas guardadas' : payment.occurrenceId ? 'Pago del vencimiento registrado' : 'Transacción guardada');
       } catch (err) {
         showToast(err.message, 'error');
       }
