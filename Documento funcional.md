@@ -1,6 +1,6 @@
 # SelimSystem — Documento funcional
 
-**Versión del producto:** 1.19.0
+**Versión del producto:** 1.19.1
 **Entorno productivo:** https://selimsystem.fly.dev
 **Fecha del documento:** 20/11/2026
 
@@ -553,7 +553,7 @@ Para corregir un cobro mal registrado (cuenta, clasificación o importe equivoca
 | **Cuenta** | Cuenta de pago, si se definió |
 | **Identificador** | Cuenta Nº / Contrato Nº del servicio |
 | **Monto estimado** | Importe y moneda |
-| **Frecuencia** | Única vez, Mensual, Cada dos meses, Trimestral, Semestral o Anual |
+| **Frecuencia** | Única vez, Mensual, Cada dos meses, Trimestral, Semestral o Anual. En una obligación nueva viene preseleccionada **Mensual** |
 | **Aviso** | Días de anticipación ("El mismo día", "7 días"...) |
 
 ### 11.2 Estados de un vencimiento

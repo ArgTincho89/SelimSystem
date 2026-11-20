@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.19.1] - 2026-11-20
+
+### Changed
+- Nueva obligación: la **Frecuencia** viene preseleccionada en **Mensual** (al editar se mantiene la frecuencia guardada).
+
 ## [1.19.0] - 2026-11-20
 
 ### Added
