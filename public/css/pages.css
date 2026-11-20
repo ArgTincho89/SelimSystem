@@ -2150,3 +2150,14 @@ body:not(.desktop-mode) .home-accounts .account-card-sub {
 .asset-drag-handle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .asset-card.is-dragging { opacity: 0.6; box-shadow: 0 0 0 2px var(--accent); }
 .asset-card.is-dragging .asset-drag-handle { cursor: grabbing; }
+
+/* Provider form: multiple expense categories as a scrollable checkbox list. */
+.category-multiselect {
+  display: grid;
+  gap: 6px;
+  max-height: 220px;
+  overflow-y: auto;
+  padding: var(--space-sm);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}

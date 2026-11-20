@@ -85,13 +85,14 @@ describe('Evolutivo 6 quick fixes UI contract', () => {
     };
     const hint = (Modal, kind) => Modal.show.mock.calls[0][1].find(item => item.dataset && item.dataset.categoryHint === kind);
 
-    it('loads the categories when the form opens, whatever the role, and fills the dropdown', async () => {
+    it('loads the categories when the form opens, whatever the role, and lists them as checkboxes', async () => {
       const { EntitiesPage, Modal, API } = setup(jest.fn().mockResolvedValue([{ id: 'c1', nombre: 'Servicios' }]));
       await EntitiesPage.showForm(new FakeElement('div'), 'tenant');
       expect(API.categories.list).toHaveBeenCalled();
       const form = Modal.show.mock.calls[0][1];
       expect(hint(Modal, 'empty')).toBeNull();
-      expect(form.findAll(item => item.tagName === 'OPTION').map(option => option.textContent)).toContain('Servicios');
+      const boxes = form.findAll(item => item.tagName === 'INPUT' && (item.type === 'checkbox' || item.attributes?.type === 'checkbox'));
+      expect(boxes.map(box => box.value ?? box.attributes?.value)).toContain('c1');
     });
 
     it('shows the empty-state hint when there are no categories', async () => {
