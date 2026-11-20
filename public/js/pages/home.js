@@ -844,30 +844,55 @@ const HomePage = {
     });
     heading.appendChild(privacyButton);
     section.appendChild(heading);
+    const groups = this.groupAccounts(accounts);
     const grid = create('div', {
-      className: `account-card-grid${accounts.length === 1 ? ' is-single' : accounts.length === 2 ? ' is-duo' : ''}`
+      className: `account-card-grid${groups.length === 1 ? ' is-single' : groups.length === 2 ? ' is-duo' : ''}`
     });
-    accounts.forEach(account => {
-      const card = create('article', { className: `account-card account-card-${account.presentation || 'default'}` });
-      const cardHeader = create('div', { className: 'account-card-heading' });
-      cardHeader.appendChild(create('span', { className: 'account-card-name', textContent: `${account.nombre}${account.primary ? ' · Principal' : ''}` }));
-      cardHeader.appendChild(create('span', { className: 'account-card-currency', textContent: account.currency }));
-      card.appendChild(cardHeader);
-      const balance = create('p', { className: 'account-card-balance sensitive-value' });
-      if (account.balanceStatus === 'verified') {
-        this.markSensitive(balance, formatearMoneda(account.balance, account.currency), 'accounts');
-      } else {
-        this.markSensitive(balance, '—', 'accounts');
-        balance.title = 'Saldo sin conciliar';
+    groups.forEach(({ account, children }) => {
+      const group = create('div', { className: 'account-group' });
+      group.appendChild(this.renderAccountCard(account, false));
+      if (children.length) {
+        const subList = create('div', { className: 'account-subcards', role: 'list', 'aria-label': `Sub-cuentas de ${account.nombre}` });
+        children.forEach(child => {
+          const card = this.renderAccountCard(child, true);
+          card.setAttribute('role', 'listitem');
+          subList.appendChild(card);
+        });
+        group.appendChild(subList);
       }
-      card.appendChild(balance);
-      const open = create('button', { className: 'btn btn-sm btn-ghost', type: 'button', textContent: 'Ver cuenta' });
-      on(open, 'click', () => Router.navigate('/settings?section=accounts'));
-      card.appendChild(open);
-      grid.appendChild(card);
+      grid.appendChild(group);
     });
     section.appendChild(grid);
     return section;
+  },
+
+  // Top-level accounts in their order, each followed by its sub-accounts; a sub-account whose
+  // parent is not in the list is shown as its own group.
+  groupAccounts(accounts) {
+    const ids = new Set(accounts.map(account => account.id));
+    return accounts
+      .filter(account => !account.parentId || !ids.has(account.parentId))
+      .map(account => ({ account, children: accounts.filter(child => child.parentId === account.id) }));
+  },
+
+  renderAccountCard(account, isSub) {
+    const card = create('article', { className: `account-card account-card-${account.presentation || 'default'}${isSub ? ' account-card-sub' : ''}` });
+    const cardHeader = create('div', { className: 'account-card-heading' });
+    cardHeader.appendChild(create('span', { className: 'account-card-name', textContent: `${isSub ? '↳ ' : ''}${account.nombre}${account.primary ? ' · Principal' : ''}` }));
+    cardHeader.appendChild(create('span', { className: 'account-card-currency', textContent: account.currency }));
+    card.appendChild(cardHeader);
+    const balance = create('p', { className: 'account-card-balance sensitive-value' });
+    if (account.balanceStatus === 'verified') {
+      this.markSensitive(balance, formatearMoneda(account.balance, account.currency), 'accounts');
+    } else {
+      this.markSensitive(balance, '—', 'accounts');
+      balance.title = 'Saldo sin conciliar';
+    }
+    card.appendChild(balance);
+    const open = create('button', { className: 'btn btn-sm btn-ghost', type: 'button', textContent: 'Ver cuenta' });
+    on(open, 'click', () => Router.navigate('/settings?section=accounts'));
+    card.appendChild(open);
+    return card;
   },
 
   // Two independent privacy scopes: 'accounts' (account balances, shared with Configuración > "Ocultar importes")
