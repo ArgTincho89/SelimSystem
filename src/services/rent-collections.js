@@ -2,6 +2,7 @@ const { v4: uuidv4 } = require('uuid');
 const ledger = require('./account-ledger');
 const incomeAttribution = require('./income-attribution');
 const rentals = require('./rentals');
+const rentMirror = require('./rent-mirror');
 
 /**
  * "Cobrar mes" split by modality. One collection group (`rentCollectionGroups`) holds one child
@@ -46,7 +47,8 @@ function lineFingerprint(lines) {
   return rentals.hash(JSON.stringify(lines.map(line => ({
     occurrenceId: line?.occurrenceId ?? null, amount: line?.amount ?? null, accountId: line?.accountId ?? null, date: line?.date || '',
     method: line?.method || '', paymentMethodId: line?.paymentMethodId || null, clasificacion: line?.clasificacion || null,
-    ...(line?.chequeDays !== undefined && line?.chequeDays !== null ? { chequeDays: line.chequeDays } : {})
+    ...(line?.chequeDays !== undefined && line?.chequeDays !== null ? { chequeDays: line.chequeDays } : {}),
+    ...(line?.tenantAccountId ? { tenantAccountId: line.tenantAccountId } : {})
   }))));
 }
 
@@ -75,8 +77,18 @@ function validateLine(db, userId, line, today) {
   if (allocation.error) return fail(allocation.error);
   const occurrence = db.findById('rentOccurrences', line.occurrenceId, userId);
   const contract = db.findById('rentalContracts', occurrence.contractId, userId);
+  const classified = { ...allocation.allocations[0], ...(line.clasificacion ? { clasificacion: line.clasificacion } : {}) };
+  const { clasificacion, ivaPercent } = rentals.classifyCollection(db, userId, [classified], amountMinor, null);
+  const ivaApplies = ivaPercent !== null && clasificacion === 'A';
+  const postingDate = cheque ? cheque.dueDate : date;
+  // A titular tenant also pays this line: its mirror expense is validated now, before anything is written.
+  const mirror = rentMirror.plan(db, userId, {
+    contract, occurrence, currency: account.currency, accountId: line.tenantAccountId, amountMinor, ivaPercent: ivaApplies ? ivaPercent : null,
+    ivaIncluded: ivaApplies, date: postingDate, paymentMethodId: paymentMethod?.id || null, method
+  });
+  if (mirror.error) return mirror;
   return { value: {
-    account, amountMinor, date, postingDate: cheque ? cheque.dueDate : date, cheque, paymentMethod, method, clasificacion: line.clasificacion || null,
+    account, amountMinor, date, postingDate, cheque, paymentMethod, method, clasificacion, ivaPercent, ivaApplies, mirror: mirror.value,
     allocation: allocation.allocations[0], modality: occurrence.modality || (contract ? rentals.modalityOf(contract) : null), assetId: contract?.assetId || null
   } };
 }
@@ -111,10 +123,7 @@ function createMonthCollection(db, userId, input = {}) {
     const transactionIds = [];
     planned.forEach((line, index) => {
       const collectionId = uuidv4();
-      const { account, amountMinor } = line;
-      const allocation = { ...line.allocation, ...(line.clasificacion ? { clasificacion: line.clasificacion } : {}) };
-      const { clasificacion, ivaPercent } = rentals.classifyCollection(db, userId, [allocation], amountMinor, null);
-      const ivaApplies = ivaPercent !== null && clasificacion === 'A';
+      const { account, amountMinor, clasificacion, ivaPercent, ivaApplies } = line;
       const amount = ledger.fromMinorUnits(amountMinor, account.currency);
       const lineKey = `${keyHash}:${index}`;
       const transaction = db.create('transactions', {
@@ -131,6 +140,10 @@ function createMonthCollection(db, userId, input = {}) {
         ...(line.cheque ? { cheque: line.cheque } : {}),
         idempotencyKey: lineKey, fingerprint
       }, userId);
+      if (line.mirror) {
+        const mirror = rentMirror.write(db, userId, line.mirror, { incomeTransactionId: transaction.id, collectionId });
+        db.update('rentCollections', collectionId, { mirrorTransactionId: mirror.id }, userId);
+      }
       db.create('rentCollectionAllocations', {
         collectionId, occurrenceId: line.allocation.occurrenceId, amountMinor: line.allocation.amountMinor,
         amount: ledger.fromMinorUnits(line.allocation.amountMinor, account.currency), currencyCode: account.currency
@@ -243,7 +256,8 @@ function collectionDetail(db, userId, id) {
     const base = {
       collectionId: collection.id, transactionId: collection.transactionId || null, date: collection.date, method: collection.method || '',
       accountId: collection.accountId || null, accountName: account ? (account.nombre || account.name || '') : '', currencyCode: collection.currencyCode,
-      clasificacion: clasificacion === 'Mixto' ? null : clasificacion, receivedDate: collection.receivedDate || null, cheque: collection.cheque || null
+      clasificacion: clasificacion === 'Mixto' ? null : clasificacion, receivedDate: collection.receivedDate || null, cheque: collection.cheque || null,
+      mirrorTransactionId: collection.mirrorTransactionId || null
     };
     const allocations = db.findAll('rentCollectionAllocations', userId).filter(item => item.collectionId === collection.id);
     let allocatedMinor = 0;
@@ -282,6 +296,8 @@ function collectionDetail(db, userId, id) {
   return {
     id: group ? group.id : collections[0].id, groupId: group ? group.id : null, legacy: !group,
     collectionIds: collections.map(item => item.id), transactionIds: collections.map(item => item.transactionId).filter(Boolean),
+    mirrorTransactionIds: collections.filter(item => !item.reversedAt).map(item => item.mirrorTransactionId).filter(Boolean),
+    mirrorTenant: mirrorTenantName(db, userId, collections),
     date: group ? group.date : collections[0].date, reversed: group ? Boolean(group.reversedAt) : collections.every(item => item.reversedAt),
     asset: asset ? { id: asset.id, name: asset.name } : null, declarationId: contract?.declarationId || null,
     tenants: tenantIds.map(tenantId => db.findById('legalOwners', tenantId, userId)?.name).filter(Boolean),
@@ -289,6 +305,14 @@ function collectionDetail(db, userId, id) {
     lines,
     totals: [...totals.values()].map(row => ({ ...row, amount: ledger.fromMinorUnits(row.amountMinor, row.currencyCode), ivaAmount: ledger.fromMinorUnits(row.ivaMinor, row.currencyCode) }))
   };
+}
+
+// Name of the titular tenant that holds the mirror expense of these collections (null without mirror).
+function mirrorTenantName(db, userId, collections) {
+  const mirror = rentMirror.mirrorsOf(db, userId, collections.filter(item => !item.reversedAt))[0];
+  const account = mirror ? db.findById('accounts', mirror.accountId, userId) : null;
+  const owner = account?.ownerId ? db.findById('legalOwners', account.ownerId, userId) : null;
+  return owner ? owner.name : null;
 }
 
 function dependentFor(db, userId, transaction) {
@@ -312,32 +336,44 @@ function reverseGroup(db, userId, group, storage = null, reason = null) {
     const dependent = transaction && dependentFor(db, userId, transaction);
     if (dependent) return fail(`Este cobro tiene ${dependent}; deshacé primero ese movimiento`, 409);
   }
+  for (const mirror of rentMirror.mirrorsOf(db, userId, collections)) {
+    const dependent = dependentFor(db, userId, mirror);
+    if (dependent) return fail(`El gasto espejo del inquilino tiene ${dependent}; deshacé primero ese movimiento`, 409);
+  }
+  const removedMirrorIds = [];
   const reopened = new Set();
   const removedDocuments = [];
   let reconciliationReset = false;
   const reversedAt = new Date().toISOString();
+  // Removes one movement of the collection (the income or its mirror expense) with its receipts and reconciliation.
+  const drop = (transaction, collection) => {
+    const account = db.findById('accounts', transaction.accountId || collection.accountId, userId);
+    if (account && account.reconciled && account.openingDate && (collection.date < account.openingDate || (account.includedMovementIds || []).includes(transaction.id))) {
+      db.update('accounts', account.id, { reconciled: false, includedMovementIds: (account.includedMovementIds || []).filter(id => id !== transaction.id) }, userId);
+      reconciliationReset = true;
+    }
+    db.findAll('documents', userId).filter(item => item.transactionId === transaction.id).forEach(item => {
+      if (!NON_TRANSACTION_TARGETS.some(field => item[field])) { db.remove('documents', item.id, userId); removedDocuments.push(item); }
+      else db.update('documents', item.id, { transactionId: null, detachedFromCollectionId: collection.id }, userId);
+    });
+    db.remove('transactions', transaction.id, userId);
+  };
   const written = atomically(db, userId, () => {
     collections.forEach(collection => {
       const transaction = db.findById('transactions', collection.transactionId, userId);
+      const mirror = rentMirror.mirrorsOf(db, userId, [collection])[0] || null;
       const collectionOccurrenceIds = [];
       db.findAll('rentCollectionAllocations', userId).filter(item => item.collectionId === collection.id).forEach(item => {
         reopened.add(item.occurrenceId);
         collectionOccurrenceIds.push(item.occurrenceId);
         db.remove('rentCollectionAllocations', item.id, userId);
       });
-      if (transaction) {
-        const account = db.findById('accounts', transaction.accountId || collection.accountId, userId);
-        if (account && account.reconciled && account.openingDate && (collection.date < account.openingDate || (account.includedMovementIds || []).includes(transaction.id))) {
-          db.update('accounts', account.id, { reconciled: false, includedMovementIds: (account.includedMovementIds || []).filter(id => id !== transaction.id) }, userId);
-          reconciliationReset = true;
-        }
-        db.findAll('documents', userId).filter(item => item.transactionId === transaction.id).forEach(item => {
-          if (!NON_TRANSACTION_TARGETS.some(field => item[field])) { db.remove('documents', item.id, userId); removedDocuments.push(item); }
-          else db.update('documents', item.id, { transactionId: null, detachedFromCollectionId: collection.id }, userId);
-        });
-        db.remove('transactions', transaction.id, userId);
-      }
-      db.update('rentCollections', collection.id, { reversedAt, reversedTransactionId: transaction?.id || null, reversedOccurrenceIds: [...new Set(collectionOccurrenceIds)], ...reasonFields }, userId);
+      if (transaction) drop(transaction, collection);
+      if (mirror) { drop(mirror, collection); removedMirrorIds.push(mirror.id); }
+      db.update('rentCollections', collection.id, {
+        reversedAt, reversedTransactionId: transaction?.id || null, reversedOccurrenceIds: [...new Set(collectionOccurrenceIds)],
+        ...(mirror ? { reversedMirrorTransactionId: mirror.id } : {}), ...reasonFields
+      }, userId);
     });
     db.update(GROUPS, group.id, { reversedAt, ...reasonFields }, userId);
   }, 'No se pudo deshacer el cobro');
@@ -346,7 +382,7 @@ function reverseGroup(db, userId, group, storage = null, reason = null) {
   ledger.refreshAlerts(db, userId);
   return {
     ok: true, collectionId: group.id, groupId: group.id, collectionIds: group.collectionIds, reopenedOccurrenceIds: [...reopened],
-    reconciliationReset, deletedDocumentIds: removedDocuments.map(item => item.id)
+    reconciliationReset, deletedDocumentIds: removedDocuments.map(item => item.id), deletedMirrorTransactionIds: removedMirrorIds
   };
 }
 

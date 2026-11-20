@@ -3,6 +3,12 @@ const RentalDeclarationModal = {
   MODALITIES: [['locacion', 'Contrato de locación'], ['comodato', 'Comodato'], ['mutuo', 'Mutuo']],
   CURRENCIES: ['ARS', 'EUR', 'USD'],
 
+  // Pure: tenant options of the declaration. Every entity with the tenant role (also a titular that is a tenant),
+  // minus the current holders of the asset; tenants already selected stay listed.
+  tenantChoices(owners, holderIds, selectedIds = new Set()) {
+    return (owners || []).filter(item => (item.roles || ['owner']).includes('tenant') && (!holderIds.has(item.id) || selectedIds.has(item.id)));
+  },
+
   today() { return new Date().toISOString().slice(0, 10); },
 
   field(container, label, control) {
@@ -74,12 +80,19 @@ const RentalDeclarationModal = {
     try { owners = await API.owners.list(); } catch (error) { showToast(error.message, 'error'); return; }
     const body = create('div', { style: { maxHeight: '65vh', overflowY: 'auto', paddingRight: '4px' } });
     const tenantSelect = create('select', { className: 'form-control', multiple: true, 'aria-label': 'Inquilino' });
-    owners.filter(item => (item.roles || ['owner']).includes('tenant')).forEach(item => tenantSelect.appendChild(create('option', { value: item.id, textContent: item.name })));
-    tenantSelect.size = Math.min(Math.max(tenantSelect.options.length, 2), 5);
     const tenantIds = new Set((declaration?.tenants || []).map(item => item.id));
+    // Every entity with the tenant role (a titular can also be a tenant), except the current titulares of this asset.
+    const today = new Date().toISOString().slice(0, 10);
+    const holderIds = new Set((asset.ownerships || []).filter(item => !item.endDate || item.endDate >= today).map(item => item.ownerId));
+    const tenantChoices = this.tenantChoices(owners, holderIds, tenantIds);
+    tenantChoices.forEach(item => tenantSelect.appendChild(create('option', { value: item.id, textContent: item.name })));
+    tenantSelect.size = Math.min(Math.max(tenantSelect.options.length, 2), 5);
     [...tenantSelect.options].forEach(option => { option.selected = tenantIds.has(option.value); });
     this.field(body, 'Inquilino', tenantSelect);
     if (!tenantSelect.options.length) body.appendChild(create('small', { className: 'text-muted', textContent: 'Cargá un inquilino en Personas para poder declarar el alquiler.' }));
+    if (owners.some(item => holderIds.has(item.id) && (item.roles || []).includes('tenant') && !tenantIds.has(item.id))) {
+      body.appendChild(create('small', { className: 'text-muted', dataset: { selfRentHint: 'true' }, textContent: 'Los titulares de este inmueble no aparecen: un titular no puede alquilar su propio bien.' }));
+    }
 
     const sets = new Map();
     const checks = create('div', { style: { display: 'grid', gap: '4px', margin: '8px 0' } });

@@ -124,6 +124,11 @@ function validateContract(db, userId, input, existing = null, assetHint = null) 
     const tenant = db.findById('legalOwners', tenantId, userId);
     if (!tenant || !(tenant.roles || ['owner']).includes('tenant')) return { error: 'Uno de los inquilinos no es válido' };
   }
+  // A titular can rent someone else's asset (evolutivo-13), never its own: no tenant may be a current holder of the asset.
+  const today = ledger.localDateForUser(db, userId);
+  const holderIds = new Set(db.findAll('assetOwnerships', userId).filter(item => item.assetId === asset.id && (!item.endDate || item.endDate >= today)).map(item => item.ownerId));
+  const selfTenant = value.tenantIds.map(id => db.findById('legalOwners', id, userId)).find(tenant => holderIds.has(tenant.id));
+  if (selfTenant) return { error: `${selfTenant.name} es titular de este inmueble: un titular no puede alquilar su propio bien` };
   if (!CONTRACT_STATES.has(value.status || 'active')) return { error: 'El estado del contrato no es válido' };
   if (!Array.isArray(value.includedExpenses || [])) return { error: 'Los gastos incluidos deben ser una lista' };
   if ((value.includedExpenses || []).some(item => typeof item !== 'string' || item.trim().length > 120)) return { error: 'Hay un gasto incluido no válido' };
@@ -313,7 +318,7 @@ function occurrenceView(db, userId, occurrence, today) {
     paidAmount: ledger.fromMinorUnits(paidMinor, occurrence.currencyCode),
     remainingAmount: ledger.fromMinorUnits(remainingMinor, occurrence.currencyCode),
     allocations: allocations.map(item => ({ ...item, collection: db.findById('rentCollections', item.collectionId, userId) })),
-    contract: contract ? { id: contract.id, assetId: contract.assetId, type: contract.type, status: contract.status, declarationId: contract.declarationId || null } : null
+    contract: contract ? { id: contract.id, assetId: contract.assetId, type: contract.type, status: contract.status, declarationId: contract.declarationId || null, tenantIds: contract.tenantIds || [] } : null
   };
 }
 
@@ -424,7 +429,7 @@ function monthViews(occurrenceViews, today) {
       parts: month.parts.map(part => ({
         occurrenceId: part.id, contractId: part.contractId, modality: part.modality, currencyCode: part.currencyCode, status: part.status,
         rentMinor: part.rentMinor, paidMinor: part.paidMinor, remainingMinor: part.remainingMinor, ivaPercent: part.ivaPercent ?? null,
-        rentAmount: part.rentAmount, paidAmount: part.paidAmount, remainingAmount: part.remainingAmount,
+        rentAmount: part.rentAmount, paidAmount: part.paidAmount, remainingAmount: part.remainingAmount, tenantIds: part.contract?.tenantIds || [],
         collectionIds: [...new Set(part.allocations.map(item => item.collectionId))]
       })),
       collectionIds: [...new Set(month.parts.flatMap(part => part.allocations.map(item => item.collectionId)))]
@@ -458,6 +463,12 @@ function reverseCollection(db, userId, collectionId, storage = null, reason = nu
     const dependent = movementDependents.dependentMovement(db, userId, transaction, { claims: false });
     if (dependent) return { status: 409, error: `Este cobro tiene ${dependent}; deshacé primero ese movimiento` };
   }
+  // The mirror expense of a titular tenant (evolutivo-13) goes away with the collection.
+  const mirror = collection.mirrorTransactionId ? db.findById('transactions', collection.mirrorTransactionId, userId) : null;
+  const mirrorDependent = mirror && movementDependents.dependentMovement(db, userId, mirror, { claims: false });
+  if (mirrorDependent) return { status: 409, error: `El gasto espejo del inquilino tiene ${mirrorDependent}; deshacé primero ese movimiento` };
+  const mirrorAccount = mirror && db.findById('accounts', mirror.accountId, userId);
+  const resetsMirrorReconciliation = Boolean(mirrorAccount && mirrorAccount.reconciled && (mirrorAccount.includedMovementIds || []).includes(mirror.id));
   const account = transaction && db.findById('accounts', transaction.accountId || collection.accountId, userId);
   const resetsReconciliation = Boolean(account && account.reconciled && account.openingDate && (collection.date < account.openingDate || (account.includedMovementIds || []).includes(transaction.id)));
   const allocations = db.findAll('rentCollectionAllocations', userId).filter(item => item.collectionId === collection.id);
@@ -466,24 +477,32 @@ function reverseCollection(db, userId, collectionId, storage = null, reason = nu
   const removedAllocations = [];
   const removedDocuments = [];
   let removedTransaction = null;
+  let removedMirror = null;
   try {
     allocations.forEach(item => { db.remove('rentCollectionAllocations', item.id, userId); removedAllocations.push(item); });
     if (transaction) { db.remove('transactions', transaction.id, userId); removedTransaction = transaction; }
-    db.update('rentCollections', collection.id, { reversedAt: new Date().toISOString(), reversedTransactionId: transaction?.id || null, reversedOccurrenceIds: [...new Set(allocations.map(item => item.occurrenceId))], ...(reason ? { reversalReason: reason } : {}) }, userId);
+    if (mirror) { db.remove('transactions', mirror.id, userId); removedMirror = mirror; }
+    db.update('rentCollections', collection.id, {
+      reversedAt: new Date().toISOString(), reversedTransactionId: transaction?.id || null, reversedOccurrenceIds: [...new Set(allocations.map(item => item.occurrenceId))],
+      ...(mirror ? { reversedMirrorTransactionId: mirror.id } : {}), ...(reason ? { reversalReason: reason } : {})
+    }, userId);
     documents.forEach(item => {
       if (onlyTarget(item)) { db.remove('documents', item.id, userId); removedDocuments.push(item); }
       else db.update('documents', item.id, { transactionId: null, detachedFromCollectionId: collection.id }, userId);
     });
     if (resetsReconciliation) db.update('accounts', account.id, { reconciled: false, includedMovementIds: (account.includedMovementIds || []).filter(id => id !== transaction.id) }, userId);
+    if (resetsMirrorReconciliation) db.update('accounts', mirrorAccount.id, { reconciled: false, includedMovementIds: mirrorAccount.includedMovementIds.filter(id => id !== mirror.id) }, userId);
   } catch {
     db.clearCache();
     try {
       removedAllocations.forEach(item => { if (!db.findById('rentCollectionAllocations', item.id, userId)) db.create('rentCollectionAllocations', item, userId); });
       if (removedTransaction && !db.findById('transactions', removedTransaction.id, userId)) db.create('transactions', removedTransaction, userId);
+      if (removedMirror && !db.findById('transactions', removedMirror.id, userId)) db.create('transactions', removedMirror, userId);
       removedDocuments.forEach(item => { if (!db.findById('documents', item.id, userId)) db.create('documents', item, userId); });
       documents.filter(item => !onlyTarget(item)).forEach(item => { if (db.findById('documents', item.id, userId)) db.update('documents', item.id, { transactionId: item.transactionId, detachedFromCollectionId: item.detachedFromCollectionId ?? null }, userId); });
       if (db.findById('rentCollections', collection.id, userId)?.reversedAt) db.update('rentCollections', collection.id, { reversedAt: null, reversedTransactionId: null, reversalReason: null }, userId);
       if (resetsReconciliation) db.update('accounts', account.id, { reconciled: true, includedMovementIds: account.includedMovementIds || [] }, userId);
+      if (resetsMirrorReconciliation) db.update('accounts', mirrorAccount.id, { reconciled: true, includedMovementIds: mirrorAccount.includedMovementIds }, userId);
     } catch { /* best effort restore */ }
     db.clearCache();
     return { status: 500, error: 'No se pudo deshacer el cobro' };
@@ -492,7 +511,8 @@ function reverseCollection(db, userId, collectionId, storage = null, reason = nu
   ledger.refreshAlerts(db, userId);
   return {
     ok: true, collectionId: collection.id, reopenedOccurrenceIds: [...new Set(allocations.map(item => item.occurrenceId))],
-    reconciliationReset: resetsReconciliation, deletedDocumentIds: removedDocuments.map(item => item.id)
+    reconciliationReset: resetsReconciliation || resetsMirrorReconciliation, deletedDocumentIds: removedDocuments.map(item => item.id),
+    deletedMirrorTransactionIds: mirror ? [mirror.id] : []
   };
 }
 

@@ -5,6 +5,7 @@ const ledger = require('../services/account-ledger');
 const incomeAttribution = require('../services/income-attribution');
 const rentals = require('../services/rentals');
 const rentCollections = require('../services/rent-collections');
+const rentMirror = require('../services/rent-mirror');
 const rentSchedule = require('../services/rent-schedule');
 const { parseReason, REASON_ERROR } = require('../services/reasons');
 const activityLog = require('../services/activity-log');
@@ -217,7 +218,7 @@ router.post('/collections', (req, res) => {
   const key = input.idempotencyKey;
   if (typeof key !== 'string' || key.length < 8 || key.length > 120) return res.status(400).json({ error: 'Se requiere una clave de idempotencia válida' });
   const keyHash = rentals.hash(key);
-  const fingerprint = rentals.hash(JSON.stringify({ amount: input.amount, accountId: input.accountId, date: input.date, method: input.method || '', clasificacion: input.clasificacion || null, allocations: input.allocations || [] }));
+  const fingerprint = rentals.hash(JSON.stringify({ amount: input.amount, accountId: input.accountId, date: input.date, method: input.method || '', clasificacion: input.clasificacion || null, allocations: input.allocations || [], ...(input.tenantAccountId ? { tenantAccountId: input.tenantAccountId } : {}) }));
   const prior = db.findAll('rentCollections', userId).find(item => item.idempotencyKey === keyHash);
   if (prior) {
     if (prior.reversedAt) return res.status(409).json({ error: 'Ese cobro fue deshecho; registrá uno nuevo' });
@@ -246,9 +247,20 @@ router.post('/collections', (req, res) => {
   const { clasificacion, ivaPercent } = classification;
   const ivaApplies = ivaPercent !== null && (clasificacion === 'A' || clasificacion === 'Mixto');
   const montoAMinor = clasificacion === 'Mixto' ? classification.montoAMinor : null;
+  // Titular tenant (evolutivo-13): the whole amount is also its expense. Only a fully A collection carries the IVA
+  // to the mirror (an expense has no A/B split, so a Mixto collection mirrors without IVA).
+  const firstOccurrence = allocationResult.allocations.length ? db.findById('rentOccurrences', allocationResult.allocations[0].occurrenceId, userId) : null;
+  const mirrorIva = ivaApplies && clasificacion === 'A';
+  const mirrorPlan = firstOccurrence ? rentMirror.plan(db, userId, {
+    contract: db.findById('rentalContracts', firstOccurrence.contractId, userId), occurrence: firstOccurrence, currency: account.currency,
+    accountId: input.tenantAccountId, amountMinor, ivaPercent: mirrorIva ? ivaPercent : null, ivaIncluded: mirrorIva, date,
+    paymentMethodId: paymentMethod?.id || null, method: methodLabel || paymentMethod?.name || ''
+  }) : { value: null };
+  if (mirrorPlan.error) return res.status(400).json({ error: mirrorPlan.error });
   const collectionId = uuidv4();
   let transaction;
   let collection;
+  let mirror;
   const savedAllocations = [];
   try {
     transaction = db.create('transactions', {
@@ -269,15 +281,20 @@ router.post('/collections', (req, res) => {
       collectionId: collection.id, occurrenceId: item.occurrenceId, amountMinor: item.amountMinor,
       amount: ledger.fromMinorUnits(item.amountMinor, account.currency), currencyCode: account.currency
     }, userId)));
+    if (mirrorPlan.value) {
+      mirror = rentMirror.write(db, userId, mirrorPlan.value, { incomeTransactionId: transaction.id, collectionId });
+      collection = db.update('rentCollections', collection.id, { mirrorTransactionId: mirror.id }, userId);
+    }
   } catch {
     savedAllocations.forEach(item => db.remove('rentCollectionAllocations', item.id, userId));
+    if (mirror) db.remove('transactions', mirror.id, userId);
     if (transaction) db.remove('transactions', transaction.id, userId);
     if (collection) db.remove('rentCollections', collection.id, userId);
     db.clearCache();
     return res.status(500).json({ error: 'No se pudo registrar el cobro' });
   }
   res.locals.activityMeta = {
-    facts: { amount: collection.amount, currencyCode: collection.currencyCode },
+    facts: { amount: collection.amount, currencyCode: collection.currencyCode, details: mirror ? [`con el gasto espejo de ${mirrorPlan.value.tenant.name}`] : [] },
     undo: { type: 'rental.collection', collectionId: collection.id }
   };
   res.status(201).json(rentals.collectionView(db, userId, collection));
@@ -309,6 +326,7 @@ function collectionDetails(detail, balance) {
   const cheques = new Map();
   detail.lines.filter(line => line.cheque).forEach(line => cheques.set(line.collectionId, line.cheque));
   cheques.forEach(cheque => details.push(`cheque a ${cheque.days} días, se cobra el ${cheque.dueDate.split('-').reverse().join('/')}`));
+  if (detail.mirrorTransactionIds && detail.mirrorTransactionIds.length) details.push(`con el gasto espejo de ${detail.mirrorTenant || 'el inquilino'}`);
   return details;
 }
 
@@ -353,6 +371,7 @@ router.post('/collections/:id/reverse', (req, res) => {
   const result = rentals.reverseCollection(db, userId, req.params.id, req.app.locals.documentStorage, reason);
   if (result.error) return res.status(result.status || 409).json({ error: result.error });
   res.locals.activityNote = reason;
+  if (result.deletedMirrorTransactionIds && result.deletedMirrorTransactionIds.length) res.locals.activityMeta = { facts: { details: ['también se eliminó el gasto espejo del inquilino'] } };
   res.json(result);
 });
 
