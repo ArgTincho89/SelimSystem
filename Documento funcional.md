@@ -366,7 +366,8 @@ Reglas generales: se consideran avisos hasta 90 días hacia adelante y se muestr
 ### 9.1 Lista de bienes
 
 - **Avisos de alquiler** (si existen): accesos rápidos a alquileres pendientes y vencimientos de contratos.
-- **Filtros:** cada campo tiene su etiqueta visible encima: **Tipo de bien** (Todos / Mueble / Inmueble), **Tipo de inmueble** (solo aparece al elegir Inmueble; ofrece los tipos ya creados: Departamento, Casa, Galpón, Lote y los agregados), **Titular legal** y **Estado** (Todos / Alquilado / No alquilado; "No alquilado" incluye todo bien sin alquiler vigente), con los botones **Filtrar** y **Limpiar**. Los buscadores de Obligaciones (Bien, Proveedor, Estado, Tipo, Desde, Hasta) y Avisos (Tipo de aviso, Responsable, Bien) también muestran etiquetas visibles.
+- **Filtros:** cada campo tiene su etiqueta visible encima: **Tipo de bien** (Todos / Mueble / Inmueble), **Tipo de inmueble** (solo aparece al elegir Inmueble; ofrece los tipos ya creados: Departamento, Casa, Galpón, Local, Lote y los agregados), **Titular legal** y **Estado** (Todos / Alquilado / No alquilado; "No alquilado" incluye todo bien sin alquiler vigente), con los botones **Filtrar** y **Limpiar**. Los buscadores de Obligaciones (Bien, Proveedor, Estado, Tipo, Desde, Hasta) y Avisos (Tipo de aviso, Responsable, Bien) también muestran etiquetas visibles.
+- **Orden de las tarjetas:** se arrastra cada tarjeta desde su agarre **⋮⋮** (con el mouse o el dedo) para reordenarla; con el agarre enfocado, las flechas ↑/↓ la mueven de a un lugar. El orden se guarda y se mantiene en todos los dispositivos. Con filtros activos, solo cambia el orden entre los bienes visibles. Los bienes nuevos se agregan al final.
 - Cada bien muestra su nombre y dos líneas con los nombres de los datos en negrita: "**Inmueble** · **Tipo:** Galpón · **Ubicación:** …" (en muebles, "**Mueble** · **Detalle:** …") y "**Estado:** Alquilado / No alquilado · **Titular:** …". Los datos vacíos no se muestran. Botones:
 
 | Botón | Qué hace |
@@ -388,7 +389,7 @@ Reglas generales: se consideran avisos hasta 90 días hacia adelante y se muestr
 
 | Mueble | Inmueble |
 |---|---|
-| Tipo (Automóvil) | Tipo: Departamento, Casa, Galpón, Lote o un **tipo propio** (obligatorio). Con **Agregar tipo…** se crea uno nuevo (hasta 50 caracteres, sin repetir ninguno existente aunque cambien mayúsculas o acentos) y queda seleccionado. Los tipos propios no se renombran ni se eliminan, y los contratos de esos bienes usan el tipo "residencial". |
+| Tipo (Automóvil) | Tipo: Departamento, Casa, Galpón, Local, Lote o un **tipo propio** (obligatorio). Un **Local** alquilado genera un contrato de tipo "comercial" (un Galpón, "industrial"). Con **Agregar tipo…** se crea uno nuevo (hasta 50 caracteres, sin repetir ninguno existente aunque cambien mayúsculas o acentos) y queda seleccionado. Los tipos propios no se renombran ni se eliminan, y los contratos de esos bienes usan el tipo "residencial". |
 | Marca | Características |
 | Dominio | Ubicación |
 | KMs | Superficie cubierta (m²) y Superficie libre (m²), enteros ≥ 0 |
