@@ -283,7 +283,7 @@ const ObligationsPage = {
     }
     this.fieldWrap(form, 'Cuenta o contrato', identifierKind);
     const externalIdentifier = this.field(form, 'Número de cuenta o contrato', { value: existing?.externalIdentifier || '' });
-    const frequency = this.select([['', 'Única vez'], ['monthly', 'Mensual'], ['bimonthly', 'Cada dos meses'], ['quarterly', 'Trimestral'], ['semiannual', 'Semestral'], ['annual', 'Anual']], existing?.recurrenceFrequency || '');
+    const frequency = this.select([['', 'Única vez'], ['monthly', 'Mensual'], ['bimonthly', 'Cada dos meses'], ['quarterly', 'Trimestral'], ['semiannual', 'Semestral'], ['annual', 'Anual']], existing ? (existing.recurrenceFrequency || '') : 'monthly');
     this.fieldWrap(form, 'Frecuencia', frequency);
     const date = this.field(form, 'Primer vencimiento', { type: 'date', required: true, value: existing?.startDate || new Date().toISOString().slice(0, 10) });
     const endDate = this.field(form, 'Último vencimiento (opcional)', { type: 'date', value: existing?.endDate || '' });
