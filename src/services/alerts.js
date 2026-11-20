@@ -4,19 +4,21 @@ const obligations = require('./obligations');
 const rentals = require('./rentals');
 const installments = require('./credit-card-installments');
 const rentCollections = require('./rent-collections');
+const alertConfig = require('./alert-config');
+const { isPendingTransaction } = require('../utils/transaction-status');
 
 const ALERT_TYPES = [
   'obligation_due', 'obligation_overdue', 'partial_payment', 'tenant_obligation_pending', 'rent_due',
-  'contract_expiry', 'rent_adjustment_due', 'card_installment_due', 'account_forecast', 'document_pending', 'cheque_due'
+  'contract_expiry', 'rent_adjustment_due', 'card_installment_due', 'account_forecast', 'document_pending', 'cheque_due',
+  'transaction_cheque_due', 'credit_installment_upcoming'
 ];
 // Alerts the tenant answers for (the rent side). Everything else affects the owner's own finances.
 const TENANT_TYPES = new Set(['tenant_obligation_pending', 'rent_due', 'contract_expiry', 'rent_adjustment_due', 'cheque_due']);
-// A cheque received for a rent is announced this many days before its collection date (and stays until cashed).
-const CHEQUE_LEAD_DAYS = 7;
+// Default lead of rent cheques (the effective value comes from the alert configuration).
+const CHEQUE_LEAD_DAYS = alertConfig.entryFor('cheque_due').defaultDays;
 const RESPONSIBILITIES = ['owner', 'tenant'];
 const DEFAULT_HORIZON_DAYS = 90;
 const DEFAULT_LIMIT = 200;
-const DOCUMENT_LOOKBACK_DAYS = 60;
 
 const MONTHS = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
 const SYMBOLS = { ARS: '$', EUR: '€', USD: 'US$' };
@@ -37,6 +39,10 @@ function money(amount, currencyCode) {
 
 function plural(count, one, many) {
   return `${count} ${count === 1 ? one : many}`;
+}
+
+function shortDate(date) {
+  return `${date.slice(8, 10)}/${date.slice(5, 7)}/${date.slice(0, 4)}`;
 }
 
 function countdown(daysAway) {
@@ -90,6 +96,8 @@ function build(db, userId, today, filters) {
   const ownerName = id => (id ? db.findById('legalOwners', id, userId)?.name || null : null);
   const documents = db.findAll('documents', userId);
   const contracts = db.findAll('rentalContracts', userId);
+  const leadDaysFor = alertConfig.resolver(db, userId);
+  const withinLead = (date, lead) => date < today || date <= addDaysDateOnly(today, lead);
 
   const push = (alert, holders = []) => {
     const assetLabel = alert.assetName === undefined ? assetName(alert.assetId) : alert.assetName;
@@ -98,8 +106,10 @@ function build(db, userId, today, filters) {
   };
 
   db.findAll(obligations.COLLECTION, userId).filter(item => item.status === 'active').forEach(obligation => {
-    const lead = obligation.reminderLeadDays ?? 7;
-    const horizon = addDaysDateOnly(today, lead);
+    const target = { assetId: obligation.assetId || null, obligationId: obligation.id };
+    const lead = leadDaysFor('obligation_due', target);
+    const tenantLead = leadDaysFor('tenant_obligation_pending', target);
+    const horizon = addDaysDateOnly(today, Math.max(lead, tenantLead));
     let occurrences;
     try {
       occurrences = obligations.occurrencesFor(view, userId, obligation, { to: horizon });
@@ -117,12 +127,13 @@ function build(db, userId, today, filters) {
       currencyCode: occurrence.currencyCode, reminderLeadDays: lead, title: occurrence.title
     });
     const inWindow = occurrence => occurrence.date < today || occurrence.date <= horizon;
+    const ownerWindow = occurrence => withinLead(occurrence.date, lead);
 
     occurrences.filter(occurrence => !['cancelled', 'resolved'].includes(occurrence.status) && inWindow(occurrence)).forEach(occurrence => {
       const daysAway = dateOnlyDaysBetween(today, occurrence.date);
       const overdue = occurrence.date < today;
       const paid = occurrence.totalPaid > 0;
-      if (obligations.responsibilityFor(obligation, occurrence).responsibilityType !== 'none' && occurrence.status !== 'paid' && occurrence.remainingAmount > 0) {
+      if (ownerWindow(occurrence) && obligations.responsibilityFor(obligation, occurrence).responsibilityType !== 'none' && occurrence.status !== 'paid' && occurrence.remainingAmount > 0) {
         const amountText = money(occurrence.remainingAmount, occurrence.currencyCode);
         if (paid) {
           push({
@@ -145,11 +156,11 @@ function build(db, userId, today, filters) {
         }
       }
       // The tenant portion is only chased once the owner portion is settled; a resolution closes it.
-      if (occurrence.tenantDueAmount !== undefined && !occurrence.resolution && occurrence.remainingAmount === 0) {
+      if (withinLead(occurrence.date, tenantLead) && occurrence.tenantDueAmount !== undefined && !occurrence.resolution && occurrence.remainingAmount === 0) {
         const tenantName = ownerName(tenantId) || 'El inquilino';
         const who = tenantId ? `El inquilino ${tenantName}` : 'El inquilino';
         push({
-          ...common(occurrence), id: `tenant:${obligation.id}:${occurrence.date}`, type: 'tenant_obligation_pending', date: occurrence.date,
+          ...common(occurrence), reminderLeadDays: tenantLead, id: `tenant:${obligation.id}:${occurrence.date}`, type: 'tenant_obligation_pending', date: occurrence.date,
           status: overdue ? 'overdue' : 'pending', tenantEntityId: tenantId, amount: occurrence.tenantRemainingAmount,
           message: `${who} debe enviar el comprobante de pago de ${occurrence.title}${where}. ${overdue ? 'Venció' : 'Vence'} el ${longDate(occurrence.date)}.`
         }, holders);
@@ -157,7 +168,7 @@ function build(db, userId, today, filters) {
     });
 
     // Paid owner occurrences without any receipt attached (recent ones only).
-    const since = addDaysDateOnly(today, -DOCUMENT_LOOKBACK_DAYS);
+    const since = addDaysDateOnly(today, -leadDaysFor('document_pending', target));
     occurrences.filter(occurrence => occurrence.status === 'paid' && !isVirtual(occurrence.id) && occurrence.date >= since && occurrence.date <= today).forEach(occurrence => {
       const hasReceipt = documents.some(document => document.occurrenceId === occurrence.id || (document.transactionId && (occurrence.paymentIds || []).includes(document.transactionId)));
       if (hasReceipt) return;
@@ -169,9 +180,10 @@ function build(db, userId, today, filters) {
     });
   });
 
-  const rentLead = settings?.alertLeadDays || 5;
-  rentals.rentAlerts(view, userId, { today, leadDays: rentLead, expiryDays: 30, adjustmentDays: 30 }).forEach(raw => {
+  const rentWindow = { today, leadDays: leadDaysFor.max('rent_due'), expiryDays: leadDaysFor.max('contract_expiry'), adjustmentDays: leadDaysFor.max('rent_adjustment_due') };
+  rentals.rentAlerts(view, userId, rentWindow).forEach(raw => {
     const { tenantIds, ...alert } = raw;
+    if (!withinLead(alert.date, leadDaysFor(alert.type, { assetId: alert.assetId }))) return;
     const asset = assetName(alert.assetId);
     const daysAway = dateOnlyDaysBetween(today, alert.date);
     const tenant = tenantIds[0] || null;
@@ -194,7 +206,8 @@ function build(db, userId, today, filters) {
   });
 
   // Rent cheques close to (or past) their collection date that are not marked as cashed yet.
-  rentCollections.chequeAlerts(db, userId, { today, leadDays: CHEQUE_LEAD_DAYS }).forEach(item => {
+  rentCollections.chequeAlerts(db, userId, { today, leadDays: leadDaysFor.max('cheque_due') }).forEach(item => {
+    if (!withinLead(item.date, leadDaysFor('cheque_due', { assetId: item.assetId }))) return;
     const asset = assetName(item.assetId);
     const tenantNames = item.tenantIds.map(ownerName).filter(Boolean);
     const period = item.period ? `${monthName(item.period)} ${item.period.slice(0, 4)}` : '';
@@ -216,7 +229,7 @@ function build(db, userId, today, filters) {
   const plans = new Map(db.findAll(installments.PLANS, userId).filter(plan => plan.status === 'active').map(plan => [plan.id, plan]));
   db.findAll(installments.OCCURRENCES, userId).filter(occurrence => occurrence.status === 'scheduled' && plans.has(occurrence.planId)).forEach(occurrence => {
     const plan = plans.get(occurrence.planId);
-    const lead = plan.reminderLeadDays ?? 5;
+    const lead = leadDaysFor('card_installment_due', { assetId: plan.assetId || null, accountId: plan.accountId || null });
     if (occurrence.dueDate >= today && occurrence.dueDate > addDaysDateOnly(today, lead)) return;
     const overdue = occurrence.dueDate < today;
     const daysAway = dateOnlyDaysBetween(today, occurrence.dueDate);
@@ -231,6 +244,8 @@ function build(db, userId, today, filters) {
     }, [db.findById('accounts', plan.accountId, userId)?.ownerId]);
   });
 
+  transactionInstallmentAlerts(db, userId, today, leadDaysFor, contracts).forEach(({ holders, ...alert }) => push(alert, holders));
+
   ledger.accountsForUser(db, userId, false).forEach(account => {
     ledger.forecastAccount(db, userId, account, today).alerts.filter(alert => ['open', 'covered'].includes(alert.status)).forEach(alert => {
       const amount = ledger.fromMinorUnits(alert.neededMinor, account.currency);
@@ -243,6 +258,57 @@ function build(db, userId, today, filters) {
     });
   });
   return items;
+}
+
+// Asset a transaction is attributed to (first movement allocation with an asset), or null.
+function attributedAssetId(db, userId, transactionId) {
+  return db.findAll('movementAllocations', userId).find(item => item.transactionId === transactionId && item.assetId)?.assetId || null;
+}
+
+// Pending cheque installments (to confirm) and upcoming credit installments created by the transaction form.
+function transactionInstallmentAlerts(db, userId, today, leadDaysFor, contracts) {
+  const alerts = [];
+  db.findAll('transactions', userId).forEach(tx => {
+    if (!tx.chequeInstallment && !tx.creditInstallment) return;
+    const account = tx.accountId ? db.findById('accounts', tx.accountId, userId) : null;
+    const assetId = attributedAssetId(db, userId, tx.id);
+    const currencyCode = tx.currencyCode || account?.currency || null;
+    const amountText = money(tx.monto, currencyCode);
+    if (tx.chequeInstallment && isPendingTransaction(tx)) {
+      const lead = leadDaysFor('transaction_cheque_due', { assetId, accountId: tx.accountId || null });
+      if (tx.fecha >= today && tx.fecha > addDaysDateOnly(today, lead)) return;
+      const { number, total, chequeNumber } = tx.chequeInstallment;
+      const title = tx.chequeInstallment.baseTitle || tx.titulo;
+      const contract = assetId ? contracts.find(item => item.assetId === assetId && item.status === 'active' && (item.tenantIds || []).length) : null;
+      const responsibility = tx.tipo === 'income' && contract ? 'tenant' : 'owner';
+      const overdue = tx.fecha < today;
+      const prefix = chequeNumber ? `Cheque Nº ${chequeNumber} — cuota` : 'Cheque cuota';
+      alerts.push({
+        id: `txcheque:${tx.id}`, type: 'transaction_cheque_due', date: tx.fecha, status: overdue ? 'overdue' : 'pending', responsibility,
+        title: `Cheque cuota ${number}/${total} · ${title}`,
+        message: `${prefix} ${number}/${total} de «${title}» ${overdue ? 'venció' : 'vence'} el ${shortDate(tx.fecha)} — pendiente de confirmar (${amountText}).`,
+        assetId, accountId: tx.accountId || null, transactionId: tx.id, chequeGroupId: tx.chequeGroupId || null, chequeNumber: chequeNumber || null,
+        installmentNumber: number, installmentsCount: total, transactionType: tx.tipo, amount: tx.monto, currencyCode,
+        reminderLeadDays: lead, tenantEntityId: responsibility === 'tenant' ? contract.tenantIds[0] : null,
+        holders: [account?.ownerId, ...(responsibility === 'tenant' ? contract.tenantIds : [])]
+      });
+    }
+    if (tx.creditInstallment && !isPendingTransaction(tx) && tx.fecha > today) {
+      const lead = leadDaysFor('credit_installment_upcoming', { assetId, accountId: tx.accountId || null });
+      if (tx.fecha > addDaysDateOnly(today, lead)) return;
+      const { number, total, purchaseDate, purchaseTitle } = tx.creditInstallment;
+      const title = purchaseTitle || tx.titulo;
+      alerts.push({
+        id: `txcredit:${tx.id}`, type: 'credit_installment_upcoming', date: tx.fecha, status: 'scheduled', responsibility: 'owner',
+        title: `Cuota ${number}/${total} · ${title}`,
+        message: `Ingresará el cobro de la cuota Nº ${number}/${total} del gasto «${title}» realizado el ${shortDate(purchaseDate || tx.fecha)} (${amountText}).`,
+        assetId, accountId: tx.accountId || null, transactionId: tx.id, creditGroupId: tx.creditGroupId || null,
+        installmentNumber: number, installmentsCount: total, amount: tx.monto, currencyCode,
+        reminderLeadDays: lead, holders: [account?.ownerId]
+      });
+    }
+  });
+  return alerts;
 }
 
 /**

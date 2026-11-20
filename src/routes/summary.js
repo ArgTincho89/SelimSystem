@@ -3,6 +3,7 @@ const { requireAuth } = require('../middleware/auth');
 const { getIncomeBreakdown, getIncomePercentages, getIncomeIva, roundCents, percentOf } = require('../utils/income');
 const ledger = require('../services/account-ledger');
 const incomeAttribution = require('../services/income-attribution');
+const { isPostedTransaction } = require('../utils/transaction-status');
 
 const router = express.Router();
 
@@ -22,7 +23,7 @@ router.get('/', (req, res) => {
   const settings = ledger.getSettings(db, userId);
   const appCurrency = settings?.appCurrency || 'ARS';
   const today = ledger.localDateForUser(db, userId);
-  const monthTransactions = ledger.getMonthMovements(db, userId, transactions, month).filter(transaction =>
+  const monthTransactions = ledger.getMonthMovements(db, userId, transactions, month).filter(transaction => isPostedTransaction(transaction) &&
     (!transaction.isRecurringInstance || transaction.occurrenceStatus === 'posted') &&
     (!transaction.recurrente || transaction.fecha <= today)
   );
@@ -284,7 +285,7 @@ router.get('/burn-rate', (req, res) => {
   ledger.ensureSetup(db, userId);
   const appCurrency = ledger.getSettings(db, userId).appCurrency || 'ARS';
   const today = ledger.localDateForUser(db, userId);
-  const onlyActiveCurrency = list => list.filter(tx =>
+  const onlyActiveCurrency = list => list.filter(tx => isPostedTransaction(tx) &&
     (!tx.isRecurringInstance || tx.occurrenceStatus === 'posted') &&
     (!tx.recurrente || tx.fecha <= today) && ledger.accountForMovement(db, userId, tx)?.currency === appCurrency
   );

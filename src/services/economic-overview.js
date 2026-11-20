@@ -2,6 +2,7 @@ const ledger = require('./account-ledger');
 const obligations = require('./obligations');
 const rentals = require('./rentals');
 const alerts = require('./alerts');
+const { isPostedTransaction } = require('../utils/transaction-status');
 
 function validMonth(value) {
   return typeof value === 'string' && /^\d{4}-(0[1-9]|1[0-2])$/.test(value);
@@ -41,6 +42,7 @@ function postedMovements(db, userId, movements) {
   const recurringOccurrences = db.findAll('recurringOccurrences', userId);
   const recurringTemplateIds = new Set(db.findAll('recurrenceRevisions', userId).map(item => item.templateId));
   return movements.flatMap(transaction => {
+    if (!isPostedTransaction(transaction)) return [];
     if (transaction.isRecurringInstance) return transaction.occurrenceStatus === 'posted' ? [transaction] : [];
     if (!transaction.recurrente && !recurringTemplateIds.has(transaction.id)) return [transaction];
     const occurrence = recurringOccurrences.find(item => item.templateId === transaction.id && item.date === transaction.fecha && item.status === 'posted');

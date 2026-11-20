@@ -56,6 +56,10 @@ class FakeElement {
 
   getAttribute(name) { return Object.prototype.hasOwnProperty.call(this.attributes, name) ? this.attributes[name] : null; }
 
+  hasAttribute(name) { return Object.prototype.hasOwnProperty.call(this.attributes, name); }
+
+  removeAttribute(name) { delete this.attributes[name]; }
+
   appendChild(child) { child.parentNode = this; this.children.push(child); return child; }
 
   append(...nodes) { nodes.forEach(node => this.appendChild(typeof node === 'string' ? new FakeTextNode(node) : node)); }

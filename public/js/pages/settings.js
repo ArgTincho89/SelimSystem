@@ -201,11 +201,113 @@ const SettingsPage = {
     } catch (error) { list.appendChild(create('p', { role: 'alert', textContent: error.message })); }
   },
 
+  ALERT_SCOPE_LABELS: { asset: 'Inmueble/Bien', obligation: 'Obligación', account: 'Cuenta' },
+
+  // Payload of PUT /api/alerts/settings from the per-type inputs and the override list. Returns { payload } | { error }.
+  alertSettingsPayload(dayInputs, overrides) {
+    const defaults = {};
+    for (const [type, input] of Object.entries(dayInputs)) {
+      const text = String(input.value).trim();
+      if (!/^\d+$/.test(text) || Number(text) > 365) return { error: 'Los días deben ser un número entero entre 0 y 365' };
+      defaults[type] = Number(text);
+    }
+    return { payload: { defaults, overrides: overrides.map(({ type, scope, targetId, days }) => ({ type, scope, targetId, days })) } };
+  },
+
   async renderAlerts(panel) {
-    panel.appendChild(create('h2', { textContent: 'Avisos de saldo' }));
-    const form = create('form', { className: 'settings-card' });
-    const lead = create('input', { id: 'alert-lead', className: 'form-control', type: 'number', min: '0', max: '30', step: '1', value: this.settings.alertLeadDays ?? 5 });
-    form.appendChild(this.field('Avisar con anticipación (días calendario)', lead));
+    const config = await API.alerts.settings();
+    const catalog = config.catalog || [];
+    const labelOf = type => catalog.find(entry => entry.key === type)?.label || type;
+    const targetsOf = scope => (config.targets && config.targets[scope]) || [];
+    panel.appendChild(create('h2', { textContent: 'Avisos' }));
+    const form = create('form', { className: 'settings-card alert-settings', dataset: { alertSettings: 'true' } });
+
+    // Anticipación por tipo de aviso: one row per catalog type (informational rows are always visible).
+    form.appendChild(create('h3', { textContent: 'Anticipación por tipo de aviso' }));
+    const table = create('div', { className: 'alert-settings-table', role: 'list' });
+    const dayInputs = {};
+    catalog.forEach(entry => {
+      const row = create('div', { className: 'alert-settings-row', role: 'listitem', dataset: { alertType: entry.key } });
+      row.appendChild(create('div', { className: 'alert-settings-text' }, [
+        create('strong', { textContent: entry.label }),
+        create('p', { className: 'account-status-note', textContent: entry.description })
+      ]));
+      if (entry.kind === 'info') {
+        row.appendChild(create('span', { className: 'alert-settings-days text-muted', textContent: 'Siempre visible' }));
+      } else {
+        const input = create('input', { id: `alert-days-${entry.key}`, className: 'form-control', type: 'number', min: '0', max: '365', step: '1', value: String(entry.days ?? entry.defaultDays), 'aria-label': `${entry.label}: días` });
+        dayInputs[entry.key] = input;
+        row.appendChild(create('div', { className: 'alert-settings-days' }, [input, create('span', { textContent: entry.kind === 'lookback' ? 'días hacia atrás' : 'días antes' })]));
+      }
+      table.appendChild(row);
+    });
+    form.appendChild(table);
+
+    // Excepciones específicas: a different lead for one asset, obligation or account.
+    form.appendChild(create('h3', { textContent: 'Excepciones específicas' }));
+    const overrides = (config.settings?.overrides || []).map(item => ({ ...item }));
+    const overrideList = create('div', { className: 'alert-settings-table', dataset: { alertOverrides: 'true' } });
+    const targetName = (scope, id) => targetsOf(scope).find(item => item.id === id)?.name || 'Elemento eliminado';
+    const renderOverrides = () => {
+      overrideList.replaceChildren();
+      if (!overrides.length) overrideList.appendChild(create('p', { className: 'account-status-note', textContent: 'No hay excepciones. Cada aviso usa la anticipación de su tipo.' }));
+      overrides.forEach((item, index) => {
+        const remove = create('button', { className: 'btn btn-ghost btn-sm', type: 'button', textContent: 'Eliminar', 'aria-label': `Eliminar excepción de ${labelOf(item.type)}` });
+        on(remove, 'click', () => { overrides.splice(index, 1); renderOverrides(); });
+        overrideList.appendChild(create('div', { className: 'alert-settings-row', dataset: { alertOverride: `${item.type}:${item.scope}:${item.targetId}` } }, [
+          create('div', { className: 'alert-settings-text' }, [
+            create('strong', { textContent: labelOf(item.type) }),
+            create('p', { className: 'account-status-note', textContent: `${this.ALERT_SCOPE_LABELS[item.scope]}: ${item.targetName || targetName(item.scope, item.targetId)}` })
+          ]),
+          create('span', { textContent: `${item.days} ${item.days === 1 ? 'día' : 'días'}` }),
+          remove
+        ]));
+      });
+    };
+    renderOverrides();
+    form.appendChild(overrideList);
+
+    const addForm = create('div', { className: 'alert-override-form', dataset: { alertOverrideForm: 'true' } });
+    const overridable = catalog.filter(entry => entry.kind !== 'info' && entry.scopes.length);
+    const typeSelect = create('select', { id: 'alert-override-type', className: 'form-control' });
+    overridable.forEach(entry => typeSelect.appendChild(create('option', { value: entry.key, textContent: entry.label })));
+    const scopeSelect = create('select', { id: 'alert-override-scope', className: 'form-control' });
+    const targetSelect = create('select', { id: 'alert-override-target', className: 'form-control' });
+    const daysInput = create('input', { id: 'alert-override-days', className: 'form-control', type: 'number', min: '0', max: '365', step: '1', value: '30' });
+    const syncTargets = () => {
+      targetSelect.replaceChildren(...targetsOf(scopeSelect.value).map(item => create('option', { value: item.id, textContent: item.name })));
+      targetSelect.value = targetsOf(scopeSelect.value)[0]?.id || '';
+    };
+    const syncScopes = () => {
+      const entry = overridable.find(item => item.key === typeSelect.value) || overridable[0];
+      const scopes = entry ? entry.scopes : [];
+      scopeSelect.replaceChildren(...scopes.map(scope => create('option', { value: scope, textContent: this.ALERT_SCOPE_LABELS[scope] })));
+      scopeSelect.value = scopes[0] || '';
+      syncTargets();
+    };
+    on(typeSelect, 'change', syncScopes);
+    on(scopeSelect, 'change', syncTargets);
+    if (overridable[0]) typeSelect.value = overridable[0].key;
+    syncScopes();
+    const addButton = create('button', { className: 'btn btn-secondary', type: 'button', textContent: 'Agregar' });
+    on(addButton, 'click', () => {
+      const days = String(daysInput.value).trim();
+      if (!targetSelect.value) return showToast('Elegí a qué se aplica la excepción', 'error');
+      if (!/^\d+$/.test(days) || Number(days) > 365) return showToast('Los días deben ser un número entero entre 0 y 365', 'error');
+      const record = { type: typeSelect.value, scope: scopeSelect.value, targetId: targetSelect.value, days: Number(days), targetName: targetName(scopeSelect.value, targetSelect.value) };
+      const existing = overrides.findIndex(item => item.type === record.type && item.scope === record.scope && item.targetId === record.targetId);
+      if (existing >= 0) overrides[existing] = record; else overrides.push(record);
+      renderOverrides();
+    });
+    addForm.append(
+      this.field('Tipo de aviso', typeSelect), this.field('Aplica a', scopeSelect), this.field('Elemento', targetSelect),
+      this.field('Días antes', daysInput), addButton
+    );
+    form.appendChild(create('p', { className: 'account-status-note', textContent: 'Agregar excepción: por ejemplo, ajustes de alquiler con 15 días de anticipación en general y 30 días para un inmueble puntual.' }));
+    form.appendChild(addForm);
+
+    // Avisos de saldo: forecast horizon and the daily server review stay as before.
+    form.appendChild(create('h3', { textContent: 'Avisos de saldo' }));
     const horizon = create('input', { id: 'alert-horizon', className: 'form-control', type: 'number', min: '1', max: '365', step: '1', value: this.settings.forecastHorizonDays ?? 30 });
     form.appendChild(this.field('Horizonte de pronóstico (días)', horizon));
     const dailyLabel = create('label', { className: 'checkbox-label' });
@@ -215,12 +317,15 @@ const SettingsPage = {
     dailyLabel.appendChild(document.createTextNode(' Revisión diaria en el servidor'));
     form.appendChild(dailyLabel);
     form.appendChild(create('p', { className: 'account-status-note', textContent: 'Avisos internos únicamente. No se envían correos o notificaciones y no se ejecutan pagos.' }));
-    const save = create('button', { className: 'btn btn-primary', type: 'submit', textContent: 'Guardar avisos' });
+    const save = create('button', { className: 'btn btn-primary', type: 'submit', textContent: 'Guardar' });
     form.appendChild(save);
     on(form, 'submit', async event => {
       event.preventDefault();
+      const built = this.alertSettingsPayload(dayInputs, overrides);
+      if (built.error) return this.showError(form, built.error);
       try {
-        this.settings = await API.accounts.updateSettings({ alertLeadDays: Number(lead.value), forecastHorizonDays: Number(horizon.value), dailyReview: daily.checked });
+        await API.alerts.updateSettings(built.payload);
+        this.settings = await API.accounts.updateSettings({ forecastHorizonDays: Number(horizon.value), dailyReview: daily.checked });
         await this.render();
         showToast('Preferencias de avisos guardadas');
       } catch (error) { this.showError(form, error.message); }

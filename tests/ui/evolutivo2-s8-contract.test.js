@@ -10,7 +10,7 @@ const modal = () => {
 describe('Evolutivo 2 S8 obligation form contract', () => {
   it('contains the simplified fields and no payment method', () => {
     const form = modal();
-    ['Nombre', "'Tipo'", "'Bien'", "'Proveedor'", 'Número de cuenta o contrato', 'Primer vencimiento', 'Último vencimiento (opcional)', "'Aviso'", "'Moneda'", 'Importe estimado', "'Categoría'", "'Responsable'", "'Notas'"].forEach(text => expect(form).toContain(text));
+    ['Nombre', "'Tipo'", "'Bien'", "'Proveedor'", 'Número de cuenta o contrato', 'Primer vencimiento', 'Último vencimiento (opcional)', "'Moneda'", 'Importe estimado', "'Categoría'", "'Responsable'", "'Notas'"].forEach(text => expect(form).toContain(text));
     expect(form).not.toContain('Medio de pago');
     expect(form).not.toContain('paymentMethod');
     expect(form).not.toContain('Cuenta habitual');

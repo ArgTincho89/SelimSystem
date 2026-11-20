@@ -101,11 +101,11 @@ const Modal = {
     }
 
     overlay.appendChild(modal);
+    // Dialogs close only through their own close (X) or action buttons: no Escape, no backdrop click.
     on(modal, 'keydown', event => {
       if (event.key === 'Escape') {
         event.preventDefault();
         event.stopPropagation();
-        this.hide();
         return;
       }
       if (event.key !== 'Tab') return;
@@ -122,10 +122,6 @@ const Modal = {
         first.focus();
       }
     });
-    on(overlay, 'click', (e) => {
-      if (e.target === overlay) this.hide();
-    });
-
     this.layers.push({ overlay, onClose: options.onClose || null, returnFocus: depth ? document.activeElement : null });
     root.appendChild(overlay);
     const firstFocusable = $('button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])', modal);

@@ -3,6 +3,7 @@ const { requireAuth } = require('../middleware/auth');
 const { getIncomeBreakdown, getIncomePercentages, getIncomeIva, roundCents } = require('../utils/income');
 const ledger = require('../services/account-ledger');
 const incomeAttribution = require('../services/income-attribution');
+const { isPostedTransaction } = require('../utils/transaction-status');
 
 const router = express.Router();
 
@@ -42,7 +43,7 @@ router.get('/', (req, res) => {
   }
 
   const monthlyData = months.map(month => {
-    const allMonthTx = ledger.getMonthMovements(db, userId, transactions, month).filter(tx =>
+    const allMonthTx = ledger.getMonthMovements(db, userId, transactions, month).filter(tx => isPostedTransaction(tx) &&
       (!tx.isRecurringInstance || tx.occurrenceStatus === 'posted') && (!tx.recurrente || tx.fecha <= today)
     );
     const monthTx = allMonthTx.filter(tx => ledger.accountForMovement(db, userId, tx)?.currency === activeCurrency);

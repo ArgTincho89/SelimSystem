@@ -188,7 +188,9 @@ const HomePage = {
             info.appendChild(create('div', { className: 'transaction-title', textContent: tx.titulo }));
 
              const catName = tx.isTransfer ? `${tx.status === 'posted' ? 'Contabilizada' : 'Programada'} · ${tx.accountName}` : tx.tipo === 'income' ? `Ingreso${tx.clasificacion ? ` (${tx.clasificacion})` : ''}` : (tx.tipo === 'refund' ? 'Reembolso' : (cat ? cat.nombre : 'Sin categoría'));
-            info.appendChild(create('div', { className: 'transaction-category', textContent: catName }));
+            info.appendChild(create('div', { className: 'transaction-category', textContent: `${catName}${this.chequeLabel(tx) ? ` · ${this.chequeLabel(tx)}` : ''}` }));
+            const pendingBadge = this.pendingBadge(tx);
+            if (pendingBadge) info.appendChild(pendingBadge);
 
             const sign = tx.tipo === 'expense' ? '-' : '+';
             const amountClass = tx.tipo;
@@ -592,7 +594,9 @@ const HomePage = {
         const categoryName = tx.isTransfer ? `${tx.status === 'posted' ? 'Contabilizada' : 'Programada'} · ${tx.accountName}` : tx.tipo === 'income'
           ? `Ingreso${tx.clasificacion ? ` (${tx.clasificacion})` : ''}`
           : tx.tipo === 'refund' ? 'Reembolso' : (category ? category.nombre : 'Sin categoría');
-        info.appendChild(create('span', { className: 'transaction-category', textContent: `${categoryName}${tx.isRecurringInstance ? (tx.occurrenceStatus === 'posted' ? ' · Contabilizada' : tx.occurrenceStatus === 'skipped' ? ' · Omitida' : ' · Programada') : ''}` }));
+        info.appendChild(create('span', { className: 'transaction-category', textContent: `${categoryName}${tx.isRecurringInstance ? (tx.occurrenceStatus === 'posted' ? ' · Contabilizada' : tx.occurrenceStatus === 'skipped' ? ' · Omitida' : ' · Programada') : ''}${this.chequeLabel(tx) ? ` · ${this.chequeLabel(tx)}` : ''}` }));
+        const pendingBadge = this.pendingBadge(tx);
+        if (pendingBadge) info.appendChild(pendingBadge);
         const amount = create('span', {
           className: `transaction-amount ${tx.tipo}`,
           textContent: tx.isTransfer
@@ -907,6 +911,36 @@ const HomePage = {
     $$('.stat-value').forEach(value => value.classList.toggle('income-blurred', hidden));
   },
 
+  // "Cheque Nº 123 · cuota 2/3" for a cheque installment, "Cuota 2/3" for a credit installment, '' otherwise.
+  chequeLabel(tx) {
+    if (tx.chequeInstallment) {
+      const { number, total, chequeNumber } = tx.chequeInstallment;
+      return `${chequeNumber ? `Cheque Nº ${chequeNumber}` : 'Cheque'} · cuota ${number}/${total}`;
+    }
+    if (tx.creditInstallment) return `Crédito · cuota ${tx.creditInstallment.number}/${tx.creditInstallment.total}`;
+    return '';
+  },
+
+  // Badge of a movement that does not count in the totals until it is confirmed.
+  pendingBadge(tx) {
+    if (tx.status !== 'pending') return null;
+    return create('span', { className: 'badge badge-warning pending-confirmation-badge', dataset: { pendingConfirmation: tx.id }, textContent: 'Pendiente de confirmación' });
+  },
+
+  // Confirms a pending cheque installment: from now on it counts in the totals of its month.
+  async confirmTransaction(tx, onDone) {
+    const { confirmed } = await ConfirmDialog.open({
+      title: 'Confirmar imputación', confirmLabel: 'Confirmar imputación',
+      message: 'El movimiento pasa a contar en los totales del mes de su fecha.',
+      details: [['Movimiento', tx.titulo], ['Fecha', tx.fecha], ['Importe', formatearMoneda(tx.monto, tx.currencyCode || 'ARS')], ...(tx.chequeInstallment?.chequeNumber ? [['Nº cheque', tx.chequeInstallment.chequeNumber]] : [])]
+    });
+    if (!confirmed) return false;
+    await API.transactions.confirm(tx.id);
+    showToast('Imputación confirmada');
+    if (onDone) await onDone();
+    return true;
+  },
+
   showTransactionOptions(tx, catMap) {
     if (tx.isTransfer) return this.showTransferDetails(tx);
     const footer = create('div', { style: { display: 'flex', gap: '8px' } });
@@ -932,6 +966,20 @@ const HomePage = {
             await this.render({ month: this.currentMonth });
           } catch (error) { showToast(error.message, 'error'); }
         }
+      }));
+    }
+    if (tx.status === 'pending') {
+      footer.appendChild(create('button', {
+        className: 'btn btn-primary', type: 'button', textContent: 'Confirmar imputación', dataset: { confirmTransaction: tx.id },
+        onClick: async () => {
+          try { await this.confirmTransaction(tx, async () => { Modal.hide(); await this.render({ month: this.currentMonth }); }); }
+          catch (error) { showToast(error.message, 'error'); }
+        }
+      }));
+    } else if (tx.chequeInstallment && tx.confirmedAt) {
+      footer.appendChild(create('button', {
+        className: 'btn btn-secondary', type: 'button', textContent: 'Deshacer confirmación', dataset: { unconfirmTransaction: tx.id },
+        onClick: () => UndoDialog.open({ type: 'transaction.confirmation', transactionId: tx.id }, { onDone: async () => { Modal.hide(); await this.render({ month: this.currentMonth }); } })
       }));
     }
     footer.appendChild(create('button', {
@@ -991,6 +1039,8 @@ const HomePage = {
     categoryDetails.appendChild(document.createTextNode(` - ${formatFechaCorta(tx.fecha)}`));
     if (tx.accountName) categoryDetails.appendChild(document.createTextNode(` · ${tx.accountName} (${tx.currencyCode || 'EUR'})`));
     details.appendChild(categoryDetails);
+    if (this.chequeLabel(tx)) details.appendChild(create('p', { className: 'transaction-installment-info', textContent: this.chequeLabel(tx) }));
+    if (tx.status === 'pending') details.appendChild(create('p', { className: 'account-status-note', textContent: 'Pendiente de confirmación: no cuenta en los totales hasta confirmar la imputación.' }));
     if (tx.rentCollectionId) details.appendChild(create('p', { textContent: 'Cobro de alquiler: si lo deshacés, el período vuelve a quedar pendiente de cobro.', style: { color: 'var(--text-secondary)', fontSize: 'var(--font-xs)' } }));
     const amountDetail = create('p', {
       textContent: `${tx.tipo === 'expense' ? '-' : '+'}${formatearMoneda(tx.monto, tx.currencyCode || 'EUR')}`,

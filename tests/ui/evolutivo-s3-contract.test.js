@@ -9,13 +9,13 @@ describe('Evolutivo S3 UI contract', () => {
     ['installments:', 'createPlan', '/installments/occurrences?month=', 'postOccurrence', 'cancelOccurrence'].forEach(text => expect(source).toContain(text));
   });
 
-  it('adds installment fields to the expense form for credit cards', () => {
+  // Evolutivo 10: the form creates "Crédito" installments as transactions; legacy plans stay in Inicio and Avisos.
+  it('no longer creates credit-card plans from the transaction form', () => {
     const source = read('js/components/transactionForm.js');
-    expect(source).toContain("type === 'credit_card'");
-    ['Cantidad de cuotas', 'Día de vencimiento', 'Interés % (opcional)'].forEach(label => expect(source).toContain(label));
-    expect(source).toContain('API.installments.createPlan');
-    expect(source).toContain('installmentsCount: count');
-    expect(source).toContain('assetId: targets[0]');
+    expect(source).not.toContain('API.installments.createPlan');
+    ['Cuotas', 'Interés (%)'].forEach(label => expect(source).toContain(label));
+    expect(source).toContain('data.creditInstallments = collected');
+    expect(source).toContain("data.attributionAssetId = targets[0].split(':')[1]");
   });
 
   it('shows scheduled installments in the transactions page as non-total items', () => {

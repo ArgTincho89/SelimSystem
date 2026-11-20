@@ -550,10 +550,12 @@ function listResolutions(db, userId, filters = {}) {
 function getAlerts(db, userId) {
   const today = ledger.localDateForUser(db, userId);
   const end = addDaysDateOnly(today, 90);
+  const leadDaysFor = require('./alert-config').resolver(db, userId);
+  const leadOf = obligation => leadDaysFor('obligation_due', { assetId: obligation.assetId || null, obligationId: obligation.id });
   return db.findAll(COLLECTION, userId).filter(item => item.status === 'active').flatMap(obligation =>
     occurrencesFor(db, userId, obligation, { to: end }).filter(item => ['overdue', 'expected', 'confirmed', 'partial'].includes(item.status) && item.remainingAmount > 0)
-      .filter(item => item.status === 'overdue' || item.date <= addDaysDateOnly(today, obligation.reminderLeadDays))
-      .map(item => ({ obligationId: obligation.id, occurrenceId: item.id, title: item.title, date: item.date, status: item.status, reminderLeadDays: obligation.reminderLeadDays, remainingAmount: item.remainingAmount, currencyCode: item.currencyCode }))
+      .filter(item => item.status === 'overdue' || item.date <= addDaysDateOnly(today, leadOf(obligation)))
+      .map(item => ({ obligationId: obligation.id, occurrenceId: item.id, title: item.title, date: item.date, status: item.status, reminderLeadDays: leadOf(obligation), remainingAmount: item.remainingAmount, currencyCode: item.currencyCode }))
   ).sort((a, b) => a.date.localeCompare(b.date));
 }
 

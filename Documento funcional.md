@@ -1,8 +1,8 @@
 # SelimSystem — Documento funcional
 
-**Versión del producto:** 1.17.1
+**Versión del producto:** 1.18.0
 **Entorno productivo:** https://selimsystem.fly.dev
-**Fecha del documento:** 17/11/2026
+**Fecha del documento:** 20/11/2026
 
 Este documento describe qué hace SelimSystem, cómo se usa cada pantalla y qué reglas de negocio aplica la aplicación. Está pensado para personas usuarias y responsables del negocio que necesitan entender el producto sin leer el código. Los detalles técnicos se limitan a la sección 16.
 
@@ -236,6 +236,8 @@ En la experiencia **Escritorio**, cada gráfico tiene una estrella (☆/★) par
 
 **Propósito:** registrar o editar un gasto, ingreso, reembolso o transferencia. Se abre con **+** / **Nueva transacción** en Inicio, con **Nuevo movimiento en esta cuenta** en el detalle de una cuenta o con **Editar** en una transacción.
 
+La ventana siempre se abre desde arriba, con el selector de tipo (Gasto, Ingreso, Reembolso, Transferencia) a la vista y el foco en el tipo activo.
+
 ### 6.1 Tipos
 
 | Tipo | Efecto | Campos propios |
@@ -248,7 +250,7 @@ En la experiencia **Escritorio**, cada gráfico tiene una estrella (☆/★) par
 ### 6.2 Campos comunes (gasto, ingreso, reembolso)
 
 - **Cuenta:** lista de cuentas activas con sus sub-cuentas. Por defecto, la cuenta principal. El importe se interpreta en la moneda de la cuenta; cambiar de cuenta **no convierte** el importe.
-- **Medio de pago reutilizable:** lista de medios guardados, con botones **Crear medio reutilizable**, **Renombrar medio** y **Eliminar medio**. También admite una **etiqueta** de texto libre.
+- **Medio de pago** (opcional): lista fija con **Transferencia**, **Efectivo**, **Débito**, **Crédito** y **Cheque**. **Crédito** solo se ofrece en gastos; **Cheque**, en gastos e ingresos (no en reembolsos). Al editar un movimiento antiguo con un medio escrito a mano, ese valor se conserva como opción adicional.
 - **Atribución del movimiento:** permite indicar a qué bien, obligación, vencimiento, contrato o período de alquiler corresponde el importe (una o varias líneas, con opción "Asignación completa"). Es descriptivo: **no crea movimientos ni cambia los totales**. Alimenta el análisis económico del bien.
 - **Título (opcional):** si se deja vacío en gastos y reembolsos, se usa el nombre de la categoría.
 - **Monto:** formato monetario local (por ejemplo, "211.392,00"). Debe ser positivo.
@@ -274,10 +276,20 @@ En la experiencia **Escritorio**, cada gráfico tiene una estrella (☆/★) par
 - **Factura a nombre de:** titular que recibe el crédito fiscal. Por defecto, "Titular de la cuenta" (el titular de la cuenta con la que se paga).
 - Sin IVA (vacío o 0) el gasto no afecta al IVA mensual.
 
-**Compra en cuotas (tarjeta de crédito)**
-- Aparece solo en gastos nuevos pagados con un medio reutilizable de tipo tarjeta de crédito.
-- Campos: **Cantidad de cuotas** (2 a 120), **Día de vencimiento** (1 a 31) e **Interés %** opcional (0 a 1000).
-- No registra ningún gasto al crearse: genera **cuotas programadas** que se contabilizan una por una (desde Inicio o desde Avisos). Solo admite atribución a un bien.
+**Cheques en cuotas y confirmación (gastos e ingresos nuevos con medio Cheque)**
+- Aparece **Cuotas** (1 a 24) y una fila por cheque con tres datos: **Vencimiento cuota Nº x** (fecha), **Monto** y **Nº cheque**. En pantallas angostas los tres campos pasan a la línea siguiente.
+- Los montos se precargan repartiendo el Monto en partes iguales (la última cuota absorbe los centavos) cada vez que cambia el Monto o la cantidad de cuotas; se pueden corregir a mano.
+- Reglas: cada fila necesita fecha y monto mayor a cero; la suma de las cuotas debe ser exactamente el Monto. El **Nº cheque** es obligatorio, de hasta 30 caracteres, con letras, números y guiones (por ejemplo, 0001-23456789).
+- Al guardar se crea un movimiento por cuota, con el título "«Título» — Cheque cuota x/N", el monto de la cuota y la fecha de vencimiento. Cada cuota queda **Pendiente de confirmación** y **no cuenta en ningún total** (Ingresos, Gastos, Ahorro, saldos de cuentas, IVA ni estadísticas) hasta confirmarla.
+- **Confirmar imputación** (desde Avisos o desde el detalle del movimiento en Inicio): la cuota pasa a contar en los totales del mes de su vencimiento. **Deshacer confirmación** pide un motivo y la devuelve a pendiente. Ambas acciones quedan en Logs.
+- Con Cheque no se puede marcar Recurrente; la atribución admite un solo bien. La clasificación Mixto no admite cuotas.
+
+**Compras en cuotas con crédito (gastos nuevos con medio Crédito)**
+- Campos: **Cuotas** (1 a 36) e **Interés (%)** (0 o más, admite decimales; por defecto 0). Una vista previa muestra "N cuotas de $X (total $Y)".
+- El interés es un porcentaje total: total = Monto × (1 + interés/100), dividido en partes iguales (la última cuota absorbe el redondeo).
+- Con **1 cuota** es un gasto normal en la fecha elegida (con el interés aplicado, si lo hay).
+- Con **más de una cuota** no se registra un gasto en la fecha de la compra: se crea un gasto por cuota con el título "«Título» — cuota x/N", el mismo día del mes de la compra en cada uno de los meses siguientes (la cuota 1, el mes próximo; si el mes no tiene ese día, el último día del mes: 31/01 → 28/02 o 29/02). Cada cuota cuenta en los totales del mes de su fecha.
+- Eliminar una cuota elimina solo esa cuota. Los planes de tarjeta creados en versiones anteriores siguen visibles en Inicio y en Avisos.
 
 **Transferencia**
 - Las cuentas de salida e ingreso deben ser distintas.
@@ -304,15 +316,17 @@ En la experiencia **Escritorio**, cada gráfico tiene una estrella (☆/★) par
 | Grupo | Cuándo aparece | Acciones |
 |---|---|---|
 | **Obligaciones vencidas** | Vencimiento impago con fecha pasada. | Registrar pago, Adjuntar comprobante, Ver obligación |
-| **Próximos vencimientos** | Vencimiento impago dentro de los días de aviso de la obligación (por defecto 7). | Registrar pago, Adjuntar comprobante, Ver obligación |
+| **Próximos vencimientos** | Vencimiento impago dentro de la anticipación configurada (por defecto 7 días). | Registrar pago, Adjuntar comprobante, Ver obligación |
 | **Pagos parciales** | Vencimiento con un pago menor al importe. | Registrar pago, Adjuntar comprobante, Ver obligación |
 | **Comprobantes pendientes de inquilinos** | La parte del inquilino no tiene resolución registrada. | Resolver, Adjuntar comprobante, Ver obligación |
 | **Alquileres pendientes de cobro** | Mes de alquiler sin cobrar (vencido o dentro de los días de aviso de Configuración > Avisos, por defecto 5). | Registrar cobro, Ver bien |
-| **Cheques por cobrar** | Cobro de alquiler con medio **Cheque** no marcado como cobrado, cuya fecha de cobro llega en 7 días o menos (o ya pasó). Indica bien, inquilino, período y importe. | Marcar como cobrado, Ver cobro, Ver bien |
+| **Cheques por cobrar** | Cobro de alquiler con medio **Cheque** no marcado como cobrado, cuya fecha de cobro llega dentro de la anticipación configurada (por defecto 7 días) o ya pasó. Indica bien, inquilino, período e importe. | Marcar como cobrado, Ver cobro, Ver bien |
+| **Cuotas con cheque por confirmar** | Cuota con cheque pendiente de confirmación que vence dentro de la anticipación (por defecto 7 días) o ya venció. Mensaje: "Cheque Nº 12345 — cuota 2/3 de «Título» vence el dd/mm/aaaa — pendiente de confirmar". Gastos: a cargo del titular; ingresos atribuidos a un bien con alquiler activo: a cargo del inquilino. | Confirmar imputación, Ver movimiento |
+| **Próximas cuotas de crédito** | Cuota de una compra con crédito cuya fecha llega en los próximos días (por defecto 5). Mensaje: "Ingresará el cobro de la cuota Nº x/N del gasto «Título» realizado el dd/mm/aaaa ($monto)". A cargo del titular. | Ver movimiento |
 | **Cuotas de tarjeta** | Cuota programada vencida o dentro de sus días de aviso (por defecto 5). | Contabilizar cuota, Ver transacciones |
-| **Contratos por vencer** | Contrato de alquiler que vence en los próximos 30 días. | Ver bien |
-| **Ajustes de alquiler** | Ajuste de alquiler en los próximos 30 días. | Ver bien |
-| **Documentos pendientes** | Vencimiento pagado en los últimos 60 días sin comprobante adjunto. | Adjuntar comprobante, Revertir pago, Ver obligación |
+| **Contratos por vencer** | Contrato de alquiler que vence dentro de la anticipación configurada (por defecto 30 días). | Ver bien |
+| **Ajustes de alquiler** | Ajuste de alquiler dentro de la anticipación configurada (por defecto 30 días). | Ver bien |
+| **Documentos pendientes** | Vencimiento pagado en los últimos días configurados (por defecto 60) sin comprobante adjunto. | Adjuntar comprobante, Revertir pago, Ver obligación |
 | **Saldo insuficiente en cuentas** | El pronóstico de una cuenta conciliada indica que no alcanza para un pago próximo. | Ver cuentas |
 
 Reglas generales: se consideran avisos hasta 90 días hacia adelante y se muestran como máximo 200. Los vencimientos cancelados o resueltos no generan avisos.
@@ -555,7 +569,6 @@ Cada fila indica también "Pagado X/Y moneda" y, si la obligación es compartida
    - **Proveedor** (de Configuración > Proveedor). Al elegirlo, la **Categoría** se precarga con la categoría de gasto del proveedor.
    - **Cuenta o contrato** y **Número de cuenta o contrato**.
    - **Frecuencia**, **Primer vencimiento** (obligatorio) y **Último vencimiento** (opcional).
-   - **Aviso**: El mismo día, 7, 15 o 30 días antes, o Personalizado (cantidad de días).
    - **Moneda** (ARS, EUR o USD) e **Importe estimado** (formato monetario).
    - **Categoría**.
    - **Responsable**: Titular o Inquilino. "Inquilino" solo está disponible si el bien tiene un contrato de alquiler activo.
@@ -653,13 +666,20 @@ Para corregir un pago registrado por error sin perder la trazabilidad.
 - La **comisión** se contabiliza **una sola vez como gasto**; el resto de la transferencia no es ingreso ni gasto.
 - Cada transferencia se puede **Editar**, **Eliminar** y, si está programada, **Confirmar y contabilizar**. No se puede editar ni eliminar si tiene conversiones posteriores dependientes.
 
-### 12.2 Avisos (de saldo)
+### 12.2 Avisos (configuración de avisos)
 
-- **Avisar con anticipación** (0 a 30 días; por defecto 5). También fija la anticipación de los avisos de alquiler.
+**Anticipación por tipo de aviso:** una fila por cada tipo de aviso con su nombre, una descripción y los **días antes** en que empieza a mostrarse (0 a 365). Valores por defecto: próximos vencimientos de obligaciones 7, comprobantes pendientes de inquilinos 7, alquileres pendientes de cobro 5, contratos por vencer 30, ajustes de alquiler 30, cheques de alquiler 7, cuotas con cheque por confirmar 7, próximas cuotas de crédito 5, cuotas de tarjeta (planes anteriores) 5 y saldo insuficiente 5. **Documentos pendientes** se configura en **días hacia atrás** (por defecto 60). Obligaciones vencidas y pagos parciales figuran como **Siempre visible** (un vencimiento vencido se muestra siempre; los pagos parciales siguen la anticipación de los próximos vencimientos).
+
+**Excepciones específicas:** anticipaciones distintas para un elemento puntual. **Agregar excepción**: elegir **Tipo de aviso**, **Aplica a** (solo los alcances permitidos para ese tipo: Inmueble/Bien, Obligación o Cuenta), el elemento y los días, y pulsar **Agregar**. Cada excepción se puede eliminar. Ejemplo: ajustes de alquiler con 15 días de anticipación en general y 30 días para un inmueble puntual.
+
+**Prioridad:** excepción de la obligación > excepción del bien > excepción de la cuenta > anticipación del tipo > valor por defecto. Los días que se guardaban en cada obligación ya no se usan (el formulario de obligaciones ya no pide "Aviso"). Si antes se había cambiado "Avisar con anticipación", ese valor se toma como anticipación inicial de alquileres pendientes y de saldo insuficiente.
+
+**Avisos de saldo:**
 - **Horizonte de pronóstico** (1 a 365 días; por defecto 30).
 - **Revisión diaria en el servidor** (sí/no).
 - Lista de **avisos de saldo activos** (cuenta, pago, fecha y cuánto falta; indica si una transferencia programada lo cubre) y el **pronóstico** por cuenta conciliada (mínimo del horizonte y próximo pago).
 - Son avisos internos: no se envían correos ni notificaciones y no se ejecutan pagos.
+- Un único botón **Guardar** guarda la anticipación por tipo, las excepciones y los avisos de saldo.
 
 ### 12.3 Titular, Inquilino y Proveedor
 
@@ -722,7 +742,7 @@ Sección con el contenido descrito en el capítulo 8 (alta, edición, subcategor
 | **Ingresos** | Suma de ingresos contabilizados (incluye cobros de alquiler y reintegros). |
 | **Gastos** | Gastos contabilizados menos reembolsos. Incluye pagos de obligaciones, cuotas contabilizadas y comisiones de transferencias. |
 | **Ahorro** | Ingresos − gastos netos. Puede ser negativo. |
-| **No cuentan** | Transferencias (salvo su comisión), ocurrencias recurrentes no contabilizadas, cuotas programadas, resoluciones de inquilinos, atribuciones y vencimientos pendientes. |
+| **No cuentan** | Transferencias (salvo su comisión), ocurrencias recurrentes no contabilizadas, cuotas con cheque pendientes de confirmación, cuotas programadas, resoluciones de inquilinos, atribuciones y vencimientos pendientes. |
 
 Los totales se calculan **por moneda**, sin conversión.
 
@@ -805,7 +825,7 @@ Todas verificadas en el código de la versión 1.15.0:
 
 1. **Metas sin pantalla:** el servidor permite crear, listar y borrar metas (ahorro, límite por categoría y límite general), pero no existe ninguna pantalla para gestionarlas y su progreso no se muestra en Inicio.
 2. **Sin pantallas de Resumen ni Estadísticas propias:** la analítica está integrada en Inicio. El ritmo de gasto (burn rate) y las tendencias multi-mes existen en el servidor, pero no tienen pantalla propia (el IVA mensual de Inicio sale del resumen del mes elegido).
-3. **Compras en cuotas difíciles de iniciar:** solo aparecen con un medio de pago de tipo tarjeta de crédito, pero la pantalla crea los medios de pago reutilizables siempre con tipo "otro".
+3. **Compras en cuotas con crédito sin borrado en bloque:** cada cuota es un gasto independiente; para anular una compra hay que eliminar sus cuotas una por una.
 4. **Moneda principal fija desde la interfaz:** la analítica de Inicio usa la moneda principal (ARS por defecto) y no hay una opción en pantalla para cambiarla.
 5. **Pagos de obligaciones inmutables:** no se pueden editar ni eliminar (Inicio muestra el botón "Eliminar", pero el servidor rechaza la acción y el mensaje remite a **Revertir pago**).
 6. **Sin copia de seguridad automática:** existe una tarea semanal de respaldo en el código, pero no se activa al iniciar el servidor.

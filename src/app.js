@@ -7,7 +7,7 @@ const config = require('./config');
 const { version } = require('../package.json');
 const JsonDB = require('./db/jsondb');
 const DiskDocumentStorage = require('./services/document-storage');
-const { migrateEvolutivo, migrateEvolutivo2, migrateEvolutivo3, migrateRentalResponsibilities } = require('./services/migrations');
+const { migrateEvolutivo, migrateEvolutivo2, migrateEvolutivo3, migrateRentalResponsibilities, migrateRentCollectionClassification } = require('./services/migrations');
 const { errorHandler } = require('./middleware/errorHandler');
 
 const authRoutes = require('./routes/auth');
@@ -41,6 +41,7 @@ function createApp(options = {}) {
   migrateEvolutivo2(app.locals.db);
   migrateEvolutivo3(app.locals.db);
   migrateRentalResponsibilities(app.locals.db);
+  migrateRentCollectionClassification(app.locals.db);
 
   app.use(helmet({ contentSecurityPolicy: false, crossOriginEmbedderPolicy: false }));
   app.use(cors({ origin: config.appUrl, credentials: true }));
