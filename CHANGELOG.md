@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.21.0] - 2026-11-20
+
+### Changed
+- **Fechas en formato DD-MM-AAAA** en toda la aplicación (por ejemplo, "20-11-2026"): Inicio (encabezados por día, detalle de la transacción y cuotas programadas), formulario de transacción ("Vencimiento · <título> · dd-mm-aaaa"), Avisos, Bienes (ficha, historial, titulares, análisis económico), ventana del alquiler y sus períodos, cobros y notas, Obligaciones (vencimientos, pagos, comprobantes y notas), Configuración (cuentas, transferencias y avisos de saldo), documentos y notas, y el historial de versiones. Los Logs muestran "dd-mm-aaaa hh:mm". Los mensajes que arma el servidor (avisos, errores de superposición de alquileres y descripciones de los Logs) también usan DD-MM-AAAA. Los datos se siguen guardando como AAAA-MM-DD; los selectores de fecha del navegador y las etiquetas de solo mes ("Noviembre 2026") no cambian.
+- **Ventanas un 15% más anchas**: todas las ventanas emergentes se ensanchan otro 15% (la estándar pasa de 572 px a 658 px), siempre limitadas al ancho de la pantalla. La ventana **Ver alquiler** conserva su tamaño (1430 px); las ventanas que se abren encima de ella sí se ensanchan.
+
 ## [1.20.0] - 2026-11-20
 
 ### Added
