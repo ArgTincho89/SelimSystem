@@ -977,11 +977,15 @@ const HomePage = {
     // "Ver": read-only detail of the whole rent collection (every modality), stacked on top of this dialog.
     // A mirror expense (rent paid by a titular tenant) is read-only: it shows its rent collection and follows its undo.
     const mirrorOf = tx.mirrorRentCollectionId || null;
-    const collectionId = tx.rentCollectionId || mirrorOf;
-    if (collectionId) {
+    if (tx.rentCollectionId) {
       footer.appendChild(create('button', {
-        className: 'btn btn-secondary', type: 'button', textContent: 'Ver', dataset: { viewRentCollection: collectionId },
-        onClick: () => AssetsPage.showCollectionView(collectionId, { stacked: true })
+        className: 'btn btn-secondary', type: 'button', textContent: 'Ver', dataset: { viewRentCollection: tx.rentCollectionId },
+        onClick: () => AssetsPage.showCollectionView(tx.rentCollectionId, { stacked: true })
+      }));
+    } else if (mirrorOf) {
+      footer.appendChild(create('button', {
+        className: 'btn btn-secondary', type: 'button', textContent: 'Ver', dataset: { viewRentCollection: mirrorOf },
+        onClick: () => AssetsPage.showCollectionView(mirrorOf, { stacked: true })
       }));
     }
     if (tx.isRecurringInstance && tx.occurrenceStatus !== 'posted' && tx.occurrenceStatus !== 'skipped' && tx.fecha <= getToday()) {
