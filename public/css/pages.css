@@ -2131,3 +2131,22 @@ body.desktop-mode .home-accounts .account-card-sub,
 body:not(.desktop-mode) .home-accounts .account-card-sub {
   min-height: 0;
 }
+
+/* Bienes: drag handle to reorder the asset cards. */
+.asset-card-main { display: flex; align-items: flex-start; gap: var(--space-sm); min-width: 0; }
+.asset-drag-handle {
+  flex: none;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: var(--font-md);
+  line-height: 1;
+  padding: 4px 2px;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  border-radius: var(--radius);
+}
+.asset-drag-handle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.asset-card.is-dragging { opacity: 0.6; box-shadow: 0 0 0 2px var(--accent); }
+.asset-card.is-dragging .asset-drag-handle { cursor: grabbing; }

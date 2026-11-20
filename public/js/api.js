@@ -155,6 +155,7 @@ const API = {
       return API.get(`/assets${serialized ? `?${serialized}` : ''}`);
     },
     get(id) { return API.get(`/assets/${id}`); },
+    reorder(ids) { return API.put('/assets/order', { ids }); },
     economics(id, filters = {}) {
       const query = new URLSearchParams(Object.entries(filters).filter(([, value]) => value !== '' && value != null));
       return API.get(`/assets/${encodeURIComponent(id)}/economics${query.toString() ? `?${query}` : ''}`);

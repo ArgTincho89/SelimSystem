@@ -209,6 +209,35 @@ function matchesFilter(asset, query, owners, assetOwnerships) {
     && (!query.location || locationText.includes(query.location.toLocaleLowerCase()));
 }
 
+// User-defined card order: assets with an `order` first (ascending), then the rest in creation order.
+function sortByOrder(assets) {
+  return assets
+    .map((asset, index) => ({ asset, index, ordered: Number.isFinite(asset.order) }))
+    .sort((a, b) => (a.ordered === b.ordered ? 0 : a.ordered ? -1 : 1)
+      || (a.ordered ? a.asset.order - b.asset.order : 0)
+      || a.index - b.index)
+    .map(item => item.asset);
+}
+
+// Reorders the given ids (possibly a filtered subset): they keep the slots they occupy in the full
+// list, refilled in the new sequence; every asset is then renumbered 0..n-1.
+router.put('/order', (req, res) => {
+  const db = req.app.locals.db;
+  const userId = req.session.userId;
+  const ids = req.body && req.body.ids;
+  if (!Array.isArray(ids) || !ids.length || ids.some(id => typeof id !== 'string') || new Set(ids).size !== ids.length) {
+    return res.status(400).json({ error: 'Enviá la lista de bienes a ordenar' });
+  }
+  const full = sortByOrder(db.findAll('assets', userId));
+  const known = new Set(full.map(asset => asset.id));
+  if (ids.some(id => !known.has(id))) return res.status(400).json({ error: 'Bien no encontrado' });
+  const moving = new Set(ids);
+  const queue = ids.map(id => full.find(asset => asset.id === id));
+  const next = full.map(asset => (moving.has(asset.id) ? queue.shift() : asset)).map((asset, order) => ({ ...asset, order }));
+  db.replace('assets', userId, next);
+  res.json({ ids: next.map(asset => asset.id) });
+});
+
 router.get('/', (req, res) => {
   const db = req.app.locals.db;
   const userId = req.session.userId;
@@ -216,7 +245,7 @@ router.get('/', (req, res) => {
     q: String(req.query.q || '').trim(), type: req.query.type, ownerId: req.query.ownerId,
     status: req.query.status, usage: req.query.usage, condition: req.query.condition, propertyKind: req.query.propertyKind, location: String(req.query.location || '').trim()
   };
-  const assets = db.findAll('assets', userId);
+  const assets = sortByOrder(db.findAll('assets', userId));
   const owners = db.findAll('legalOwners', userId);
   const ownerships = db.findAll('assetOwnerships', userId);
   const today = ledger.localDateForUser(db, userId);
