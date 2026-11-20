@@ -1,6 +1,6 @@
 # SelimSystem — Documento funcional
 
-**Versión del producto:** 1.18.0
+**Versión del producto:** 1.18.1
 **Entorno productivo:** https://selimsystem.fly.dev
 **Fecha del documento:** 20/11/2026
 
@@ -192,6 +192,7 @@ Permite ir a meses anteriores y **futuros** (para ver lo programado). Al tocar e
 ### 5.4 Cuentas
 
 - Una tarjeta por cuenta activa con nombre, marca "Principal", moneda y saldo.
+- Las **sub-cuentas** se muestran debajo de su cuenta, con "↳" y una tarjeta más compacta, para ver la relación de un vistazo.
 - El saldo solo se muestra si la cuenta está **conciliada**; si no, aparece "—" (Saldo sin conciliar). Ver 12.1.
 - **Ver cuenta** lleva a Configuración > Cuentas.
 - **Ocultar importes / Mostrar importes** (y el botón con forma de ojo): son dos preferencias independientes que se recuerdan en el dispositivo. El ojo de Inicio oculta con "••••••" las tarjetas de **Ingresos, Gastos y Ahorro** (y los importes de Inicio); el botón **Ocultar importes** de Configuración oculta solo los **saldos de las cuentas**. Uno no modifica al otro.
@@ -365,7 +366,8 @@ Reglas generales: se consideran avisos hasta 90 días hacia adelante y se muestr
 ### 9.1 Lista de bienes
 
 - **Avisos de alquiler** (si existen): accesos rápidos a alquileres pendientes y vencimientos de contratos.
-- **Filtros:** cada campo tiene su etiqueta visible encima: **Tipo de bien** (Todos / Mueble / Inmueble), **Tipo de inmueble** (solo aparece al elegir Inmueble; ofrece los tipos ya creados: Departamento, Casa, Galpón, Lote y los agregados), **Titular legal** y **Estado** (Todos / Alquilado / No alquilado; "No alquilado" incluye todo bien sin alquiler vigente), con los botones **Filtrar** y **Limpiar**. Los buscadores de Obligaciones (Bien, Proveedor, Estado, Tipo, Desde, Hasta) y Avisos (Tipo de aviso, Responsable, Bien) también muestran etiquetas visibles.
+- **Filtros:** cada campo tiene su etiqueta visible encima: **Tipo de bien** (Todos / Mueble / Inmueble), **Tipo de inmueble** (solo aparece al elegir Inmueble; ofrece los tipos ya creados: Departamento, Casa, Galpón, Local, Lote y los agregados), **Titular legal** y **Estado** (Todos / Alquilado / No alquilado; "No alquilado" incluye todo bien sin alquiler vigente), con los botones **Filtrar** y **Limpiar**. Los buscadores de Obligaciones (Bien, Proveedor, Estado, Tipo, Desde, Hasta) y Avisos (Tipo de aviso, Responsable, Bien) también muestran etiquetas visibles.
+- **Orden de las tarjetas:** se arrastra cada tarjeta desde su agarre **⋮⋮** (con el mouse o el dedo) para reordenarla; con el agarre enfocado, las flechas ↑/↓ la mueven de a un lugar. El orden se guarda y se mantiene en todos los dispositivos. Con filtros activos, solo cambia el orden entre los bienes visibles. Los bienes nuevos se agregan al final.
 - Cada bien muestra su nombre y dos líneas con los nombres de los datos en negrita: "**Inmueble** · **Tipo:** Galpón · **Ubicación:** …" (en muebles, "**Mueble** · **Detalle:** …") y "**Estado:** Alquilado / No alquilado · **Titular:** …". Los datos vacíos no se muestran. Botones:
 
 | Botón | Qué hace |
@@ -387,7 +389,7 @@ Reglas generales: se consideran avisos hasta 90 días hacia adelante y se muestr
 
 | Mueble | Inmueble |
 |---|---|
-| Tipo (Automóvil) | Tipo: Departamento, Casa, Galpón, Lote o un **tipo propio** (obligatorio). Con **Agregar tipo…** se crea uno nuevo (hasta 50 caracteres, sin repetir ninguno existente aunque cambien mayúsculas o acentos) y queda seleccionado. Los tipos propios no se renombran ni se eliminan, y los contratos de esos bienes usan el tipo "residencial". |
+| Tipo (Automóvil) | Tipo: Departamento, Casa, Galpón, Local, Lote o un **tipo propio** (obligatorio). Un **Local** alquilado genera un contrato de tipo "comercial" (un Galpón, "industrial"). Con **Agregar tipo…** se crea uno nuevo (hasta 50 caracteres, sin repetir ninguno existente aunque cambien mayúsculas o acentos) y queda seleccionado. Los tipos propios no se renombran ni se eliminan, y los contratos de esos bienes usan el tipo "residencial". |
 | Marca | Características |
 | Dominio | Ubicación |
 | KMs | Superficie cubierta (m²) y Superficie libre (m²), enteros ≥ 0 |
@@ -645,15 +647,15 @@ Para corregir un pago registrado por error sin perder la trazabilidad.
 
 ### 12.1 Cuentas
 
-**Lista de cuentas:** cada cuenta muestra nombre, marca "Principal" o "Archivada", moneda, titular y saldo (si está conciliada). Las sub-cuentas aparecen indentadas con "↳".
+**Lista de cuentas:** cada cuenta muestra nombre, marca "Principal" o "Archivada", moneda, titular, **Dígitos** (los últimos 4 dígitos, si se cargaron) y saldo (si está conciliada). Las sub-cuentas aparecen indentadas con "↳".
 
 | Acción | Detalle |
 |---|---|
-| **Agregar cuenta** | Nombre (hasta 80 caracteres), Moneda (ARS, EUR o USD), **Titular de la cuenta** y casilla **Cuenta principal**: si se marca, esa cuenta pasa a ser la principal y la anterior deja de serlo. |
+| **Agregar cuenta** | Nombre (hasta 80 caracteres), Moneda (ARS, EUR o USD), **Titular de la cuenta**, **Últimos 4 dígitos** (opcional, exactamente 4 números) y casilla **Cuenta principal**: si se marca, esa cuenta pasa a ser la principal y la anterior deja de serlo. |
 | **Agregar sub-cuenta** | Igual, con moneda propia obligatoria. No puede ser principal. Solo se ofrece en cuentas de primer nivel activas. |
 | **Ver movimientos** | Saldo, lista de movimientos de la cuenta y mínimo proyectado. Botón **Nuevo movimiento en esta cuenta**. |
 | **Conciliar saldo / Editar conciliación** | Saldo al inicio de una **fecha de referencia** y selección de los movimientos históricos ya incluidos en ese saldo. Desde entonces el saldo se calcula solo. |
-| **Editar** | Nombre, titular y moneda (la moneda solo si la cuenta no tiene movimientos ni conciliación). |
+| **Editar** | Nombre, titular, últimos 4 dígitos y moneda (la moneda solo si la cuenta no tiene movimientos ni conciliación). |
 | **Hacer principal** | Pasa a ser la cuenta principal (solo cuentas de primer nivel). No se ofrece en la cuenta que ya es principal. |
 | **Archivar** | No aplica a la principal; requiere archivar antes las sub-cuentas y no tener recurrencias ni movimientos programados. |
 | **Eliminar** | Solo cuentas no principales, sin movimientos y sin sub-cuentas. |

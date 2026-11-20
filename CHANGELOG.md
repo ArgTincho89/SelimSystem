@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.18.1] - 2026-11-20
+
+### Added
+- Configuración > Cuentas: campo **Últimos 4 dígitos** (opcional, exactamente 4 números) al crear o editar una cuenta. La tarjeta de la cuenta muestra **Dígitos: xxxx** debajo de "Titular".
+
+- Bienes: **reordenar las tarjetas con drag and drop** desde el agarre ⋮⋮ (mouse o pantalla táctil; también con las flechas ↑/↓). El orden se guarda.
+- Bienes: nuevo tipo de inmueble **Local**; al alquilarlo, el contrato se crea como comercial.
+
+### Changed
+- Inicio: las **sub-cuentas** se muestran debajo de su cuenta (con "↳"), en lugar de al lado.
+
 ## [1.18.0] - 2026-11-20
 
 ### Added

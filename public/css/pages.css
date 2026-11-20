@@ -546,6 +546,31 @@
   font-weight: 700;
 }
 
+/* Inicio: each account is a column with its sub-accounts stacked below it. */
+.account-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  min-width: 0;
+}
+
+.account-subcards {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  margin-left: var(--space-md);
+  padding-left: var(--space-sm);
+  border-left: 2px solid var(--border);
+}
+
+.account-card-sub {
+  padding: var(--space-sm) var(--space-md);
+}
+
+.account-card-sub .account-card-balance {
+  font-size: var(--font-md);
+}
+
 .account-card-compact {
   padding: var(--space-sm);
 }
@@ -2100,3 +2125,28 @@ body:not(.desktop-mode) .home-stats .stat-value-multi .stat-currency-amount:not(
 }
 .logs-header > .btn { justify-self: start; }
 .logs-header > .page-title { grid-column: 2; text-align: center; margin: 0; }
+
+/* Sub-account cards stay compact under their parent account. */
+body.desktop-mode .home-accounts .account-card-sub,
+body:not(.desktop-mode) .home-accounts .account-card-sub {
+  min-height: 0;
+}
+
+/* Bienes: drag handle to reorder the asset cards. */
+.asset-card-main { display: flex; align-items: flex-start; gap: var(--space-sm); min-width: 0; }
+.asset-drag-handle {
+  flex: none;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: var(--font-md);
+  line-height: 1;
+  padding: 4px 2px;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  border-radius: var(--radius);
+}
+.asset-drag-handle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.asset-card.is-dragging { opacity: 0.6; box-shadow: 0 0 0 2px var(--accent); }
+.asset-card.is-dragging .asset-drag-handle { cursor: grabbing; }

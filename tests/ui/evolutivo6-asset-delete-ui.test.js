@@ -52,7 +52,7 @@ describe('Evolutivo 6 asset deletion UI', () => {
   it('merges custom kinds into the options and offers "Agregar tipo…"', () => {
     const { AssetsPage } = setup();
     AssetsPage.kinds = [{ key: 'custom-local-comercial', name: 'Local comercial' }];
-    expect(AssetsPage.propertyKindOptions().map(([key]) => key)).toEqual(['departamento', 'casa', 'galpon', 'lote', 'custom-local-comercial']);
+    expect(AssetsPage.propertyKindOptions().map(([key]) => key)).toEqual(['departamento', 'casa', 'galpon', 'local', 'lote', 'custom-local-comercial']);
     expect(AssetsPage.optionLabel(AssetsPage.propertyKindOptions(), 'custom-local-comercial')).toBe('Local comercial');
     expect(source).toContain("'Agregar tipo…'");
   });

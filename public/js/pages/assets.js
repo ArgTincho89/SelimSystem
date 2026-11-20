@@ -70,10 +70,15 @@ const AssetsPage = {
       content.appendChild(create('div', { className: 'empty-state', innerHTML: '<div class="empty-state-icon">🏠</div><p class="empty-state-text">No hay bienes que coincidan con la búsqueda</p>' }));
       return;
     }
-    const list = create('div', { style: { display: 'grid', gap: '10px' } });
+    const list = create('div', { className: 'asset-list', style: { display: 'grid', gap: '10px' } });
     this.assets.forEach(asset => {
-      const card = create('article', { className: 'card', style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: 'wrap' } });
-      const details = create('div', {}, [create('strong', { textContent: asset.name }), ...this.assetCardLines(asset)]);
+      const card = create('article', { className: 'card asset-card', style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: 'wrap' } });
+      card.dataset.assetId = asset.id;
+      const handle = create('button', {
+        className: 'asset-drag-handle', type: 'button', textContent: '⋮⋮',
+        title: 'Arrastrá para reordenar', 'aria-label': `Reordenar ${asset.name} (flechas arriba y abajo)`
+      });
+      const details = create('div', { className: 'asset-card-main' }, [handle, create('div', {}, [create('strong', { textContent: asset.name }), ...this.assetCardLines(asset)])]);
       const actions = create('div', { style: { display: 'flex', gap: '8px' } }, [
         create('button', { className: 'btn btn-ghost btn-sm', textContent: 'Ver', onClick: async () => { try { this.showAssetModal(await API.assets.get(asset.id), { readOnly: true }); } catch (error) { showToast(error.message, 'error'); } } }),
         create('button', { className: 'btn btn-ghost btn-sm', textContent: 'Ver historial', onClick: () => this.showHistory(asset.id) }),
@@ -84,7 +89,64 @@ const AssetsPage = {
       card.append(details, actions);
       list.appendChild(card);
     });
+    this.enableReorder(list);
     content.appendChild(list);
+  },
+
+  // Drag and drop of the asset cards by their handle (pointer events: mouse and touch), plus
+  // ArrowUp/ArrowDown on the focused handle. The new order is saved when the drop changes it.
+  enableReorder(list) {
+    const cards = () => Array.from(list.children).filter(child => child.classList.contains('asset-card'));
+    const idsNow = () => cards().map(card => card.dataset.assetId);
+    let dragging = null;
+    let before = '';
+    on(list, 'pointerdown', event => {
+      const handle = event.target.closest && event.target.closest('.asset-drag-handle');
+      if (!handle || (event.button !== undefined && event.button !== 0)) return;
+      dragging = handle.closest('.asset-card');
+      before = idsNow().join(',');
+      event.preventDefault();
+      if (handle.setPointerCapture) { try { handle.setPointerCapture(event.pointerId); } catch { /* capture is optional */ } }
+      dragging.classList.add('is-dragging');
+    });
+    on(list, 'pointermove', event => {
+      if (!dragging) return;
+      const target = document.elementFromPoint(event.clientX, event.clientY);
+      const over = target && target.closest ? target.closest('.asset-card') : null;
+      if (!over || over === dragging || over.parentNode !== list) return;
+      const rect = over.getBoundingClientRect();
+      list.insertBefore(dragging, event.clientY > rect.top + rect.height / 2 ? over.nextSibling : over);
+    });
+    const finish = () => {
+      if (!dragging) return;
+      dragging.classList.remove('is-dragging');
+      dragging = null;
+      if (idsNow().join(',') !== before) this.saveOrder(idsNow());
+    };
+    on(list, 'pointerup', finish);
+    on(list, 'pointercancel', finish);
+    on(list, 'keydown', event => {
+      const handle = event.target.closest && event.target.closest('.asset-drag-handle');
+      if (!handle || (event.key !== 'ArrowUp' && event.key !== 'ArrowDown')) return;
+      event.preventDefault();
+      const card = handle.closest('.asset-card');
+      const sibling = event.key === 'ArrowUp' ? card.previousElementSibling : card.nextElementSibling;
+      if (!sibling) return;
+      list.insertBefore(card, event.key === 'ArrowUp' ? sibling : sibling.nextSibling);
+      handle.focus();
+      this.saveOrder(idsNow());
+    });
+  },
+
+  async saveOrder(ids) {
+    try {
+      await API.assets.reorder(ids);
+      const byId = new Map(this.assets.map(asset => [asset.id, asset]));
+      this.assets = ids.map(id => byId.get(id)).filter(Boolean);
+    } catch (error) {
+      showToast(error.message || 'No se pudo guardar el orden', 'error');
+      this.render();
+    }
   },
 
   // "Alquilado" only when the asset has an active rental; everything else (movables, usufruct, unset) is "No alquilado".
@@ -157,7 +219,7 @@ const AssetsPage = {
   },
 
   propertyKindOptions() {
-    return [['departamento', 'Departamento'], ['casa', 'Casa'], ['galpon', 'Galpón'], ['lote', 'Lote'], ...(this.kinds || []).map(kind => [kind.key, kind.name])];
+    return [['departamento', 'Departamento'], ['casa', 'Casa'], ['galpon', 'Galpón'], ['local', 'Local'], ['lote', 'Lote'], ...(this.kinds || []).map(kind => [kind.key, kind.name])];
   },
 
   conditionOptions() {
