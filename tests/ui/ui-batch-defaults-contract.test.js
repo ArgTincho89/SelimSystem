@@ -41,20 +41,15 @@ describe('UI batch: defaults, money inputs, obligation form and nav highlight', 
     });
   });
 
-  describe('obligation form custom lead days', () => {
+  // Evolutivo 10: the lead time moved to Configuración > Avisos; the obligation form no longer asks for it.
+  describe('obligation form lead days', () => {
     const source = read('js/pages/obligations.js');
     const form = source.slice(source.indexOf('  async showCreateModal('), source.indexOf('  async editOccurrence('));
 
-    it('only shows the custom days field when Aviso is Personalizado', () => {
-      expect(form).toContain("const customLeadWrap = customLead.parentNode;");
-      expect(form).toMatch(/customLeadWrap\.style\.display = isCustom \? '' : 'none'/);
-      expect(form).toContain("on(reminder, 'change', syncCustomLead);");
-    });
-
-    it('only validates and submits the custom days when Personalizado is selected', () => {
-      expect(form).toContain("const isCustomLead = reminder.value === 'custom';");
-      expect(form).toMatch(/if \(isCustomLead && !/);
-      expect(form).toContain('reminderLeadDays: Number(isCustomLead ? customLead.value : reminder.value)');
+    it('has no Aviso field and does not submit reminderLeadDays', () => {
+      expect(form).not.toContain("this.fieldWrap(form, 'Aviso'");
+      expect(form).not.toContain('customLead');
+      expect(form).not.toContain('reminderLeadDays:');
     });
   });
 

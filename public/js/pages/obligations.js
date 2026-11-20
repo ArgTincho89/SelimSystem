@@ -152,12 +152,6 @@ const ObligationsPage = {
     return ['paid', 'resolved', 'cancelled'].includes(occurrence.status);
   },
 
-  reminderLabel(days) {
-    const value = Number(days);
-    if (!value) return 'El mismo día';
-    return `${value} ${value === 1 ? 'día' : 'días'}`;
-  },
-
   renderObligation(item) {
     const asset = this.assets.find(record => record.id === item.assetId)?.name;
     const provider = this.owners.find(record => record.id === item.providerEntityId)?.name;
@@ -172,8 +166,7 @@ const ObligationsPage = {
       this.labelValue('Cuenta', account ? (account.nombre || account.name) : ''),
       this.labelValue('Identificador', identifier),
       this.labelValue('Monto estimado', amount),
-      this.labelValue('Frecuencia', item.recurrenceFrequency ? this.frequencyLabel(item.recurrenceFrequency) : 'Única vez'),
-      this.labelValue('Aviso', this.reminderLabel(item.reminderLeadDays))
+      this.labelValue('Frecuencia', item.recurrenceFrequency ? this.frequencyLabel(item.recurrenceFrequency) : 'Única vez')
     ].filter(Boolean);
     const details = create('div', { style: { display: 'grid', gap: '2px' } }, [
       create('h3', { textContent: item.title, style: { marginBottom: '4px' } }),
@@ -294,20 +287,7 @@ const ObligationsPage = {
     this.fieldWrap(form, 'Frecuencia', frequency);
     const date = this.field(form, 'Primer vencimiento', { type: 'date', required: true, value: existing?.startDate || new Date().toISOString().slice(0, 10) });
     const endDate = this.field(form, 'Último vencimiento (opcional)', { type: 'date', value: existing?.endDate || '' });
-    const reminderValues = ['0', '7', '15', '30'];
-    const reminder = this.select([['0', 'El mismo día'], ['7', '7 días antes'], ['15', '15 días antes'], ['30', '30 días antes'], ['custom', 'Personalizado']], reminderValues.includes(String(existing?.reminderLeadDays ?? 7)) ? String(existing?.reminderLeadDays ?? 7) : 'custom');
-    this.fieldWrap(form, 'Aviso', reminder);
-    const customLead = this.field(form, 'Días de anticipación personalizados', { type: 'text', value: existing?.reminderLeadDays ?? 7 });
-    const customLeadWrap = customLead.parentNode;
-    // The custom lead days are only shown (and submitted) when "Aviso" is "Personalizado".
-    const syncCustomLead = () => {
-      const isCustom = reminder.value === 'custom';
-      customLeadWrap.style.display = isCustom ? '' : 'none';
-      customLead.disabled = !isCustom;
-      customLead.required = isCustom;
-    };
-    on(reminder, 'change', syncCustomLead);
-    syncCustomLead();
+    // The alert lead time is configured in Configuración > Avisos (stored reminderLeadDays is left untouched).
     const currencies = ['ARS', 'EUR', 'USD'];
     const currency = this.select(currencies.map(code => [code, code]), existing?.currencyCode || 'ARS');
     if (existing?.currencyCode && !currencies.includes(existing.currencyCode)) {
@@ -362,8 +342,6 @@ const ObligationsPage = {
     on(form, 'submit', async event => {
       event.preventDefault();
       if (!this.validMoney(amount)) return;
-      const isCustomLead = reminder.value === 'custom';
-      if (isCustomLead && !/^\d+$/.test(String(customLead.value).trim())) { alert('Ingresá los días de anticipación'); return; }
       try {
         const identifier = externalIdentifier.value.trim();
         const data = {
@@ -371,7 +349,7 @@ const ObligationsPage = {
           categoryId: category.value || null,
           currencyCode: currency.value, estimatedAmount: MoneyInput.value(amount),
           startDate: date.value, endDate: endDate.value || null, recurrenceFrequency: frequency.value || null,
-          reminderLeadDays: Number(isCustomLead ? customLead.value : reminder.value), notes: notes.value,
+          notes: notes.value,
           externalIdentifier: identifier || null, externalIdentifierType: identifier ? identifierKind.value : null
         };
         // Legacy shared/third/none stay untouched unless the user picks Titular or Inquilino.

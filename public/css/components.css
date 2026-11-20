@@ -620,6 +620,43 @@ body.desktop-mode .fab {
   border-radius: var(--radius-md, 8px);
 }
 
+.alert-settings-table {
+  display: grid;
+  gap: 8px;
+}
+
+.alert-settings-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.alert-settings-row .alert-settings-text {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+
+.alert-settings-row .alert-settings-days {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.alert-settings-row .alert-settings-days input {
+  width: 84px;
+}
+
+.alert-override-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 10px;
+  align-items: end;
+}
+
 .badge-resolved {
   color: var(--success, #2e7d32);
   font-weight: 600;

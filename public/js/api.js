@@ -196,7 +196,9 @@ const API = {
       const query = new URLSearchParams(Object.entries(filters).filter(([, value]) => value !== '' && value != null));
       const serialized = query.toString();
       return API.get(`/alerts${serialized ? `?${serialized}` : ''}`);
-    }
+    },
+    settings() { return API.get('/alerts/settings'); },
+    updateSettings(data) { return API.put('/alerts/settings', data); }
   },
 
   getAlerts(filters = {}) { return API.alerts.list(filters); },

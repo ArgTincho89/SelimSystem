@@ -16,6 +16,8 @@ const AlertsPage = {
     rent_adjustment_due: 'Ajustes de alquiler',
     document_pending: 'Documentos pendientes',
     cheque_due: 'Cheques por cobrar',
+    transaction_cheque_due: 'Cuotas con cheque por confirmar',
+    credit_installment_upcoming: 'Próximas cuotas de crédito',
     account_forecast: 'Saldo insuficiente en cuentas'
   },
 
@@ -131,6 +133,10 @@ const AlertsPage = {
         return [['Marcar como cobrado', () => this.markChequeCashed(alert), true], ['Ver cobro', () => AssetsPage.showCollectionView(alert.groupId || alert.collectionId)], ...(alert.assetId ? [viewAsset] : [])];
       case 'card_installment_due':
         return [['Contabilizar cuota', () => this.postInstallment(alert), true], ['Ver transacciones', () => Router.navigate('/home')]];
+      case 'transaction_cheque_due':
+        return [['Confirmar imputación', () => this.confirmChequeInstallment(alert), true], ['Ver movimiento', () => this.viewMovement(alert)]];
+      case 'credit_installment_upcoming':
+        return [['Ver movimiento', () => this.viewMovement(alert)]];
       case 'account_forecast':
         return [['Ver cuentas', () => Router.navigate('/settings')]];
       default:
@@ -196,6 +202,25 @@ const AlertsPage = {
     await API.rentals.markChequeCashed(alert.groupId || alert.collectionId);
     showToast('Cheque marcado como cobrado');
     await this.reload();
+  },
+
+  // A pending cheque installment of a transaction: confirming it makes it count in the totals of its month.
+  async confirmChequeInstallment(alert) {
+    const { confirmed } = await ConfirmDialog.open({
+      title: 'Confirmar imputación', confirmLabel: 'Confirmar imputación',
+      message: 'La cuota pasa a contar en los totales del mes de su vencimiento y el aviso deja de mostrarse.',
+      details: [['Movimiento', alert.title], ['Nº cheque', alert.chequeNumber || ''], ['Importe', formatearMonedaConCodigo(alert.amount, alert.currencyCode)], ['Vencimiento', alert.date]]
+    });
+    if (!confirmed) return;
+    await API.transactions.confirm(alert.transactionId);
+    showToast('Imputación confirmada');
+    await this.reload();
+    if (typeof App !== 'undefined' && App.refreshAlertIndicator) App.refreshAlertIndicator();
+  },
+
+  // Opens Inicio on the month of the movement.
+  viewMovement(alert) {
+    Router.navigate(`/home?month=${encodeURIComponent(String(alert.date).slice(0, 7))}`);
   },
 
   // One alert per declaration month: the dialog collects every modality of that month.

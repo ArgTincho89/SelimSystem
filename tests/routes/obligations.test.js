@@ -168,6 +168,9 @@ describe('Obligations', () => {
     expect(cancelled.body.status).toBe('cancelled');
     const customDate = addDaysDateOnly(today, 40);
     const customReminder = await createObligation({ startDate: customDate, reminderLeadDays: 45 });
+    // Evolutivo 10: the lead time is an alert-settings override, not the stored reminderLeadDays.
+    expect((await agent.get('/api/obligations/alerts')).body.some(item => item.obligationId === customReminder.id)).toBe(false);
+    await agent.put('/api/alerts/settings').send({ overrides: [{ type: 'obligation_due', scope: 'obligation', targetId: customReminder.id, days: 45 }] });
     expect((await agent.get('/api/obligations/alerts')).body.some(item => item.obligationId === customReminder.id)).toBe(true);
     expect((await agent.post('/api/obligations').send({ title: 'Invalid reminder', type: 'other', currencyCode: 'EUR', estimatedAmount: 10, startDate: today, reminderLeadDays: 91 })).status).toBe(400);
 

@@ -18,7 +18,7 @@ describe('Evolutivo 4 obligation card contract', () => {
   it('renders bold label/value lines for every datum of the obligation', () => {
     expect(source).toContain("className: 'label-value'");
     expect(source).toContain("create('strong', { textContent: `${label}:` })");
-    ['Tipo', 'Inmueble', 'Proveedor', 'Responsabilidad', 'Cuenta', 'Monto estimado', 'Frecuencia', 'Aviso'].forEach(label => {
+    ['Tipo', 'Inmueble', 'Proveedor', 'Responsabilidad', 'Cuenta', 'Monto estimado', 'Frecuencia'].forEach(label => {
       expect(source).toContain(`this.labelValue('${label}'`);
     });
   });

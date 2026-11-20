@@ -73,10 +73,12 @@ describe('Unified alerts API', () => {
     expect((await request(app).get('/api/alerts')).status).toBe(401);
   });
 
+  // Evolutivo 10: the lead comes from Configuración > Avisos (per-obligation override); reminderLeadDays is ignored.
   it('respects per-obligation anticipation and always includes overdue items', async () => {
-    const included = await createObligation({ title: 'Impuesto', startDate: day(10), reminderLeadDays: 15 });
-    const excluded = await createObligation({ title: 'Agua', startDate: day(10), reminderLeadDays: 4 });
+    const included = await createObligation({ title: 'Impuesto', startDate: day(10), reminderLeadDays: 4 });
+    const excluded = await createObligation({ title: 'Agua', startDate: day(10), reminderLeadDays: 15 });
     const overdue = await createObligation({ title: 'Gas', startDate: day(-3), reminderLeadDays: 0 });
+    expect((await agent.put('/api/alerts/settings').send({ overrides: [{ type: 'obligation_due', scope: 'obligation', targetId: included.obligation.id, days: 15 }] })).status).toBe(200);
     const list = await alerts();
     expect(forObligation(list, included.obligation).map(item => item.type)).toEqual(['obligation_due']);
     expect(forObligation(list, excluded.obligation)).toHaveLength(0);

@@ -1,5 +1,6 @@
 const { generateRecurringInstances, addDaysDateOnly, dateOnlyDaysBetween } = require('../utils/recurring');
 const { isPostedTransaction } = require('../utils/transaction-status');
+const alertConfig = require('./alert-config');
 
 const CURRENCIES = new Set(['EUR', 'USD', 'ARS', 'GBP', 'CAD', 'AUD', 'CHF', 'JPY', 'BRL', 'CLP', 'MXN', 'CNY', 'UYU', 'PYG', 'COP', 'PEN', 'BOB', 'CRC', 'DOP', 'PLN', 'SEK', 'NOK', 'DKK', 'NZD', 'INR', 'ZAR', 'KRW']);
 const SELECTABLE_CURRENCIES = new Set(['ARS', 'EUR', 'USD']);
@@ -454,7 +455,7 @@ function forecastAccount(db, userId, account, today = localDateForUser(db, userI
   if (currentBalanceMinor === null || currentBalanceMinor === undefined) return { accountId: account.id, currency: account.currency, reconciled: false, events: [], alerts: [] };
   const settings = getSettings(db, userId, false);
   const horizon = settings?.forecastHorizonDays || 30;
-  const lead = settings?.alertLeadDays || 5;
+  const lead = alertConfig.leadDaysFor(db, userId, 'account_forecast', { accountId: account.id });
   const endDate = addDaysDateOnly(today, horizon);
   const events = [];
   const transactions = db.findAll('transactions', userId);

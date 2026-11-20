@@ -2,6 +2,7 @@ const express = require('express');
 const { requireAuth } = require('../middleware/auth');
 const alerts = require('../services/alerts');
 const rentals = require('../services/rentals');
+const alertConfig = require('../services/alert-config');
 
 const router = express.Router();
 router.use(requireAuth);
@@ -32,6 +33,24 @@ router.get('/', (req, res) => {
     filters.limit = limit;
   }
   res.json(alerts.list(db, userId, filters));
+});
+
+// Lead-time configuration: catalog, the user's defaults and overrides, and the names for the override pickers.
+router.get('/settings', (req, res) => {
+  res.json(alertConfig.describe(req.app.locals.db, req.session.userId));
+});
+
+router.put('/settings', (req, res) => {
+  const db = req.app.locals.db;
+  const userId = req.session.userId;
+  const parsed = alertConfig.validateSettings(db, userId, req.body);
+  if (parsed.error) return res.status(400).json({ error: parsed.error });
+  const current = alertConfig.readSettings(db, userId, { persist: true });
+  alertConfig.saveSettings(db, userId, {
+    defaults: req.body.defaults !== undefined ? parsed.settings.defaults : current.defaults,
+    overrides: req.body.overrides !== undefined ? parsed.settings.overrides : current.overrides
+  });
+  res.json(alertConfig.describe(db, userId));
 });
 
 module.exports = router;

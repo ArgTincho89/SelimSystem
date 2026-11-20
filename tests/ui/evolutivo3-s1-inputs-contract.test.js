@@ -33,7 +33,7 @@ describe('Evolutivo 3 S1 money input contract', () => {
     expect(form).toContain("id: 'transaction-iva'");
     expect(form).toMatch(/type: 'number',\s+step: '0\.01',\s+min: '0',\s+max: '100'/);
     expect(form).toContain("id: 'transaction-installments-count'");
-    expect(read('js/pages/settings.js')).toContain("id: 'alert-lead', className: 'form-control', type: 'number'");
+    expect(read('js/pages/settings.js')).toContain("id: `alert-days-${entry.key}`, className: 'form-control', type: 'number'");
   });
 
   it('uses MoneyInput on home filters, obligations and settings', () => {

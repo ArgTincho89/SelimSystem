@@ -25,6 +25,7 @@ const ROUTES = [
   r('POST', '/transactions/:id/unconfirm', 'transaction.unconfirm', 'Deshiciste la confirmación de la transacción', 'deshacer la confirmación de una transacción', 'transaction', { id: 'id' }),
   r('PUT', '/transactions/:id', 'transaction.update', 'Modificaste una transacción', 'modificar una transacción', 'transaction', { id: 'id' }),
   r('DELETE', '/transactions/:id', 'transaction.delete', 'Eliminaste una transacción', 'eliminar una transacción', 'transaction', { id: 'id' }),
+  r('PUT', '/alerts/settings', 'alert.settings', 'Cambiaste la configuración de avisos', 'cambiar la configuración de avisos', null),
   r('POST', '/accounts/migration/rollback', 'account.migration-rollback', 'Revertiste la migración de cuentas', 'revertir la migración de cuentas', null),
   r('POST', '/accounts/migration/reapply', 'account.migration-reapply', 'Volviste a aplicar la migración de cuentas', 'volver a aplicar la migración de cuentas', null),
   r('PATCH', '/accounts/settings', 'account.settings', 'Cambiaste la configuración de tus cuentas', 'cambiar la configuración de tus cuentas', null),
@@ -99,7 +100,7 @@ const ROUTES = [
   r('PATCH', '/installments/plans/:id', 'installment.update', 'Modificaste un plan de cuotas', 'modificar un plan de cuotas', null)
 ].map(route => ({ ...route, regex: new RegExp(`^${route.pattern.replace(/:[A-Za-z]+/g, '([^/]+)')}$`), keys: (route.pattern.match(/:[A-Za-z]+/g) || []).map(key => key.slice(1)) }));
 
-const SECTIONS = { auth: 'tu perfil', categories: 'tus categorías', transactions: 'tus transacciones', accounts: 'tus cuentas', transfers: 'tus transferencias', goals: 'tus metas', assets: 'tus bienes', owners: 'tus personas y entidades', documents: 'tus documentos', notes: 'tus notas', obligations: 'tus obligaciones', rentals: 'tus alquileres', finance: 'tus finanzas', installments: 'tus cuotas' };
+const SECTIONS = { auth: 'tu perfil', categories: 'tus categorías', transactions: 'tus transacciones', accounts: 'tus cuentas', transfers: 'tus transferencias', goals: 'tus metas', assets: 'tus bienes', owners: 'tus personas y entidades', documents: 'tus documentos', notes: 'tus notas', obligations: 'tus obligaciones', rentals: 'tus alquileres', finance: 'tus finanzas', installments: 'tus cuotas', alerts: 'tus avisos' };
 
 const SKIPPED = [/^POST \/auth\/(register|login|logout|forgot-password|reset-password)$/, /^DELETE \/auth\/account$/];
 
