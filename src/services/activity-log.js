@@ -21,6 +21,8 @@ const ROUTES = [
   r('POST', '/transactions/:id/occurrences/:date/post', 'transaction.occurrence-post', 'Contabilizaste una ocurrencia de la transacción recurrente', 'contabilizar una ocurrencia de una transacción recurrente', 'transaction', { id: 'id' }),
   r('PUT', '/transactions/:id/occurrences/:date', 'transaction.occurrence-update', 'Modificaste una ocurrencia de la transacción recurrente', 'modificar una ocurrencia de una transacción recurrente', 'transaction', { id: 'id' }),
   r('DELETE', '/transactions/:id/occurrences/:date', 'transaction.occurrence-delete', 'Eliminaste una ocurrencia de la transacción recurrente', 'eliminar una ocurrencia de una transacción recurrente', 'transaction', { id: 'id' }),
+  r('POST', '/transactions/:id/confirm', 'transaction.confirm', 'Confirmaste la imputación de la transacción', 'confirmar la imputación de una transacción', 'transaction', { id: 'id' }),
+  r('POST', '/transactions/:id/unconfirm', 'transaction.unconfirm', 'Deshiciste la confirmación de la transacción', 'deshacer la confirmación de una transacción', 'transaction', { id: 'id' }),
   r('PUT', '/transactions/:id', 'transaction.update', 'Modificaste una transacción', 'modificar una transacción', 'transaction', { id: 'id' }),
   r('DELETE', '/transactions/:id', 'transaction.delete', 'Eliminaste una transacción', 'eliminar una transacción', 'transaction', { id: 'id' }),
   r('POST', '/accounts/migration/rollback', 'account.migration-rollback', 'Revertiste la migración de cuentas', 'revertir la migración de cuentas', null),

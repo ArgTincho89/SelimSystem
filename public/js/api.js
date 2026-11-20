@@ -70,7 +70,9 @@ const API = {
     recurringTotal(month) { return API.get(`/transactions/recurring-total?month=${month}`); },
     postOccurrence(id, date) { return API.post(`/transactions/${id}/occurrences/${date}/post`, {}); },
     updateOccurrence(id, date, data) { return API.put(`/transactions/${id}/occurrences/${date}`, data); },
-    skipOccurrence(id, date) { return API.delete(`/transactions/${id}/occurrences/${date}`); }
+    skipOccurrence(id, date) { return API.delete(`/transactions/${id}/occurrences/${date}`); },
+    confirm(id) { return API.post(`/transactions/${encodeURIComponent(id)}/confirm`, {}); },
+    unconfirm(id, data) { return API.post(`/transactions/${encodeURIComponent(id)}/unconfirm`, data); }
   },
 
   summary: {

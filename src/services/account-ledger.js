@@ -1,4 +1,5 @@
 const { generateRecurringInstances, addDaysDateOnly, dateOnlyDaysBetween } = require('../utils/recurring');
+const { isPostedTransaction } = require('../utils/transaction-status');
 
 const CURRENCIES = new Set(['EUR', 'USD', 'ARS', 'GBP', 'CAD', 'AUD', 'CHF', 'JPY', 'BRL', 'CLP', 'MXN', 'CNY', 'UYU', 'PYG', 'COP', 'PEN', 'BOB', 'CRC', 'DOP', 'PLN', 'SEK', 'NOK', 'DKK', 'NZD', 'INR', 'ZAR', 'KRW']);
 const SELECTABLE_CURRENCIES = new Set(['ARS', 'EUR', 'USD']);
@@ -244,6 +245,7 @@ function getAccountBalances(db, userId, atDate = localDateForUser(db, userId)) {
     }
     const included = new Set(account.includedMovementIds || []);
     transactions.forEach(tx => {
+      if (!isPostedTransaction(tx)) return;
       const effective = tx.recurrente || db.findAll('recurrenceRevisions', userId).some(item => item.templateId === tx.id)
         ? (recurringVersionForDate(db, userId, tx, tx.fecha) || tx)
         : tx;
@@ -401,7 +403,7 @@ function validateAllocations(db, userId, transfer, allocations, ignoreTransferId
 function incomeByCurrency(db, userId, transactions, month) {
   const transfers = db.findAll('transfers', userId).filter(item => item.status === 'posted');
   const today = localDateForUser(db, userId);
-  const monthMovements = getMonthMovements(db, userId, transactions, month).filter(tx =>
+  const monthMovements = getMonthMovements(db, userId, transactions, month).filter(tx => isPostedTransaction(tx) &&
     (!tx.isRecurringInstance || tx.occurrenceStatus === 'posted') && (!tx.recurrente || tx.fecha <= today)
   );
   const totals = {};

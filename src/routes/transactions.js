@@ -1,3 +1,4 @@
+const crypto = require('crypto');
 const express = require('express');
 const { requireAuth } = require('../middleware/auth');
 const { generateRecurringInstances, getMonthTransactions } = require('../utils/recurring');
@@ -6,6 +7,8 @@ const ledger = require('../services/account-ledger');
 const rentals = require('../services/rentals');
 const finance = require('../services/finance');
 const incomeAttribution = require('../services/income-attribution');
+const installments = require('../services/transaction-installments');
+const { isPendingTransaction } = require('../utils/transaction-status');
 
 const router = express.Router();
 
@@ -199,12 +202,16 @@ router.post('/', (req, res) => {
   }
   const paymentMethodId = req.body.paymentMethodId || null;
   if (paymentMethodId && !db.findById('paymentMethods', paymentMethodId, userId)) return res.status(400).json({ error: 'El medio de pago no es válido' });
-  if (req.body.paymentMethod !== undefined && (typeof req.body.paymentMethod !== 'string' || req.body.paymentMethod.length > 120)) return res.status(400).json({ error: 'El medio de pago no es válido' });
+  const paymentMethod = req.body.paymentMethod === undefined || req.body.paymentMethod === null ? '' : req.body.paymentMethod;
+  if (typeof paymentMethod !== 'string' || !installments.methodAllowed(paymentMethod, tipo)) return res.status(400).json({ error: 'El medio de pago no es válido' });
   const expenseIva = tipo === 'expense' && ivaPorcentaje !== undefined && ivaPorcentaje !== null && ivaPorcentaje > 0;
   const vatHolder = expenseVatHolderFields(db, userId, expenseIva ? req.body.ivaHolderId : null);
   if (vatHolder.error) return res.status(400).json({ error: vatHolder.error });
+  const purchaseDate = fecha || ledger.localDateForUser(db, userId);
+  const plan = installmentPlan(db, userId, req.body, { tipo, paymentMethod, amountMinor, currency: account.currency, purchaseDate });
+  if (plan.error) return res.status(400).json({ error: plan.error });
 
-  const transaction = db.create('transactions', {
+  const base = {
     userId,
     tipo,
     monto: ledger.fromMinorUnits(amountMinor, account.currency),
@@ -216,8 +223,8 @@ router.post('/', (req, res) => {
     categoryId: categoryId || null,
     refundSourceId,
     paymentMethodId,
-    paymentMethod: req.body.paymentMethod || '',
-    fecha: fecha || ledger.localDateForUser(db, userId),
+    paymentMethod,
+    fecha: purchaseDate,
     recurrente: recurrente || false,
     frecuencia: recurrente ? (frecuencia || 'monthly') : null,
     fechaFin: recurrente ? (fechaFin || null) : null,
@@ -227,10 +234,98 @@ router.post('/', (req, res) => {
     ivaPorcentaje: (tipo === 'income' || expenseIva) && ivaPorcentaje !== undefined && ivaPorcentaje !== null ? roundCents(ivaPorcentaje) : null,
     ...(tipo === 'expense' ? vatHolder.fields : {}),
     ...(comments !== undefined ? { comments } : {})
-  }, userId);
+  };
 
+  if (!plan.records) {
+    const transaction = db.create('transactions', base, userId);
+    ledger.refreshAlerts(db, userId);
+    return res.status(201).json(transaction);
+  }
+  // Every record was validated above: the installments are written in one go.
+  const created = plan.records(base, finalTitulo).map(record => db.create('transactions', record, userId));
+  if (plan.assetId) {
+    created.forEach(record => db.create('movementAllocations', {
+      transactionId: record.id, amountMinor: record.amountMinor, amount: record.monto, currencyCode: record.currencyCode,
+      assetId: plan.assetId, obligationId: null, occurrenceId: null, contractId: null, rentOccurrenceId: null, complete: true
+    }, userId));
+  }
   ledger.refreshAlerts(db, userId);
-  res.status(201).json(transaction);
+  res.status(201).json({ ...created[0], installments: created });
+});
+
+// Installment flows of a new transaction. Returns {} (single transaction), { records(base, title), assetId } or { error }.
+function installmentPlan(db, userId, body, { tipo, paymentMethod, amountMinor, currency, purchaseDate }) {
+  const { chequeInstallments, creditInstallments } = body;
+  if (chequeInstallments === undefined && creditInstallments === undefined) return {};
+  if (chequeInstallments !== undefined && creditInstallments !== undefined) return { error: 'Elegí cuotas con cheque o con crédito, no ambas' };
+  if (body.recurrente) return { error: 'Las cuotas no se pueden combinar con una transacción recurrente' };
+  if (body.clasificacion === 'Mixto') return { error: 'La clasificación Mixto no admite cuotas' };
+  if (!installments.isValidDate(purchaseDate)) return { error: 'La fecha no es válida' };
+  let assetId = null;
+  if (body.attributionAssetId !== undefined && body.attributionAssetId !== null && body.attributionAssetId !== '') {
+    if (typeof body.attributionAssetId !== 'string' || !db.findById('assets', body.attributionAssetId, userId)) return { error: 'El bien de la atribución no es válido' };
+    assetId = body.attributionAssetId;
+  }
+  if (chequeInstallments !== undefined) {
+    if (!['expense', 'income'].includes(tipo)) return { error: 'Las cuotas con cheque solo se admiten en gastos e ingresos' };
+    if (paymentMethod !== 'Cheque') return { error: 'Las cuotas con cheque requieren el medio de pago Cheque' };
+    const schedule = installments.chequeSchedule(chequeInstallments, amountMinor, currency);
+    if (schedule.error) return schedule;
+    const chequeGroupId = crypto.randomUUID();
+    return {
+      assetId,
+      records: (base, title) => schedule.rows.map(row => ({
+        ...base, monto: ledger.fromMinorUnits(row.amountMinor, currency), amountMinor: row.amountMinor, fecha: row.dueDate,
+        titulo: `${title} — Cheque cuota ${row.number}/${row.total}`, paymentMethod: 'Cheque', status: 'pending', chequeGroupId,
+        chequeInstallment: { number: row.number, total: row.total, dueDate: row.dueDate, originalDate: purchaseDate, chequeNumber: row.chequeNumber, baseTitle: title }
+      }))
+    };
+  }
+  if (tipo !== 'expense') return { error: 'Las cuotas con crédito solo se admiten en gastos' };
+  if (paymentMethod !== 'Crédito') return { error: 'Las cuotas con crédito requieren el medio de pago Crédito' };
+  if (!creditInstallments || typeof creditInstallments !== 'object' || Array.isArray(creditInstallments)) return { error: 'Las cuotas de crédito no son válidas' };
+  const interestPercent = creditInstallments.interestPercent === undefined || creditInstallments.interestPercent === null ? 0 : creditInstallments.interestPercent;
+  const schedule = installments.creditSchedule({ baseMinor: amountMinor, count: creditInstallments.count, interestPercent, purchaseDate });
+  if (schedule.error) return schedule;
+  const creditGroupId = crypto.randomUUID();
+  return {
+    assetId,
+    records: (base, title) => schedule.rows.map(row => {
+      const amount = { monto: ledger.fromMinorUnits(row.amountMinor, currency), amountMinor: row.amountMinor, paymentMethod: 'Crédito' };
+      // A single installment is an ordinary expense on the purchase date (with the interest applied, if any).
+      if (row.total === 1) return { ...base, ...amount };
+      return {
+        ...base, ...amount, fecha: row.date, titulo: `«${title}» — cuota ${row.number}/${row.total}`, creditGroupId,
+        creditInstallment: { number: row.number, total: row.total, interestPercent, purchaseDate, purchaseTitle: title, baseAmountMinor: amountMinor }
+      };
+    })
+  };
+}
+
+// Confirms a pending transaction (a cheque installment): from now on it counts in the totals of its month.
+router.post('/:id/confirm', (req, res) => {
+  const db = req.app.locals.db;
+  const userId = req.session.userId;
+  const transaction = db.findById('transactions', req.params.id, userId);
+  if (!transaction) return res.status(404).json({ error: 'Transacción no encontrada' });
+  if (!isPendingTransaction(transaction)) return res.status(409).json({ error: 'La transacción no está pendiente de confirmación' });
+  const updated = db.update('transactions', transaction.id, { status: 'posted', confirmedAt: new Date().toISOString() }, userId);
+  ledger.refreshAlerts(db, userId);
+  res.json(updated);
+});
+
+// Undoes a confirmation (with a reason): the transaction goes back to pending and leaves the totals again.
+router.post('/:id/unconfirm', (req, res) => {
+  const db = req.app.locals.db;
+  const userId = req.session.userId;
+  const transaction = db.findById('transactions', req.params.id, userId);
+  if (!transaction) return res.status(404).json({ error: 'Transacción no encontrada' });
+  const reason = typeof req.body?.reason === 'string' ? req.body.reason.trim() : '';
+  if (!reason || reason.length > 500) return res.status(400).json({ error: 'Indicá el motivo (hasta 500 caracteres)' });
+  if (isPendingTransaction(transaction) || !transaction.confirmedAt) return res.status(409).json({ error: 'La transacción no tiene una confirmación para deshacer' });
+  const updated = db.update('transactions', transaction.id, { status: 'pending', confirmedAt: null, unconfirmedAt: new Date().toISOString(), unconfirmReason: reason }, userId);
+  ledger.refreshAlerts(db, userId);
+  res.json(updated);
 });
 
 router.put('/:id', (req, res) => {
@@ -250,7 +345,10 @@ router.put('/:id', (req, res) => {
   const paymentMethodId = req.body.paymentMethodId !== undefined ? (req.body.paymentMethodId || null) : transaction.paymentMethodId || null;
   if (paymentMethodId && !db.findById('paymentMethods', paymentMethodId, userId)) return res.status(400).json({ error: 'El medio de pago no es válido' });
   if (req.body.paymentMethod !== undefined) {
-    if (typeof req.body.paymentMethod !== 'string' || req.body.paymentMethod.length > 120) return res.status(400).json({ error: 'El medio de pago no es válido' });
+    // A legacy free-text value is kept as long as it is not changed; any new value must be one of the fixed methods.
+    const nextTipo = tipo !== undefined ? tipo : transaction.tipo;
+    const unchanged = req.body.paymentMethod === (transaction.paymentMethod || '');
+    if (typeof req.body.paymentMethod !== 'string' || (!unchanged && !installments.methodAllowed(req.body.paymentMethod, nextTipo))) return res.status(400).json({ error: 'El medio de pago no es válido' });
     updates.paymentMethod = req.body.paymentMethod;
   }
   if (req.body.paymentMethodId !== undefined) updates.paymentMethodId = paymentMethodId;

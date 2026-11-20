@@ -64,7 +64,8 @@ describe('Evolutivo 5 feedback component and accessibility contract', () => {
     expect(obligations).toContain("title: 'Eliminar obligación', danger: true");
     expect(obligations).toContain("title: 'Anular resolución', confirmLabel: 'Anular resolución'");
     expect(obligations).toContain("title: 'Editar obligación con pagos'");
-    expect(read('js/components/transactionForm.js')).toContain("title: 'Eliminar medio de pago', danger: true");
+    // Evolutivo 10: the transaction form no longer manages reusable payment methods (fixed "Medio de pago" list).
+    expect(read('js/components/transactionForm.js')).not.toContain('API.finance.deletePaymentMethod');
     expect(read('js/pages/rentalPeriods.js')).toContain("title: 'Cancelar período'");
   });
 

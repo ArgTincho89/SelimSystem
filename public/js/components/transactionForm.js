@@ -1,4 +1,181 @@
 const TransactionForm = {
+  // "Medio de pago" values (stored as-is in `paymentMethod`). "Crédito" is only for expenses; "Cheque" not for refunds.
+  PAYMENT_METHODS: ['Transferencia', 'Efectivo', 'Débito', 'Crédito', 'Cheque'],
+  METHODS_BY_TYPE: {
+    expense: ['Transferencia', 'Efectivo', 'Débito', 'Crédito', 'Cheque'],
+    income: ['Transferencia', 'Efectivo', 'Débito', 'Cheque'],
+    refund: ['Transferencia', 'Efectivo', 'Débito']
+  },
+  CHEQUE_MAX: 24,
+  CREDIT_MAX: 36,
+  CHEQUE_NUMBER_MAX: 30,
+
+  // [value, label] options of the "Medio de pago" select for a type; a legacy value is kept as an extra option.
+  paymentMethodOptions(type, legacyValue = '') {
+    const methods = TransactionForm.METHODS_BY_TYPE[type] || [];
+    return [['', 'Seleccionar'], ...methods.map(method => [method, method]), ...(legacyValue ? [[legacyValue, `${legacyValue} (anterior)`]] : [])];
+  },
+
+  minorFactor(currency) {
+    return 10 ** (typeof MoneyInput !== 'undefined' && MoneyInput.digits ? MoneyInput.digits(currency) : 2);
+  },
+
+  // Even split in minor units; the last part absorbs the rounding remainder.
+  splitEvenly(totalMinor, count) {
+    const base = Math.floor(totalMinor / count);
+    return Array.from({ length: count }, (_, index) => (index === count - 1 ? totalMinor - base * (count - 1) : base));
+  },
+
+  // Same day of month `months` later, clamped to the last day of that month (Jan 31 + 1 → Feb 28/29).
+  addMonthsClamped(date, months) {
+    const [year, month, day] = String(date).split('-').map(Number);
+    const index = year * 12 + (month - 1) + months;
+    const targetYear = Math.floor(index / 12);
+    const targetMonth = index % 12;
+    const lastDay = new Date(Date.UTC(targetYear, targetMonth + 1, 0)).getUTCDate();
+    return `${targetYear}-${String(targetMonth + 1).padStart(2, '0')}-${String(Math.min(day, lastDay)).padStart(2, '0')}`;
+  },
+
+  validChequeNumber(value) {
+    const text = String(value || '').trim();
+    return Boolean(text) && text.length <= TransactionForm.CHEQUE_NUMBER_MAX && /^[A-Za-z0-9-]+$/.test(text);
+  },
+
+  // Credit purchase: total = amount × (1 + interest/100), split evenly (minor units, last absorbs rounding).
+  creditPreview(amount, count, interestPercent, currency) {
+    const factor = TransactionForm.minorFactor(currency);
+    const baseMinor = Math.round(Number(amount) * factor);
+    const basisPoints = Math.round(Number(interestPercent || 0) * 100);
+    const totalMinor = Math.round(baseMinor * (10000 + basisPoints) / 10000);
+    const parts = TransactionForm.splitEvenly(totalMinor, count);
+    return { total: totalMinor / factor, installment: parts[0] / factor, last: parts[parts.length - 1] / factor, count };
+  },
+
+  // Opens the dialog at the top: focus on the active type button (not "Título") and every scroll container at 0.
+  openAtTop(form, typeButtons = []) {
+    const target = typeButtons.find(button => button.classList.contains('active')) || typeButtons[0];
+    if (target) {
+      try { target.focus({ preventScroll: true }); } catch { target.focus(); }
+    }
+    for (let node = form; node && node.nodeType === 1; node = node.parentNode) node.scrollTop = 0;
+  },
+
+  // "Cuotas" (1–24) and one row per cheque: "Vencimiento cuota Nº x", "Monto" and "Nº cheque".
+  // setTotal() re-splits the amount evenly; collect(total) -> { rows } | { error }.
+  renderChequeFields({ currency = 'ARS' } = {}) {
+    let activeCurrency = currency;
+    let lastTotal = null;
+    let baseDate = '';
+    const root = create('div', { className: 'form-group cheque-installments', dataset: { chequeInstallments: 'true' } });
+    const countInput = create('input', { className: 'form-control', type: 'number', min: '1', max: String(TransactionForm.CHEQUE_MAX), step: '1', value: '1', id: 'transaction-cheque-count' });
+    const rowsHost = create('div', { className: 'cheque-rows', style: { display: 'grid', gap: '8px', marginTop: '8px' } });
+    root.append(create('label', { textContent: 'Cuotas', for: countInput.id }), countInput, rowsHost);
+    const rows = [];
+    const count = () => {
+      const value = Number(countInput.value);
+      return Number.isInteger(value) ? Math.min(TransactionForm.CHEQUE_MAX, Math.max(1, value)) : 1;
+    };
+    const prefill = () => {
+      if (!(lastTotal > 0)) return;
+      const factor = TransactionForm.minorFactor(activeCurrency);
+      TransactionForm.splitEvenly(Math.round(lastTotal * factor), rows.length).forEach((minor, index) => MoneyInput.setValue(rows[index].amount, minor / factor));
+    };
+    const render = () => {
+      const wanted = count();
+      while (rows.length > wanted) rows.pop().element.remove();
+      while (rows.length < wanted) {
+        const number = rows.length + 1;
+        const due = create('input', { className: 'form-control', type: 'date', id: `cheque-due-${number}`, value: baseDate ? TransactionForm.addMonthsClamped(baseDate, number - 1) : '' });
+        const amount = MoneyInput.create({ currency: activeCurrency, id: `cheque-amount-${number}`, ariaLabel: `Monto de la cuota Nº ${number}` });
+        const chequeNumber = create('input', { className: 'form-control', type: 'text', maxlength: String(TransactionForm.CHEQUE_NUMBER_MAX), id: `cheque-number-${number}`, placeholder: '0001-23456789', autocomplete: 'off' });
+        const cell = (label, control) => create('div', { className: 'cheque-cell', style: { flex: '1 1 140px', minWidth: '0' } }, [create('label', { textContent: label, for: control.id }), control]);
+        const element = create('div', { className: 'cheque-row', dataset: { chequeRow: String(number) }, style: { display: 'flex', flexWrap: 'wrap', gap: '8px' } }, [
+          cell(`Vencimiento cuota Nº ${number}`, due), cell('Monto', amount), cell('Nº cheque', chequeNumber)
+        ]);
+        rows.push({ element, due, amount, chequeNumber });
+        rowsHost.appendChild(element);
+      }
+      prefill();
+    };
+    on(countInput, 'input', render);
+    on(countInput, 'change', render);
+    render();
+    return {
+      element: root,
+      countInput,
+      rows,
+      setCount(value) { countInput.value = String(value); render(); },
+      setTotal(total, date) {
+        lastTotal = total;
+        if (date) baseDate = date;
+        rows.forEach((row, index) => { if (!row.due.value && baseDate) row.due.value = TransactionForm.addMonthsClamped(baseDate, index); });
+        prefill();
+      },
+      setCurrency(code) {
+        activeCurrency = code;
+        rows.forEach(row => MoneyInput.setCurrency(row.amount, code));
+      },
+      collect(total) {
+        const factor = TransactionForm.minorFactor(activeCurrency);
+        const result = [];
+        let sumMinor = 0;
+        for (const [index, row] of rows.entries()) {
+          const number = index + 1;
+          if (!row.due.value) return { error: `Indicá el vencimiento de la cuota Nº ${number}` };
+          const amount = MoneyInput.value(row.amount);
+          if (!(amount > 0)) return { error: `El monto de la cuota Nº ${number} debe ser mayor a cero` };
+          if (!TransactionForm.validChequeNumber(row.chequeNumber.value)) return { error: `Indicá el Nº de cheque de la cuota Nº ${number} (hasta ${TransactionForm.CHEQUE_NUMBER_MAX} caracteres: letras, números y guiones)` };
+          sumMinor += Math.round(amount * factor);
+          result.push({ dueDate: row.due.value, amount, chequeNumber: row.chequeNumber.value.trim() });
+        }
+        if (sumMinor !== Math.round(Number(total) * factor)) return { error: 'La suma de las cuotas debe ser igual al monto' };
+        return { rows: result };
+      }
+    };
+  },
+
+  // "Cuotas" (1–36), "Interés (%)" and a live preview "N cuotas de $X (total $Y)". collect() -> { count, interestPercent } | { error }.
+  renderCreditFields({ currency = 'ARS' } = {}) {
+    let activeCurrency = currency;
+    let lastTotal = null;
+    const root = create('div', { className: 'form-group credit-installments', dataset: { creditInstallments: 'true' } });
+    const countInput = create('input', { className: 'form-control', type: 'number', min: '1', max: String(TransactionForm.CREDIT_MAX), step: '1', value: '1', id: 'transaction-installments-count' });
+    const interestInput = create('input', { className: 'form-control', type: 'number', min: '0', step: '0.01', value: '0', id: 'transaction-installments-interest' });
+    const preview = create('p', { className: 'account-status-note', dataset: { creditPreview: 'true' }, 'aria-live': 'polite' });
+    const note = create('small', { textContent: 'Con más de una cuota, cada cuota se registra como gasto en el mismo día de los meses siguientes (la primera, el mes próximo).' });
+    root.append(
+      create('label', { textContent: 'Cuotas', for: countInput.id }), countInput,
+      create('label', { textContent: 'Interés (%)', for: interestInput.id }), interestInput,
+      preview, note
+    );
+    const read = () => {
+      const count = Number(countInput.value);
+      const interestRaw = String(interestInput.value || '').trim();
+      const interestPercent = interestRaw === '' ? 0 : Number(interestRaw);
+      if (!Number.isInteger(count) || count < 1 || count > TransactionForm.CREDIT_MAX) return { error: `Las cuotas deben ser entre 1 y ${TransactionForm.CREDIT_MAX}` };
+      if (!Number.isFinite(interestPercent) || interestPercent < 0 || interestPercent > 1000) return { error: 'El interés debe ser un número mayor o igual a 0' };
+      return { count, interestPercent };
+    };
+    const refresh = () => {
+      const values = read();
+      if (values.error || !(lastTotal > 0)) { preview.textContent = values.error || ''; return; }
+      const result = TransactionForm.creditPreview(lastTotal, values.count, values.interestPercent, activeCurrency);
+      preview.textContent = `${values.count} ${values.count === 1 ? 'cuota' : 'cuotas'} de ${formatearMoneda(result.installment, activeCurrency)} (total ${formatearMoneda(result.total, activeCurrency)})`;
+    };
+    on(countInput, 'input', refresh);
+    on(interestInput, 'input', refresh);
+    refresh();
+    return {
+      element: root,
+      countInput,
+      interestInput,
+      preview,
+      setTotal(total) { lastTotal = total; refresh(); },
+      setCurrency(code) { activeCurrency = code; refresh(); },
+      collect: read
+    };
+  },
+
   // True when the two chosen accounts exist and use different currencies (the received amount is then asked).
   transferNeedsReceived(accounts, fromId, toId) {
     const from = (accounts || []).find(account => account.id === fromId);
@@ -16,9 +193,9 @@ const TransactionForm = {
   },
 
   async show(onSave, transaction = null, options = {}) {
-    const [categories, accounts, transactions, assets, obligations, rentals, paymentMethods, owners, associationData] = await Promise.all([
+    const [categories, accounts, transactions, assets, obligations, rentals, owners, associationData] = await Promise.all([
       API.categories.list(), API.accounts.list(), API.transactions.list(), API.assets.list(),
-      API.obligations.list(), API.rentals.list(), API.finance.paymentMethods(),
+      API.obligations.list(), API.rentals.list(),
       API.owners.list().catch(() => []),
       transaction && !transaction.isRecurringInstance ? API.finance.associations(transaction.id).catch(() => null) : Promise.resolve(null)
     ]);
@@ -50,7 +227,7 @@ const TransactionForm = {
         btn.setAttribute('aria-pressed', 'true');
         updateCategoryVisibility();
         updateClasifVisibility();
-        updateRecurringVisibility();
+        refreshPaymentMethodOptions();
         updateInstallmentVisibility();
         updateTransferMode();
       });
@@ -71,83 +248,39 @@ const TransactionForm = {
     accountGroup.appendChild(create('p', { className: 'account-status-note', textContent: 'El importe se interpreta en la moneda de la cuenta. Cambiar de cuenta no convierte el importe.' }));
     form.appendChild(accountGroup);
 
+    // "Medio de pago": a fixed list stored as text. A legacy free-text value is kept as an extra option.
     const paymentMethodGroup = create('div', { className: 'form-group' });
-    const paymentMethodSelect = create('select', { className: 'form-control' });
-    paymentMethodSelect.id = 'transaction-payment-method';
-    paymentMethodSelect.appendChild(create('option', { value: '', textContent: 'Sin medio reutilizable' }));
-    paymentMethods.forEach(method => paymentMethodSelect.appendChild(create('option', { value: method.id, textContent: `${method.name}${method.lastFour ? ` ···· ${method.lastFour}` : ''}` })));
-    paymentMethodSelect.value = transaction?.paymentMethodId || '';
-    const paymentMethodLabel = create('input', { className: 'form-control', type: 'text', maxlength: '120', placeholder: 'Medio de pago (texto libre)', value: transaction?.paymentMethod || '' });
-    paymentMethodLabel.id = 'transaction-payment-method-label';
+    const paymentMethodSelect = create('select', { className: 'form-control', id: 'transaction-payment-method' });
+    const legacyPaymentMethod = transaction?.paymentMethod && !TransactionForm.PAYMENT_METHODS.includes(transaction.paymentMethod) ? transaction.paymentMethod : '';
+    let chosenPaymentMethod = transaction?.paymentMethod || '';
+    function refreshPaymentMethodOptions() {
+      const options = TransactionForm.paymentMethodOptions(selectedType, legacyPaymentMethod);
+      paymentMethodSelect.replaceChildren(...options.map(([value, label]) => create('option', { value, textContent: label })));
+      if (!options.some(([value]) => value === chosenPaymentMethod)) chosenPaymentMethod = '';
+      paymentMethodSelect.value = chosenPaymentMethod;
+    }
     on(paymentMethodSelect, 'change', () => {
-      const selected = paymentMethods.find(item => item.id === paymentMethodSelect.value);
-      if (selected) paymentMethodLabel.value = selected.name;
+      chosenPaymentMethod = paymentMethodSelect.value;
+      updateInstallmentVisibility();
     });
-    const createMethodButton = create('button', { className: 'btn btn-ghost btn-sm', type: 'button', textContent: 'Crear medio reutilizable' });
-    on(createMethodButton, 'click', async () => {
-      const name = prompt('Nombre del medio de pago');
-      if (!name?.trim()) return;
-      try {
-        const created = await API.finance.createPaymentMethod({ name: name.trim(), type: 'other' });
-        paymentMethods.push(created);
-        paymentMethodSelect.appendChild(create('option', { value: created.id, textContent: created.name }));
-        paymentMethodSelect.value = created.id;
-        paymentMethodLabel.value = created.name;
-      } catch (error) { showToast(error.message, 'error'); }
-    });
-    const editMethodButton = create('button', { className: 'btn btn-ghost btn-sm', type: 'button', textContent: 'Renombrar medio' });
-    on(editMethodButton, 'click', async () => {
-      const selected = paymentMethods.find(item => item.id === paymentMethodSelect.value);
-      if (!selected) return showToast('Selecciona un medio reutilizable', 'error');
-      const name = prompt('Nombre del medio de pago', selected.name);
-      if (!name?.trim()) return;
-      try {
-        const updated = await API.finance.updatePaymentMethod(selected.id, { name: name.trim(), type: selected.type, accountId: selected.accountId, notes: selected.notes, lastFour: selected.lastFour });
-        selected.name = updated.name;
-        [...paymentMethodSelect.options].find(option => option.value === selected.id).textContent = `${updated.name}${updated.lastFour ? ` ···· ${updated.lastFour}` : ''}`;
-        paymentMethodLabel.value = updated.name;
-      } catch (error) { showToast(error.message, 'error'); }
-    });
-    const deleteMethodButton = create('button', { className: 'btn btn-ghost btn-sm', type: 'button', textContent: 'Eliminar medio' });
-    on(deleteMethodButton, 'click', async () => {
-      const selected = paymentMethods.find(item => item.id === paymentMethodSelect.value);
-      if (!selected) return;
-      const { confirmed } = await ConfirmDialog.open({ title: 'Eliminar medio de pago', danger: true, confirmLabel: 'Eliminar medio', message: `Vas a eliminar el medio “${selected.name}”. ¿Querés continuar?` });
-      if (!confirmed) return;
-      try {
-        await API.finance.deletePaymentMethod(selected.id);
-        paymentMethods.splice(paymentMethods.indexOf(selected), 1);
-        [...paymentMethodSelect.options].find(option => option.value === selected.id)?.remove();
-        paymentMethodSelect.value = '';
-        paymentMethodLabel.value = '';
-      } catch (error) { showToast(error.message, 'error'); }
-    });
-    paymentMethodGroup.append(create('label', { textContent: 'Medio de pago reutilizable', for: paymentMethodSelect.id }), paymentMethodSelect, create('label', { textContent: 'Etiqueta heredada opcional', for: paymentMethodLabel.id }), paymentMethodLabel, createMethodButton, editMethodButton, deleteMethodButton);
+    refreshPaymentMethodOptions();
+    paymentMethodGroup.append(create('label', { textContent: 'Medio de pago', for: paymentMethodSelect.id }), paymentMethodSelect);
     form.appendChild(paymentMethodGroup);
 
-    // Credit-card installments: shown for new expenses paid with a credit-card method.
-    const installmentGroup = create('div', { className: 'form-group installment-fields', style: { display: 'none' } });
-    const installmentsCountInput = create('input', { className: 'form-control', type: 'number', min: '1', max: '120', step: '1', value: '1', id: 'transaction-installments-count' });
-    const installmentDueDayInput = create('input', { className: 'form-control', type: 'number', min: '1', max: '31', step: '1', id: 'transaction-installments-due-day' });
-    const installmentInterestInput = create('input', { className: 'form-control', type: 'number', min: '0', max: '1000', step: '0.01', placeholder: 'Sin interés', id: 'transaction-installments-interest' });
-    installmentGroup.append(
-      create('label', { textContent: 'Cantidad de cuotas', for: installmentsCountInput.id }), installmentsCountInput,
-      create('label', { textContent: 'Día de vencimiento', for: installmentDueDayInput.id }), installmentDueDayInput,
-      create('label', { textContent: 'Interés % (opcional)', for: installmentInterestInput.id }), installmentInterestInput,
-      create('small', { textContent: 'Con más de una cuota se crea una compra en cuotas: no se registra ningún gasto hasta contabilizar cada cuota.' })
-    );
+    // Installments of a new transaction: cheque rows (Gasto/Ingreso + Cheque) or a credit purchase (Gasto + Crédito).
     // Appended after the date field (below) so "Monto" stays the first numeric input of the form.
-    function creditCardSelected() {
-      return paymentMethods.find(item => item.id === paymentMethodSelect.value)?.type === 'credit_card';
-    }
+    const accountCurrency = () => activeAccounts.find(account => account.id === accountSelect.value)?.currency || 'ARS';
+    const chequeFields = TransactionForm.renderChequeFields({ currency: accountCurrency() });
+    const creditFields = TransactionForm.renderCreditFields({ currency: accountCurrency() });
+    chequeFields.element.style.display = 'none';
+    creditFields.element.style.display = 'none';
+    const chequeMode = () => !isEdit && ['expense', 'income'].includes(selectedType) && chosenPaymentMethod === 'Cheque';
+    const creditMode = () => !isEdit && selectedType === 'expense' && chosenPaymentMethod === 'Crédito';
     function updateInstallmentVisibility() {
-      installmentGroup.style.display = !isEdit && selectedType === 'expense' && creditCardSelected() ? 'block' : 'none';
+      chequeFields.element.style.display = chequeMode() ? '' : 'none';
+      creditFields.element.style.display = creditMode() ? '' : 'none';
+      updateRecurringVisibility();
     }
-    function installmentMode() {
-      return installmentGroup.style.display !== 'none' && Number(installmentsCountInput.value) > 1;
-    }
-    on(paymentMethodSelect, 'change', updateInstallmentVisibility);
-    updateInstallmentVisibility();
 
     const allocationSection = create('section', { className: 'form-group', style: { borderTop: '1px solid var(--border-color)', paddingTop: '10px' } });
     allocationSection.appendChild(create('strong', { textContent: 'Atribución del movimiento' }));
@@ -350,7 +483,20 @@ const TransactionForm = {
     });
     dateGroup.appendChild(dateInput);
     form.appendChild(dateGroup);
-    form.appendChild(installmentGroup);
+    form.appendChild(chequeFields.element);
+    form.appendChild(creditFields.element);
+    // Cheque rows and the credit preview follow the amount, the date and the account currency.
+    const syncInstallments = () => {
+      chequeFields.setCurrency(accountCurrency());
+      creditFields.setCurrency(accountCurrency());
+      chequeFields.setTotal(MoneyInput.value(amountInput), dateInput.value);
+      creditFields.setTotal(MoneyInput.value(amountInput));
+    };
+    on(amountInput, 'input', syncInstallments);
+    on(amountInput, 'change', syncInstallments);
+    on(dateInput, 'change', syncInstallments);
+    on(accountSelect, 'change', syncInstallments);
+    syncInstallments();
 
     const clasifGroup = create('div', { className: 'form-group' });
     clasifGroup.appendChild(create('label', { textContent: 'Clasificación' }));
@@ -470,8 +616,15 @@ const TransactionForm = {
       freqGroup.style.display = recurringEnabled ? 'block' : 'none';
     });
 
+    // Recurrence is not available for installments (cheque or credit).
     function updateRecurringVisibility() {
-      recurringGroup.style.display = (selectedType === 'expense') ? 'block' : 'none';
+      const available = selectedType === 'expense' && !chequeMode() && !creditMode();
+      recurringGroup.style.display = available ? 'block' : 'none';
+      if (!available && recurringEnabled) {
+        recurringEnabled = false;
+        recurringCheckbox.checked = false;
+        freqGroup.style.display = 'none';
+      }
     }
     updateRecurringVisibility();
 
@@ -554,8 +707,7 @@ const TransactionForm = {
       }
       if (selectedType === 'refund') data.refundSourceId = refundSourceSelect.value || null;
       data.accountId = accountSelect.value;
-      data.paymentMethodId = paymentMethodSelect.value || null;
-      data.paymentMethod = paymentMethodLabel.value.trim();
+      data.paymentMethod = paymentMethodSelect.value || '';
 
       if (selectedType === 'expense' && recurringEnabled) {
         data.recurrente = true;
@@ -572,31 +724,16 @@ const TransactionForm = {
         return showToast('Los importes A y B deben sumar el monto total', 'error');
       }
 
-      if (installmentMode()) {
-        const count = Number(installmentsCountInput.value);
-        const dueDay = Number(installmentDueDayInput.value || (dateInput.value || '').slice(8, 10));
-        if (!Number.isInteger(count) || count < 2 || count > 120) return showToast('La cantidad de cuotas debe estar entre 2 y 120', 'error');
-        if (!Number.isInteger(dueDay) || dueDay < 1 || dueDay > 31) return showToast('El día de vencimiento debe estar entre 1 y 31', 'error');
-        const interestRaw = installmentInterestInput.value.trim();
-        const interest = interestRaw === '' ? 0 : Number(interestRaw);
-        if (!Number.isFinite(interest) || interest < 0 || interest > 1000) return showToast('El interés debe estar entre 0 y 1000', 'error');
-        const targets = [...allocationRows.querySelectorAll(':scope > div')].map(row => row._allocationFields.target.value).filter(Boolean);
-        if (targets.some(value => !value.startsWith('asset:'))) return showToast('Las cuotas solo admiten imputación a un bien', 'error');
-        const plan = {
-          title: titulo, purchaseDate: data.fecha, totalAmount: data.monto, accountId: data.accountId,
-          paymentMethodId: data.paymentMethodId, categoryId: data.categoryId, installmentsCount: count, dueDay,
-          interestPercent: interest, notes: data.comments || '',
-          ...(targets[0] ? { assetId: targets[0].split(':')[1] } : {})
-        };
-        try {
-          await API.installments.createPlan(plan);
-          if (onSave) await onSave();
-          Modal.hide();
-          showToast('Compra en cuotas creada');
-        } catch (err) {
-          showToast(err.message, 'error');
-        }
-        return;
+      const installmentMode = chequeMode() || creditMode();
+      if (installmentMode) {
+        if (data.clasificacion === 'Mixto') return showToast('La clasificación Mixto no admite cuotas', 'error');
+        const targets = [...allocationRows.children].map(row => row._allocationFields.target.value).filter(Boolean);
+        if (targets.some(value => !value.startsWith('asset:')) || targets.length > 1) return showToast('Las cuotas solo admiten la atribución a un bien', 'error');
+        if (targets[0]) data.attributionAssetId = targets[0].split(':')[1];
+        const collected = chequeMode() ? chequeFields.collect(data.monto) : creditFields.collect();
+        if (collected.error) return showToast(collected.error, 'error');
+        if (chequeMode()) data.chequeInstallments = collected.rows;
+        else data.creditInstallments = collected;
       }
 
       try {
@@ -616,7 +753,7 @@ const TransactionForm = {
           const created = await API.transactions.create(data);
           savedTransactionId = created.id;
         }
-        if (!transaction?.isRecurringInstance && selectedType !== 'refund') {
+        if (!transaction?.isRecurringInstance && selectedType !== 'refund' && !installmentMode) {
           const allocations = [...allocationRows.querySelectorAll(':scope > div')].map(row => {
             const { target, amount } = row._allocationFields;
             const value = MoneyInput.value(amount);
@@ -635,7 +772,7 @@ const TransactionForm = {
         }
         if (onSave) await onSave();
         Modal.hide();
-        showToast(isEdit ? 'Transacción actualizada' : 'Transacción guardada');
+        showToast(isEdit ? 'Transacción actualizada' : installmentMode ? 'Cuotas guardadas' : 'Transacción guardada');
       } catch (err) {
         showToast(err.message, 'error');
       }
@@ -651,6 +788,7 @@ const TransactionForm = {
       transferBody.style.display = 'none';
       form.appendChild(transferBody);
     }
+    updateInstallmentVisibility();
     function updateTransferMode() {
       if (!transferBody) return;
       const isTransfer = selectedType === 'transfer';
@@ -674,7 +812,7 @@ const TransactionForm = {
     footer.appendChild(saveBtn);
 
     Modal.show(isEdit ? 'Editar transacción' : 'Nueva transacción', form, { footer });
-    titleInput.focus();
+    TransactionForm.openAtTop(form, [...typeSelector.children]);
   },
 
   // Transfer sub-form: source and destination accounts, amount, received amount (only when the currencies
