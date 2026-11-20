@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.18.0] - 2026-11-20
+
+### Added
+- Formulario de transacción: **Cheques en cuotas** para gastos e ingresos nuevos con medio Cheque. "Cuotas" (1 a 24) y una fila por cheque con **Vencimiento cuota Nº x**, **Monto** y **Nº cheque** (obligatorio, hasta 30 caracteres: letras, números y guiones). Los montos se reparten en partes iguales y deben sumar exactamente el Monto.
+- Cada cuota con cheque se registra **Pendiente de confirmación** y no cuenta en ningún total hasta usar **Confirmar imputación** (desde Avisos o desde Inicio). **Deshacer confirmación** pide un motivo. Ambas acciones quedan en Logs.
+- Formulario de transacción: **Compras en cuotas con crédito** para gastos nuevos con medio Crédito: "Cuotas" (1 a 36), "Interés (%)" y la vista previa "N cuotas de $X (total $Y)". Con más de una cuota se crea un gasto por cuota el mismo día de los meses siguientes.
+- Avisos: **Cuotas con cheque por confirmar** (muestra el Nº de cheque; a cargo del inquilino si es un ingreso de un bien alquilado) y **Próximas cuotas de crédito**.
+- Configuración > Avisos: **Anticipación por tipo de aviso** para cada tipo y **Excepciones específicas** por inmueble/bien, obligación o cuenta (por ejemplo, ajustes de alquiler con 15 días en general y 30 para un inmueble).
+
+### Changed
+- "Nueva transacción" se abre desde arriba, con el selector de tipo a la vista (antes se abría desplazada hasta "Título").
+- "Medio de pago reutilizable" pasa a llamarse **Medio de pago** y es una lista fija: Transferencia, Efectivo, Débito, Crédito (solo gastos) y Cheque (gastos e ingresos). Los valores antiguos se conservan al editar.
+- Inicio muestra la insignia "Pendiente de confirmación" y el Nº de cheque en las cuotas con cheque.
+- Los avisos usan la anticipación de Configuración > Avisos; el formulario de obligaciones ya no pide "Aviso" y "Avisar con anticipación" se reemplaza por la anticipación por tipo.
+- El formulario de transacción ya no crea planes de tarjeta; los planes existentes siguen en Inicio y Avisos.
+
 ## [1.17.1] - 2026-11-18
 
 ### Changed
