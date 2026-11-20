@@ -1,6 +1,6 @@
 # SelimSystem — Documento funcional
 
-**Versión del producto:** 1.18.0
+**Versión del producto:** 1.18.1
 **Entorno productivo:** https://selimsystem.fly.dev
 **Fecha del documento:** 20/11/2026
 
@@ -645,15 +645,15 @@ Para corregir un pago registrado por error sin perder la trazabilidad.
 
 ### 12.1 Cuentas
 
-**Lista de cuentas:** cada cuenta muestra nombre, marca "Principal" o "Archivada", moneda, titular y saldo (si está conciliada). Las sub-cuentas aparecen indentadas con "↳".
+**Lista de cuentas:** cada cuenta muestra nombre, marca "Principal" o "Archivada", moneda, titular, **Dígitos** (los últimos 4 dígitos, si se cargaron) y saldo (si está conciliada). Las sub-cuentas aparecen indentadas con "↳".
 
 | Acción | Detalle |
 |---|---|
-| **Agregar cuenta** | Nombre (hasta 80 caracteres), Moneda (ARS, EUR o USD), **Titular de la cuenta** y casilla **Cuenta principal**: si se marca, esa cuenta pasa a ser la principal y la anterior deja de serlo. |
+| **Agregar cuenta** | Nombre (hasta 80 caracteres), Moneda (ARS, EUR o USD), **Titular de la cuenta**, **Últimos 4 dígitos** (opcional, exactamente 4 números) y casilla **Cuenta principal**: si se marca, esa cuenta pasa a ser la principal y la anterior deja de serlo. |
 | **Agregar sub-cuenta** | Igual, con moneda propia obligatoria. No puede ser principal. Solo se ofrece en cuentas de primer nivel activas. |
 | **Ver movimientos** | Saldo, lista de movimientos de la cuenta y mínimo proyectado. Botón **Nuevo movimiento en esta cuenta**. |
 | **Conciliar saldo / Editar conciliación** | Saldo al inicio de una **fecha de referencia** y selección de los movimientos históricos ya incluidos en ese saldo. Desde entonces el saldo se calcula solo. |
-| **Editar** | Nombre, titular y moneda (la moneda solo si la cuenta no tiene movimientos ni conciliación). |
+| **Editar** | Nombre, titular, últimos 4 dígitos y moneda (la moneda solo si la cuenta no tiene movimientos ni conciliación). |
 | **Hacer principal** | Pasa a ser la cuenta principal (solo cuentas de primer nivel). No se ofrece en la cuenta que ya es principal. |
 | **Archivar** | No aplica a la principal; requiere archivar antes las sub-cuentas y no tener recurrencias ni movimientos programados. |
 | **Eliminar** | Solo cuentas no principales, sin movimientos y sin sub-cuentas. |

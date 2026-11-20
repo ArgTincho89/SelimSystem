@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.18.1] - 2026-11-20
+
+### Added
+- Configuración > Cuentas: campo **Últimos 4 dígitos** (opcional, exactamente 4 números) al crear o editar una cuenta. La tarjeta de la cuenta muestra **Dígitos: xxxx** debajo de "Titular".
+
 ## [1.18.0] - 2026-11-20
 
 ### Added
