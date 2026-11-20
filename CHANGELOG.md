@@ -1,9 +1,13 @@
 # Changelog
 
-## [1.19.1] - 2026-11-20
+## [1.20.0] - 2026-11-20
+
+### Added
+- **Pagar un vencimiento desde Nueva transacción**: en un gasto nuevo, si la atribución apunta a un vencimiento, el gasto se registra como **pago de ese vencimiento**, igual que con **Registrar pago** (mismo gasto vinculado, estado y total pagado, registro en Logs y comprobantes en el vencimiento). Debajo se indica "Se registrará como pago de este vencimiento". El gasto completo es el pago (pagos parciales permitidos, sin superar lo pendiente), la moneda de la cuenta debe ser la de la obligación, los Comentarios son obligatorios y un gasto paga un solo vencimiento. Se anula con **Revertir pago**.
 
 ### Changed
 - Nueva obligación: la **Frecuencia** viene preseleccionada en **Mensual** (al editar se mantiene la frecuencia guardada).
+- **Atribución del movimiento** rediseñada: primero se elige el **Bien** (solo bienes, más **Obligaciones sin bien** para las obligaciones sin bien vinculado) y después, opcionalmente, **Obligación o período (opcional)** con solo lo que pertenece a ese bien (obligaciones y vencimientos pendientes en gastos; contratos y períodos en ingresos). Elegir solo el bien alcanza. Los campos se apilan en el celular y al editar se precargan el bien y el detalle guardados; en un movimiento existente los vencimientos son solo informativos ("Para registrar el pago de un movimiento existente usá Registrar pago").
 
 ## [1.19.0] - 2026-11-20
 

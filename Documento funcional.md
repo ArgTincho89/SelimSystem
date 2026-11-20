@@ -1,6 +1,6 @@
 # SelimSystem — Documento funcional
 
-**Versión del producto:** 1.19.1
+**Versión del producto:** 1.20.0
 **Entorno productivo:** https://selimsystem.fly.dev
 **Fecha del documento:** 20/11/2026
 
@@ -252,7 +252,12 @@ La ventana siempre se abre desde arriba, con el selector de tipo (Gasto, Ingreso
 
 - **Cuenta:** lista de cuentas activas con sus sub-cuentas. Por defecto, la cuenta principal. El importe se interpreta en la moneda de la cuenta; cambiar de cuenta **no convierte** el importe.
 - **Medio de pago** (opcional): lista fija con **Transferencia**, **Efectivo**, **Débito**, **Crédito** y **Cheque**. **Crédito** solo se ofrece en gastos; **Cheque**, en gastos e ingresos (no en reembolsos). Al editar un movimiento antiguo con un medio escrito a mano, ese valor se conserva como opción adicional.
-- **Atribución del movimiento:** permite indicar a qué bien, obligación, vencimiento, contrato o período de alquiler corresponde el importe (una o varias líneas, con opción "Asignación completa"). Es descriptivo: **no crea movimientos ni cambia los totales**. Alimenta el análisis económico del bien.
+- **Atribución del movimiento:** permite indicar a qué bien corresponde el importe (una o varias líneas, con opción "Asignación completa"). Cada línea tiene:
+  - **Bien**: solo los bienes, más **Sin atribución** y, en gastos, **Obligaciones sin bien** (para llegar a las obligaciones que no están vinculadas a ningún bien).
+  - **Obligación o período (opcional)**: aparece al elegir un bien y lista solo lo que pertenece a ese bien. En gastos: sus obligaciones y sus vencimientos pendientes ("Vencimiento · <título> · dd/mm/aaaa · pendiente $X"); en ingresos: sus contratos de alquiler y sus períodos. Elegir solo el bien alcanza para el análisis económico.
+  - **Importe** y **Quitar**. En el celular los campos se apilan.
+
+  La atribución es descriptiva: **no crea movimientos ni cambia los totales** y alimenta el análisis económico del bien. **Excepción:** en un **gasto nuevo**, elegir un **vencimiento** registra el gasto como **pago de ese vencimiento** (debajo aparece "Se registrará como pago de este vencimiento"; ver 11.5, segunda forma de pago). Al **editar** un movimiento existente, los vencimientos son solo informativos y se indica "Para registrar el pago de un movimiento existente usá Registrar pago". Al editar se precargan el bien y el detalle guardados.
 - **Título (opcional):** si se deja vacío en gastos y reembolsos, se usa el nombre de la categoría.
 - **Monto:** formato monetario local (por ejemplo, "211.392,00"). Debe ser positivo.
 - **Fecha:** por defecto, hoy.
@@ -623,6 +628,16 @@ Cada fila indica también "Pagado X/Y moneda" y, si la obligación es compartida
 - No se puede pagar un vencimiento cancelado, ya saldado o a cargo del inquilino ("Este pago está a cargo del inquilino. Usá Resolver").
 - Se necesita al menos una cuenta activa en la moneda de la obligación.
 - Si el pago se registra pero el comprobante falla, se avisa y se puede adjuntar después con **Adjuntar comprobante**.
+
+**Segunda forma de pago: desde Nueva transacción**
+
+Un **gasto nuevo** cuya **Atribución del movimiento** apunta a un **vencimiento** (Bien → Obligación o período) se guarda como pago de ese vencimiento, con las mismas reglas y el mismo resultado que **Registrar pago**: el mismo gasto vinculado, el mismo estado y total pagado del vencimiento, el mismo registro en Logs ("Registraste un pago de la obligación…"), y los comprobantes adjuntos quedan en el vencimiento.
+- El **gasto completo** es el pago: el importe de la línea debe ser igual al **Monto** (se precarga al elegir el vencimiento). Se admiten pagos parciales; el monto no puede superar lo pendiente.
+- Un gasto paga **un solo vencimiento**, y esa debe ser su única línea de atribución. Para pagar varios vencimientos, registrá un gasto por cada uno.
+- La cuenta debe tener la **moneda de la obligación**; la fecha no puede ser futura; los **Comentarios** son obligatorios (son las notas del pago); no se combina con cuotas ni con un gasto recurrente.
+- Ante cualquier error no se guarda nada.
+- Ingresos y reembolsos nunca pagan vencimientos. Al editar un movimiento existente no se puede convertir en pago: usá **Registrar pago**.
+- El pago se anula con **Revertir pago**, como cualquier otro (no se puede editar ni eliminar desde Inicio).
 
 ### 11.6 Obligaciones a cargo del inquilino ("Resolver")
 
