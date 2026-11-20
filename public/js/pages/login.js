@@ -13,7 +13,7 @@ const LoginPage = {
 
     const CHANGELOG = [
       {
-        v: '1.11.17', date: '05/11/2026',
+        v: '1.11.17', date: '05-11-2026',
         items: [
           'Configuración de cuentas: cuentas múltiples con moneda propia y saldo independiente',
           'Transferencias y conversiones entre cuentas, con comisión opcional',
@@ -23,40 +23,40 @@ const LoginPage = {
         ]
       },
       {
-        v: '1.11.2', date: '23/08/2026',
+        v: '1.11.2', date: '23-08-2026',
         items: [
           'Resumen: gráfico A vs B movido al final, debajo de Fijo vs Variable; IVA acumulado al pie'
         ]
       },
       {
-        v: '1.11.1', date: '23/08/2026',
+        v: '1.11.1', date: '23-08-2026',
         items: [
           'Desglose Mixto: al ingresar el importe A se completa B con el saldo restante'
         ]
       },
       {
-        v: '1.11.0', date: '23/08/2026',
+        v: '1.11.0', date: '23-08-2026',
         items: [
           'Campo IVA (%) en ingresos, con IVA acumulado en Resumen y Estadísticas',
           'Clasificación de ingresos por defecto ahora es A'
         ]
       },
       {
-        v: '1.10.0', date: '23/08/2026',
+        v: '1.10.0', date: '23-08-2026',
         items: [
           'Frecuencia recurrente trimestral',
           'Clasificación de ingresos A, B y Mixto con desglose y evolución porcentual'
         ]
       },
       {
-        v: '1.9.1', date: '04/08/2026',
+        v: '1.9.1', date: '04-08-2026',
         items: [
           'Fix: nueva transacción ahora marca como fecha por defecto el día actual (antes el día 1 del mes)',
           'Service Worker v9: carga forzada de nuevos assets'
         ]
       },
       {
-        v: '1.9.0', date: '01/08/2026',
+        v: '1.9.0', date: '01-08-2026',
         items: [
           'Navegación a meses futuros en Inicio (ahora con flecha derecha)',
           'Imputar ingresos, gastos y reembolsos en meses futuros',
@@ -65,7 +65,7 @@ const LoginPage = {
         ]
       },
       {
-        v: '1.8.0', date: '14/07/2026',
+        v: '1.8.0', date: '14-07-2026',
         items: [
           'Nuevo tipo de meta: "Límite de gasto general" para controlar el presupuesto total del mes',
           'Barra de progreso con 4 zonas de color: verde (0-49%), amarillo (50-75%), naranja (76-99%), rojo (100%+)',
@@ -75,14 +75,14 @@ const LoginPage = {
         ]
       },
       {
-        v: '1.7.2', date: '14/07/2026',
+        v: '1.7.2', date: '14-07-2026',
         items: [
           'Resumen: fix donut chart — ahora filtra correctamente solo categorías padre (sin duplicar hijos)',
           'Estadísticas: fix donut chart — misma corrección, eliminado flatten de hijos que duplicaba montos'
         ]
       },
       {
-        v: '1.7.1', date: '14/07/2026',
+        v: '1.7.1', date: '14-07-2026',
         items: [
           'Resumen: barras de categoría ahora muestran gasto total (padres incluyen hijos)',
           'Resumen: gráfico donut solo muestra categorías padre (sin duplicar)',
@@ -94,7 +94,7 @@ const LoginPage = {
         ]
       },
       {
-        v: '1.7.0', date: '13/07/2026',
+        v: '1.7.0', date: '13-07-2026',
         items: [
           'Nuevo tipo de meta: "Límite de gasto por categoría/subcategoría"',
           'Selector jerárquico de categorías en el modal de creación',
@@ -105,14 +105,14 @@ const LoginPage = {
         ]
       },
       {
-        v: '1.6.3', date: '13/07/2026',
+        v: '1.6.3', date: '13-07-2026',
         items: [
           'Mejorados iconos de editar/eliminar en tarjetas de metas',
           'Eliminado valor del salario del resumen de parámetros'
         ]
       },
       {
-        v: '1.6.2', date: '13/07/2026',
+        v: '1.6.2', date: '13-07-2026',
         items: [
           'Renombrado "Metas de ahorro" a "Metas financieras"',
           'Tarjetas mejoradas: muestra tipo, parámetros y rango de meses',
@@ -121,7 +121,7 @@ const LoginPage = {
         ]
       },
       {
-        v: '1.6.1', date: '13/07/2026',
+        v: '1.6.1', date: '13-07-2026',
         items: [
           'Rediseño de Metas: formulario ahora se abre en modal flotante',
           'Selector de período inteligente: Mes único o Múltiples meses (rango)',
@@ -130,7 +130,7 @@ const LoginPage = {
         ]
       },
       {
-        v: '1.6.0', date: '13/07/2026',
+        v: '1.6.0', date: '13-07-2026',
         items: [
           'Nuevo: Metas de ahorro (monto fijo, % salario, % ingresos dinámico)',
           'Nuevo: Gráfico de ritmo de gasto (burn rate) en Resumen',
@@ -139,21 +139,21 @@ const LoginPage = {
         ]
       },
       {
-        v: '1.5.9', date: '13/07/2026',
+        v: '1.5.9', date: '13-07-2026',
         items: [
           'Fix: Editar transacción desde Inicio ahora abre el formulario correctamente',
           'Texto de login actualizado'
         ]
       },
       {
-        v: '1.5.8', date: '13/07/2026',
+        v: '1.5.8', date: '13-07-2026',
         items: [
           'Fix: Gráficos ahora muestran TODOS los gastos incluyendo subcategorías',
           'El total del gráfico ahora coincide con el total de la stat card'
         ]
       },
       {
-        v: '1.5.7', date: '13/07/2026',
+        v: '1.5.7', date: '13-07-2026',
         items: [
           'Fix: toggle de ojito (Ingresos/Ahorro) ya no recarga la página',
           'Fix: botones de período y categoría en Estadísticas actualizan sin flash',
@@ -161,7 +161,7 @@ const LoginPage = {
         ]
       },
       {
-        v: '1.5.6', date: '13/07/2026',
+        v: '1.5.6', date: '13-07-2026',
         items: [
           'Fix: Montos en Home ya no se cortan (€ adaptable al contenedor)',
           'Fix: Gráficos de Distribución muestran TODOS los gastos (incluye categorías hijas)',
@@ -169,14 +169,14 @@ const LoginPage = {
         ]
       },
       {
-        v: '1.5.5', date: '13/07/2026',
+        v: '1.5.5', date: '13-07-2026',
         items: [
           'Fix: Distribución de gastos ahora muestra todas las categorías (incluye hijas)',
           'Valores de Gastos/Ingresos/Ahorro aún más grandes'
         ]
       },
       {
-        v: '1.5.4', date: '13/07/2026',
+        v: '1.5.4', date: '13-07-2026',
         items: [
           'Valores de Gastos/Ingresos/Ahorro más grandes en móvil',
           'Botón Filtrar con borde accent para mayor visibilidad',
@@ -184,7 +184,7 @@ const LoginPage = {
         ]
       },
       {
-        v: '1.5.3', date: '13/07/2026',
+        v: '1.5.3', date: '13-07-2026',
         items: [
           'Clasificación y recurrente solo para gastos',
           'Eliminada sección "Gastos fijos" del Home',
@@ -192,7 +192,7 @@ const LoginPage = {
         ]
       },
       {
-        v: '1.5.2', date: '13/07/2026',
+        v: '1.5.2', date: '13-07-2026',
         items: [
           'Persistencia de datos con volumen en Fly.io',
           'Health check endpoint para estabilidad del deploy',
@@ -201,7 +201,7 @@ const LoginPage = {
         ]
       },
       {
-        v: '1.5.1', date: '12/07/2026',
+        v: '1.5.1', date: '12-07-2026',
         items: [
           'Foto de perfil guardada en el servidor',
           'CI gate: tests obligatorios antes del deploy',
@@ -210,14 +210,14 @@ const LoginPage = {
         ]
       },
       {
-        v: '1.5.0', date: '12/07/2026',
+        v: '1.5.0', date: '12-07-2026',
         items: [
           'Modal de filtros en Inicio (tipo, categoría, monto, fechas)',
           'Título de transacción ahora es opcional'
         ]
       },
       {
-        v: '1.4.0', date: '12/07/2026',
+        v: '1.4.0', date: '12-07-2026',
         items: [
           'Editar transacciones',
           'Campo Clasificación (Fijo/Variable) + pie chart',
@@ -225,14 +225,14 @@ const LoginPage = {
         ]
       },
       {
-        v: '1.3.0', date: '12/07/2026',
+        v: '1.3.0', date: '12-07-2026',
         items: [
           'Fix: transacciones recurrentes ahora impactan resumen y estadísticas',
           'Función getMonthTransactions compartida'
         ]
       },
       {
-        v: '1.2.0', date: '12/07/2026',
+        v: '1.2.0', date: '12-07-2026',
         items: [
           'Frecuencia bimensual',
           'Símbolo €, botón ojo oculta ingresos y ahorro',
@@ -240,7 +240,7 @@ const LoginPage = {
         ]
       },
       {
-        v: '1.1.0', date: '12/07/2026',
+        v: '1.1.0', date: '12-07-2026',
         items: [
           'Categorías jerárquicas (padre/hija)',
           'Transacciones recurrentes (mensual, semestral, anual)',
@@ -249,7 +249,7 @@ const LoginPage = {
         ]
       },
       {
-        v: '1.0.0', date: '12/07/2026',
+        v: '1.0.0', date: '12-07-2026',
         items: [
           'Login por nombre de usuario',
           'CRUD de categorías y transacciones',

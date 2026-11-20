@@ -37,7 +37,7 @@ describe('Evolutivo 4 Logs screen contract', () => {
     expect(logs).toContain("id: 'logs-from'");
     expect(logs).toContain("id: 'logs-to'");
     expect(logs).toContain("className: 'log-row'");
-    expect(logs).toContain('formatLogDateTime(item.timestamp)');
+    expect(logs).toContain('formatDateTime(item.timestamp)');
     expect(logs).toContain('No se completó');
     expect(logs).toContain('Todavía no hay acciones registradas');
     expect(logs).not.toMatch(/textContent: item\.(outcome|statusCode)/);

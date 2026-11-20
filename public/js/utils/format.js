@@ -35,21 +35,33 @@ function parseFecha(fechaStr) {
   return new Date(year, month - 1, day);
 }
 
-function formatFechaLarga(fechaStr) {
-  const date = parseFecha(fechaStr);
-  return date.toLocaleDateString(localStorage.getItem('pate_locale') || 'es-ES', {
-    weekday: 'long',
-    day: 'numeric',
-    month: 'long'
-  });
+// Every date the app displays reads "DD-MM-AAAA" (e.g. "20-11-2026"). Accepts a "YYYY-MM-DD" date or an ISO
+// timestamp (its day in the user's timezone); returns '' when the value is empty or not a date. Callers that need a
+// placeholder add their own ('—', 'sin fecha de fin'). Stored and API dates stay ISO "YYYY-MM-DD".
+function formatDate(value) {
+  const text = String(value == null ? '' : value).trim();
+  const day = /^(\d{4})-(\d{2})-(\d{2})$/.exec(text);
+  if (day) return `${day[3]}-${day[2]}-${day[1]}`;
+  if (!/^\d{4}-\d{2}-\d{2}T/.test(text)) return '';
+  const local = logDayKey(text);
+  return local ? formatDate(local) : '';
 }
 
-function formatFechaCorta(fechaStr) {
-  const date = parseFecha(fechaStr);
-  return date.toLocaleDateString(localStorage.getItem('pate_locale') || 'es-ES', {
-    day: 'numeric',
-    month: 'short'
-  });
+// "DD-MM-AAAA HH:mm" of an ISO timestamp in the user's timezone (24 hours); '' when invalid.
+function formatDateTime(value) {
+  const date = new Date(value);
+  if (value == null || value === '' || Number.isNaN(date.getTime())) return '';
+  const parts = new Intl.DateTimeFormat('es-AR', {
+    timeZone: localStorage.getItem('pate_timezone') || Intl.DateTimeFormat().resolvedOptions().timeZone,
+    day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23'
+  }).formatToParts(date).reduce((result, part) => ({ ...result, [part.type]: part.value }), {});
+  return `${parts.day}-${parts.month}-${parts.year} ${parts.hour}:${parts.minute}`;
+}
+
+// Day header of the movement lists: the weekday followed by the date, e.g. "jueves, 20-11-2026".
+function formatFechaLarga(fechaStr) {
+  const weekday = parseFecha(fechaStr).toLocaleDateString(localStorage.getItem('pate_locale') || 'es-ES', { weekday: 'long' });
+  return `${weekday}, ${formatDate(fechaStr)}`;
 }
 
 function formatMonth(monthStr) {
@@ -88,17 +100,6 @@ function logDayKey(iso) {
     year: 'numeric', month: '2-digit', day: '2-digit'
   }).formatToParts(date).reduce((result, part) => ({ ...result, [part.type]: part.value }), {});
   return `${parts.year}-${parts.month}-${parts.day}`;
-}
-
-// "dd/mm/aaaa hh:mm" in the user's timezone (24 hours).
-function formatLogDateTime(iso) {
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return '';
-  const parts = new Intl.DateTimeFormat('es-AR', {
-    timeZone: localStorage.getItem('pate_timezone') || Intl.DateTimeFormat().resolvedOptions().timeZone,
-    day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23'
-  }).formatToParts(date).reduce((result, part) => ({ ...result, [part.type]: part.value }), {});
-  return `${parts.day}/${parts.month}/${parts.year} ${parts.hour}:${parts.minute}`;
 }
 
 function addMonths(monthStr, delta) {

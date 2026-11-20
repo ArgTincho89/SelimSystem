@@ -82,8 +82,8 @@ const ObligationsPage = {
     const provider = this.filterSelect('Proveedor', [['', 'Todos los proveedores'], ...this.owners.filter(item => (item.roles || []).includes('provider')).map(item => [item.id, item.name])], filters.providerEntityId || '');
     const status = this.filterSelect('Estado', [['', 'Todos'], ['pending', 'Pendientes'], ['partial', 'Parciales'], ['paid', 'Pagadas'], ['resolved', 'Resueltas por inquilino'], ['overdue', 'Vencidas']], filters.status || '');
     const type = this.filterSelect('Tipo', [['', 'Todos los tipos'], ...OBLIGATION_TYPES], filters.type || '');
-    const from = this.filterInput('Desde (AAAA-MM-DD)', filters.from || '', 'date');
-    const to = this.filterInput('Hasta (AAAA-MM-DD)', filters.to || '', 'date');
+    const from = this.filterInput('Desde (dd-mm-aaaa)', filters.from || '', 'date');
+    const to = this.filterInput('Hasta (dd-mm-aaaa)', filters.to || '', 'date');
     [['Bien', asset], ['Proveedor', provider], ['Estado', status], ['Tipo', type], ['Desde', from], ['Hasta', to]]
       .forEach(([label, field]) => form.appendChild(labeledField(label, field)));
     form.append(create('button', { className: 'btn btn-secondary', type: 'submit', textContent: 'Filtrar' }), create('button', { className: 'btn btn-ghost', type: 'button', textContent: 'Limpiar', onClick: () => this.render() }));
@@ -182,7 +182,7 @@ const ObligationsPage = {
           : '';
         const badge = dueBadge(occurrence);
         const label = create('span', {}, [
-          create('span', { textContent: `${occurrence.date} · ` }),
+          create('span', { textContent: `${formatDate(occurrence.date)} · ` }),
           create('span', { className: badge.className, textContent: badge.label }),
           create('span', { textContent: ` · Pagado ${occurrence.totalPaid}/${occurrence.actualDueAmount} ${occurrence.currencyCode}${portions}` })
         ]);
@@ -199,12 +199,12 @@ const ObligationsPage = {
           actions.append(create('button', { className: 'btn btn-secondary btn-sm', textContent: tenantOnly ? 'Resolver' : 'Resolver (pagó el inquilino)', onClick: () => this.showResolveModal(item, occurrence) }));
         }
         if (!tenantOnly && !occurrence.resolution) (occurrence.paymentIds || []).forEach((paymentId, index, all) => actions.append(create('button', {
-          className: 'btn btn-ghost btn-sm', textContent: all.length > 1 ? `Revertir pago ${index + 1}` : 'Revertir pago', 'aria-label': `Revertir pago de ${occurrence.date}`, dataset: { revertPayment: paymentId },
+          className: 'btn btn-ghost btn-sm', textContent: all.length > 1 ? `Revertir pago ${index + 1}` : 'Revertir pago', 'aria-label': `Revertir pago de ${formatDate(occurrence.date)}`, dataset: { revertPayment: paymentId },
           onClick: () => this.revertPayment({ obligationId: item.id, occurrenceId: occurrence.id, transactionId: paymentId }, () => this.refresh())
         })));
         if (occurrence.resolution || Number(occurrence.totalPaid) > 0) {
           actions.append(create('button', { className: 'btn btn-ghost btn-sm', textContent: 'Adjuntar comprobante', onClick: () => this.attachReceiptTo(occurrence) }));
-          actions.append(create('button', { className: 'btn btn-ghost btn-sm', textContent: 'Comprobantes', 'aria-label': `Ver comprobantes de ${occurrence.date}`, dataset: { occurrenceReceipts: occurrence.id }, onClick: () => this.showReceipts(occurrence) }));
+          actions.append(create('button', { className: 'btn btn-ghost btn-sm', textContent: 'Comprobantes', 'aria-label': `Ver comprobantes de ${formatDate(occurrence.date)}`, dataset: { occurrenceReceipts: occurrence.id }, onClick: () => this.showReceipts(occurrence) }));
         }
         if (occurrence.resolution) {
           actions.append(create('button', { className: 'btn btn-ghost btn-sm', textContent: 'Anular resolución', onClick: () => this.voidResolution(item, occurrence) }));
@@ -232,7 +232,7 @@ const ObligationsPage = {
       if (!allocations.length) allocationRows.appendChild(create('small', { textContent: 'No hay atribuciones adicionales.' }));
       allocations.forEach(allocation => {
         const row = create('div', { className: 'card', style: { padding: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' } });
-        row.appendChild(create('span', { textContent: `${allocation.transaction.titulo} · ${allocation.transaction.fecha} · ${allocation.amount} ${allocation.currencyCode}` }));
+        row.appendChild(create('span', { textContent: `${allocation.transaction.titulo} · ${formatDate(allocation.transaction.fecha)} · ${allocation.amount} ${allocation.currencyCode}` }));
         row.appendChild(create('button', { className: 'btn btn-ghost btn-sm', type: 'button', textContent: 'Editar atribuciones', disabled: Boolean(allocation.transaction.obligationOccurrenceId), onClick: () => TransactionForm.show(() => this.render(), allocation.transaction) }));
         allocationRows.appendChild(row);
       });
@@ -475,7 +475,7 @@ const ObligationsPage = {
   async showReceipts(occurrence) {
     let documents = [];
     try { documents = await API.documents.listBy({ occurrenceId: occurrence.id }); } catch (error) { showToast(error.message, 'error'); return; }
-    Modal.push(`Comprobantes · ${occurrence.date}`, DocumentViewer.list(documents, { empty: 'No hay comprobantes cargados.' }), { width: '560px' });
+    Modal.push(`Comprobantes · ${formatDate(occurrence.date)}`, DocumentViewer.list(documents, { empty: 'No hay comprobantes cargados.' }), { width: '560px' });
   },
 
   // Uploads a receipt linked to the occurrence (and the payment transaction when there is one).
@@ -509,9 +509,9 @@ const ObligationsPage = {
     return UndoDialog.open({
       type: 'obligation.payment', obligationId, occurrenceId, transactionId, title: 'Revertir pago', confirmLabel: 'Revertir pago', message: this.REVERT_COPY,
       details: [
-        ['Fecha', detail.payment.date], ['Importe', formatearMonedaConCodigo(detail.payment.amount, detail.payment.currencyCode)],
+        ['Fecha', formatDate(detail.payment.date)], ['Importe', formatearMonedaConCodigo(detail.payment.amount, detail.payment.currencyCode)],
         ['Cuenta', detail.account?.name || ''], ['Medio de pago', detail.paymentMethod], ['Obligación', detail.obligation.title],
-        ['Vencimiento', detail.occurrence.date], ['Comprobante', receipts],
+        ['Vencimiento', formatDate(detail.occurrence.date)], ['Comprobante', receipts],
         ['Atención', detail.reconciliationWillReset ? 'La conciliación de la cuenta se va a reiniciar.' : '']
       ]
     }, { onDone });
@@ -626,7 +626,7 @@ const ObligationsPage = {
       const content = create('div', { style: { display: 'grid', gap: '12px' } });
       content.appendChild(create('h4', { textContent: 'Notas' }));
       if (!notes.length) content.appendChild(create('p', { className: 'text-muted', textContent: 'No hay notas.' }));
-      notes.forEach(note => content.appendChild(create('p', { textContent: `${note.date}: ${note.content}` })));
+      notes.forEach(note => content.appendChild(create('p', { textContent: `${formatDate(note.date)}: ${note.content}` })));
       content.appendChild(create('h4', { textContent: 'Documentos' }));
       if (!documents.length) content.appendChild(create('p', { className: 'text-muted', textContent: 'No hay documentos.' }));
       if (documents.length) content.appendChild(DocumentViewer.list(documents, { empty: '' }));

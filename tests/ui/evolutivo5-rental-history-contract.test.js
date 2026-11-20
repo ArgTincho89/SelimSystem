@@ -17,7 +17,7 @@ describe('Evolutivo 5 rental history and deletion UI contract', () => {
     it('shows period, tenant, modalities, state and the "Ver" action of every rental', () => {
       const { RentalModal } = load();
       const element = RentalModal.historyRow(asset, row(), () => {});
-      expect(element.textContent).toContain('01/07/2026 – 30/06/2029');
+      expect(element.textContent).toContain('01-07-2026 – 30-06-2029');
       expect(element.textContent).toContain('Bella Paloma');
       expect(element.textContent).toContain('Locación + Comodato');
       expect(element.textContent).toContain('Finalizado');

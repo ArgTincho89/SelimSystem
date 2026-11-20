@@ -130,7 +130,7 @@ describe('Evolutivo 7 "Registrar cobro": partial payments, cheque and receipt', 
     expect(RentalPeriods.chequeDueDate('2026-11-17', 30)).toBe('2026-12-17');
     expect(RentalPeriods.chequeDueDate('x', 3)).toBe('');
     expect(RentalPeriods.pendingText([{ currencyCode: 'ARS', remaining: 0 }])).toBe('');
-    expect(RentalPeriods.chequeText({ days: 30, dueDate: '2026-12-17', cashedAt: null })).toBe('Cheque a 30 días · se cobra el 17/12/2026 · pendiente de cobro');
+    expect(RentalPeriods.chequeText({ days: 30, dueDate: '2026-12-17', cashedAt: null })).toBe('Cheque a 30 días · se cobra el 17-12-2026 · pendiente de cobro');
   });
 
   it('shows "Parcialmente cancelado" with the pending balance in the periods table', () => {

@@ -52,11 +52,11 @@ const RentalModal = {
     const { header } = ctx.overview;
     const ended = header.status === 'ended';
     const info = statusBadge(header.status);
-    const nextCollection = header.nextCollection ? `${header.nextCollection.date} · ${this.money(header.nextCollection.totals)}` : 'Sin cobros próximos';
+    const nextCollection = header.nextCollection ? `${formatDate(header.nextCollection.date)} · ${this.money(header.nextCollection.totals)}` : 'Sin cobros próximos';
     const facts = create('div', { className: 'rental-header-facts' }, [
       create('span', { className: `status-badge ${info.className}`, dataset: { rentalStatus: header.status }, textContent: `${info.icon} ${info.label}` }),
       this.line('Inquilino', header.tenants.map(item => item.name).join(', ') || '—'),
-      this.line('Vigencia', `${header.from || '—'} — ${header.to || 'sin fecha de fin'}`),
+      this.line('Vigencia', `${formatDate(header.from) || '—'} — ${formatDate(header.to) || 'sin fecha de fin'}`),
       this.line('Monto mensual vigente', this.money(header.monthlyTotals)),
       this.line('Próximo cobro', nextCollection),
       this.line('Próximo vencimiento', header.nextDue || '—')
@@ -123,7 +123,7 @@ const RentalModal = {
   },
 
   historyRow(asset, row, reload) {
-    const period = `${this.shortDate(row.from)} – ${row.to ? this.shortDate(row.to) : 'sin fecha de fin'}`;
+    const period = `${formatDate(row.from)} – ${row.to ? formatDate(row.to) : 'sin fecha de fin'}`;
     const active = row.state === 'active';
     const actions = create('div', { style: { display: 'flex', gap: '6px', flexWrap: 'wrap' } }, [
       create('button', { className: 'btn btn-ghost btn-sm', type: 'button', textContent: 'Ver', 'aria-label': `Ver alquiler ${period}`, onClick: () => AssetsPage.openRental(asset.id, row.id, { readOnly: !active }) })
@@ -136,10 +136,6 @@ const RentalModal = {
       ]),
       actions
     ]);
-  },
-
-  shortDate(date) {
-    return date ? date.split('-').reverse().join('/') : '';
   },
 
   // "Actualizar alquiler": one modality directly, or a short chooser when several are active.
@@ -167,8 +163,8 @@ const RentalModal = {
     const method = create('select', { className: 'form-control', 'aria-label': 'Tipo de actualización' });
     [['manual', 'Nuevo importe'], ['percentage', 'Porcentaje de aumento'], ['index', 'Índice o criterio']].forEach(([value, label]) => method.appendChild(create('option', { value, textContent: label })));
     const date = create('select', { className: 'form-control', 'aria-label': 'Fecha efectiva' });
-    pastDueDates.forEach(value => date.appendChild(create('option', { value, textContent: `${value.split('-').reverse().join('/')} (retroactivo)` })));
-    card.futureDueDates.forEach(value => date.appendChild(create('option', { value, textContent: value.split('-').reverse().join('/') })));
+    pastDueDates.forEach(value => date.appendChild(create('option', { value, textContent: `${formatDate(value)} (retroactivo)` })));
+    card.futureDueDates.forEach(value => date.appendChild(create('option', { value, textContent: formatDate(value) })));
     date.value = card.futureDueDates[0] || pastDueDates[pastDueDates.length - 1] || '';
     const amount = MoneyInput.create({ currency: card.currencyCode, ariaLabel: `Nuevo alquiler (${card.currencyCode})` });
     const percentage = create('input', { className: 'form-control', type: 'number', step: '0.01', 'aria-label': 'Porcentaje de aumento' });
@@ -316,9 +312,9 @@ const RentalModal = {
     const info = statusBadge(header.status);
     state.append(
       this.line('Estado del alquiler', create('span', { className: `status-badge ${info.className}`, textContent: `${info.icon} ${info.label}` })),
-      this.line('Fecha de inicio', header.from || '—'), this.line('Fecha de finalización', header.to || 'Sin fecha de fin'),
+      this.line('Fecha de inicio', formatDate(header.from) || '—'), this.line('Fecha de finalización', formatDate(header.to) || 'Sin fecha de fin'),
       this.line('Inquilino', header.tenants.map(item => item.name).join(', ') || '—'),
-      this.line('Próximo cobro', header.nextCollection ? `${header.nextCollection.date} · ${this.money(header.nextCollection.totals)}` : 'Sin cobros próximos'),
+      this.line('Próximo cobro', header.nextCollection ? `${formatDate(header.nextCollection.date)} · ${this.money(header.nextCollection.totals)}` : 'Sin cobros próximos'),
       this.line('Total pendiente de cobro', this.money(header.pendingTotals)),
       this.line('Próximo ajuste', header.nextAdjustment || 'Sin ajustes programados'),
       this.line('Obligaciones del período actual', this.obligationsStatus(header.currentPeriodObligations))
@@ -353,10 +349,10 @@ const RentalModal = {
       const article = create('article', { className: 'card rental-card', dataset: { modality: card.modality, contractId: card.contractId }, style: { padding: '12px', display: 'grid', gap: '4px' } }, [
         create('strong', { textContent: card.modalityLabel }),
         create('span', { className: `status-badge ${info.className}`, textContent: `${info.icon} ${info.label}` }),
-        this.line('Vigencia', `${card.from} — ${card.to || 'sin fecha de fin'}`),
+        this.line('Vigencia', `${formatDate(card.from)} — ${formatDate(card.to) || 'sin fecha de fin'}`),
         this.line('Monto mensual vigente', formatearMonedaConCodigo(card.currentAmount, card.currencyCode)),
         this.line('Clasificación', this.classificationText(card)),
-        this.line('Próximo ajuste', card.nextAdjustmentDate || '—')
+        this.line('Próximo ajuste', formatDate(card.nextAdjustmentDate) || '—')
       ]);
       if (!ctx.readOnly) article.appendChild(this.cardActions(ctx, card));
       grid.appendChild(article);
@@ -451,13 +447,13 @@ const RentalModal = {
       const article = create('article', { className: 'card rental-card', dataset: { contractCard: card.contractId }, style: { padding: '12px', display: 'grid', gap: '4px' } }, [
         create('strong', { textContent: `${card.modalityLabel}${tenants ? ` · ${tenants}` : ''}` }),
         create('span', { className: `status-badge ${info.className}`, textContent: `${info.icon} ${info.label}` }),
-        this.line('Vigencia', `${card.from} — ${card.to || 'sin fecha de fin'}`),
+        this.line('Vigencia', `${formatDate(card.from)} — ${formatDate(card.to) || 'sin fecha de fin'}`),
         this.line('Monto original', formatearMonedaConCodigo(card.originalAmount, card.currencyCode)),
         this.line('Monto mensual vigente', formatearMonedaConCodigo(card.currentAmount, card.currencyCode)),
         this.line('Clasificación', this.classificationText(card)),
         this.line('Frecuencia de ajuste', card.adjustmentFrequencyMonths ? `Cada ${card.adjustmentFrequencyMonths} meses` : '—'),
         this.line('Criterio de ajuste', card.adjustmentCriterion || '—'),
-        this.line('Próximo ajuste', card.nextAdjustmentDate || '—')
+        this.line('Próximo ajuste', formatDate(card.nextAdjustmentDate) || '—')
       ]);
       const documentsSlot = create('div', { className: 'contract-documents', dataset: { contractDocuments: card.contractId }, style: { display: 'flex', gap: '8px', flexWrap: 'wrap' } });
       article.appendChild(documentsSlot);

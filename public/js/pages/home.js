@@ -628,11 +628,11 @@ const HomePage = {
     installments.forEach(item => {
       const row = create('div', {
         className: 'transaction-item installment-item', role: 'button', tabindex: '0',
-        'aria-label': `${item.label}, vence el ${item.dueDate}, programada`
+        'aria-label': `${item.label}, vence el ${formatDate(item.dueDate)}, programada`
       });
       const info = create('div', { className: 'transaction-info' });
       info.appendChild(create('div', { className: 'transaction-title', textContent: item.label }));
-      info.appendChild(create('div', { className: 'transaction-category', textContent: `Programada · vence ${item.dueDate}` }));
+      info.appendChild(create('div', { className: 'transaction-category', textContent: `Programada · vence ${formatDate(item.dueDate)}` }));
       const amount = create('div', { className: 'transaction-amount installment-amount', textContent: formatearMoneda(item.amount, item.currencyCode) });
       this.markSensitive(amount);
       row.append(create('div', { className: 'transaction-icon', textContent: '🗓️' }), info, amount);
@@ -649,7 +649,7 @@ const HomePage = {
   showInstallmentOptions(item, categories) {
     const body = create('div');
     body.appendChild(create('p', {}, [create('strong', { textContent: item.label })]));
-    body.appendChild(create('p', { style: { color: 'var(--text-secondary)', margin: '8px 0' }, textContent: `Vence el ${item.dueDate} · ${formatearMoneda(item.amount, item.currencyCode)}. Esta cuota está programada y no suma a los gastos hasta que la contabilices.` }));
+    body.appendChild(create('p', { style: { color: 'var(--text-secondary)', margin: '8px 0' }, textContent: `Vence el ${formatDate(item.dueDate)} · ${formatearMoneda(item.amount, item.currencyCode)}. Esta cuota está programada y no suma a los gastos hasta que la contabilices.` }));
     let categorySelect = null;
     if (!item.categoryId) {
       body.appendChild(create('label', { textContent: 'Categoría', for: 'installment-post-category' }));
@@ -728,12 +728,12 @@ const HomePage = {
     rows.forEach(item => {
       const line = create('article', { className: 'card', style: { padding: '10px' } });
       if (item.type === 'transfer') {
-        line.appendChild(create('strong', { textContent: `${item.date} · ${item.concept}` }));
+        line.appendChild(create('strong', { textContent: `${formatDate(item.date)} · ${item.concept}` }));
         line.appendChild(create('p', { textContent: `${item.fromAccount}: ${formatearMonedaConCodigo(item.sentAmount, item.fromCurrency)} → ${item.toAccount}: ${formatearMonedaConCodigo(item.receivedAmount, item.toCurrency)}` }));
         if (item.feeAmount) line.appendChild(create('small', { textContent: `Comisión contabilizada como gasto: ${formatearMonedaConCodigo(item.feeAmount, item.fromCurrency)}` }));
       } else {
         const sign = item.type === 'expense' ? '−' : '+';
-        line.appendChild(create('strong', { textContent: `${item.date} · ${item.concept}` }));
+        line.appendChild(create('strong', { textContent: `${formatDate(item.date)} · ${item.concept}` }));
         line.appendChild(create('p', { textContent: `${item.type === 'income' ? 'Ingreso' : item.type === 'expense' ? 'Gasto' : 'Reembolso'} · ${sign}${formatearMonedaConCodigo(item.amount, item.currency)} · ${item.accountName}` }));
         if (item.refundSourceId) line.appendChild(create('small', { textContent: `Reembolso de: ${item.refundSourceConcept || 'gasto de origen'}` }));
       }
@@ -957,7 +957,7 @@ const HomePage = {
     const { confirmed } = await ConfirmDialog.open({
       title: 'Confirmar imputación', confirmLabel: 'Confirmar imputación',
       message: 'El movimiento pasa a contar en los totales del mes de su fecha.',
-      details: [['Movimiento', tx.titulo], ['Fecha', tx.fecha], ['Importe', formatearMoneda(tx.monto, tx.currencyCode || 'ARS')], ...(tx.chequeInstallment?.chequeNumber ? [['Nº cheque', tx.chequeInstallment.chequeNumber]] : [])]
+      details: [['Movimiento', tx.titulo], ['Fecha', formatDate(tx.fecha)], ['Importe', formatearMoneda(tx.monto, tx.currencyCode || 'ARS')], ...(tx.chequeInstallment?.chequeNumber ? [['Nº cheque', tx.chequeInstallment.chequeNumber]] : [])]
     });
     if (!confirmed) return false;
     await API.transactions.confirm(tx.id);
@@ -1069,7 +1069,7 @@ const HomePage = {
         style: { fontSize: 'var(--font-xs)', padding: '2px 6px', borderRadius: '10px', background: 'var(--bg-hover)', color: 'var(--text-muted)' }
       }));
     }
-    categoryDetails.appendChild(document.createTextNode(` - ${formatFechaCorta(tx.fecha)}`));
+    categoryDetails.appendChild(document.createTextNode(` - ${formatDate(tx.fecha)}`));
     if (tx.accountName) categoryDetails.appendChild(document.createTextNode(` · ${tx.accountName} (${tx.currencyCode || 'EUR'})`));
     details.appendChild(categoryDetails);
     if (this.chequeLabel(tx)) details.appendChild(create('p', { className: 'transaction-installment-info', textContent: this.chequeLabel(tx) }));
@@ -1124,7 +1124,7 @@ const HomePage = {
     const details = create('div');
     details.appendChild(create('strong', { textContent: tx.titulo }));
     details.appendChild(create('p', { textContent: tx.accountName }));
-    details.appendChild(create('p', { textContent: `${tx.fecha} · ${tx.status === 'posted' ? 'Contabilizada' : 'Programada'}` }));
+    details.appendChild(create('p', { textContent: `${formatDate(tx.fecha)} · ${tx.status === 'posted' ? 'Contabilizada' : 'Programada'}` }));
     const value = create('p', { className: 'sensitive-value' });
     this.markSensitive(value, `${formatearMoneda(tx.monto, tx.fromCurrency)} → ${formatearMoneda(tx.receivedAmount, tx.toCurrency)}`);
     details.appendChild(value);
