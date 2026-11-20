@@ -95,6 +95,7 @@ const SettingsPage = {
     card.appendChild(heading);
     const accountOwner = this.owners.find(owner => owner.id === account.ownerId);
     card.appendChild(create('p', { className: 'account-status-note', textContent: `Titular: ${accountOwner?.name || 'Sin titular asignado'}` }));
+    if (account.lastFour) card.appendChild(create('p', { className: 'account-status-note account-last-four', textContent: `Dígitos: ${account.lastFour}` }));
     if (account.balanceStatus === 'verified') {
       const balance = create('p', { className: 'account-card-balance sensitive-value' });
       this.setSensitive(balance, formatearMoneda(account.balance, account.currency));
@@ -479,6 +480,10 @@ const SettingsPage = {
     ownerOptions.forEach(([value, label]) => owner.appendChild(create('option', { value, textContent: label })));
     owner.value = account?.ownerId || parent?.ownerId || '';
     form.appendChild(this.field('Titular de la cuenta', owner));
+    const lastFour = create('input', { id: 'account-last-four', className: 'form-control', type: 'text', inputmode: 'numeric', maxlength: '4', pattern: '[0-9]{4}', placeholder: '1234', autocomplete: 'off' });
+    lastFour.value = account?.lastFour || '';
+    on(lastFour, 'input', () => { lastFour.value = lastFour.value.replace(/\D/g, '').slice(0, 4); });
+    form.appendChild(this.field('Últimos 4 dígitos', lastFour));
     const primaryLabel = create('label', { className: 'checkbox-label' });
     const primary = create('input', { type: 'checkbox', className: 'form-checkbox' });
     primary.checked = account?.primary || false;
@@ -513,12 +518,14 @@ const SettingsPage = {
     on(form, 'submit', async event => {
       event.preventDefault();
       try {
+        const lastFourValue = lastFour.value.trim();
+        if (lastFourValue && !/^\d{4}$/.test(lastFourValue)) return this.showError(form, 'Los últimos 4 dígitos deben ser exactamente 4 números');
         if (account) {
           const unchecking = Boolean(account.primary) && !primary.checked;
           if (unchecking && !replacement.value) return this.showError(form, 'Elegí una cuenta activa para que sea la nueva principal');
-          await API.accounts.update(account.id, { name: name.value.trim(), currency: currencyValue, primary: primary.checked, ownerId: owner.value || null, ...(unchecking ? { newPrimaryId: replacement.value } : {}) });
+          await API.accounts.update(account.id, { name: name.value.trim(), currency: currencyValue, primary: primary.checked, ownerId: owner.value || null, lastFour: lastFourValue || null, ...(unchecking ? { newPrimaryId: replacement.value } : {}) });
         }
-        else await API.accounts.create({ name: name.value.trim(), currency: currencyValue, primary: primary.checked, ownerId: owner.value || null, ...(parent ? { parentId: parent.id } : {}) });
+        else await API.accounts.create({ name: name.value.trim(), currency: currencyValue, primary: primary.checked, ownerId: owner.value || null, lastFour: lastFourValue || null, ...(parent ? { parentId: parent.id } : {}) });
         Modal.hide();
         await this.render();
       } catch (error) { this.showError(form, error.message); }

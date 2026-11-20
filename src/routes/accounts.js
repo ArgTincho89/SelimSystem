@@ -77,6 +77,15 @@ router.get('/', (req, res) => {
   res.json(ledger.getAccountBalances(db, userId));
 });
 
+// Optional last four digits of the account/card: null when blank, otherwise exactly four digits.
+function parseLastFour(value) {
+  if (value === undefined) return { value: undefined };
+  if (value === null || String(value).trim() === '') return { value: null };
+  const text = String(value).trim();
+  if (!/^\d{4}$/.test(text)) return { error: 'Los últimos 4 dígitos deben ser exactamente 4 números' };
+  return { value: text };
+}
+
 router.post('/', (req, res) => {
   const db = req.app.locals.db;
   const userId = req.session.userId;
@@ -87,6 +96,8 @@ router.post('/', (req, res) => {
   const accountName = (name || nombre || '').trim();
   if (!accountName || accountName.length > 80) return res.status(400).json({ error: 'El nombre debe tener entre 1 y 80 caracteres' });
   if (!ledger.SELECTABLE_CURRENCIES.has(currency)) return res.status(400).json({ error: 'Moneda no válida' });
+  const lastFour = parseLastFour(req.body.lastFour);
+  if (lastFour.error) return res.status(400).json({ error: lastFour.error });
   let parent = null;
   if (parentId !== undefined && parentId !== null && parentId !== '') {
     parent = db.findById('accounts', parentId, userId);
@@ -102,7 +113,7 @@ router.post('/', (req, res) => {
     if (!owner || (Array.isArray(owner.roles) ? !owner.roles.includes('owner') : owner.role && owner.role !== 'owner')) return res.status(400).json({ error: 'Titular legal no encontrado' });
   }
   const account = db.create('accounts', {
-    nombre: accountName, currency, ownerId: ownerId || null, parentId: parent ? parent.id : null, primary: false, legacyPrimary: false,
+    nombre: accountName, currency, ownerId: ownerId || null, lastFour: lastFour.value || null, parentId: parent ? parent.id : null, primary: false, legacyPrimary: false,
     activo: true, archivedAt: null, order: Number.isInteger(order) ? order : db.findAll('accounts', userId).length,
     presentation: presentation || 'default', openingBalanceMinor: null, openingDate: null,
     reconciled: false, includedMovementIds: []
@@ -197,6 +208,9 @@ router.put('/:id', (req, res) => {
     if (ledger.hasMovement(db, userId, account.id) || account.reconciled || account.openingBalanceMinor !== null) return res.status(409).json({ error: 'La moneda no se puede cambiar después de registrar movimientos o conciliar un saldo de apertura' });
     updates.currency = currency;
   }
+  const lastFour = parseLastFour(req.body.lastFour);
+  if (lastFour.error) return res.status(400).json({ error: lastFour.error });
+  if (lastFour.value !== undefined) updates.lastFour = lastFour.value;
   if (ownerId !== undefined) {
     if (ownerId === null || ownerId === '') updates.ownerId = null;
     else {
