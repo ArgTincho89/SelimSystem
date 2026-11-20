@@ -1,6 +1,9 @@
 module.exports = {
   testEnvironment: 'node',
   testMatch: ['**/tests/**/*.test.js'],
+  // Agent git worktrees live under .claude/; never run or resolve their copies of the suite.
+  testPathIgnorePatterns: ['/node_modules/', '<rootDir>/.claude/'],
+  modulePathIgnorePatterns: ['<rootDir>/.claude/'],
   setupFiles: [],
   collectCoverageFrom: [
     'src/**/*.js',
