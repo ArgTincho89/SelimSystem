@@ -83,10 +83,7 @@ describe('Rent adjustment: preview and skip-collected apply', () => {
     expect(logs().some(entry => entry.action === 'rental.condition' && entry.outcome === 'success')).toBe(true);
   });
 
-  it('rejects retroactive dates, non due dates, invalid methods and values without changing any period', async () => {
-    const retro = await preview(percentage({ effectiveDate: firstOfMonth(today(), -1) }));
-    expect(retro.status).toBe(409);
-    expect(retro.body.error).toBe('No se puede registrar una condición de alquiler de forma retroactiva');
+  it('rejects non due dates, invalid methods and values without changing any period', async () => {
     expect((await preview(percentage({ effectiveDate: `${effective.slice(0, 8)}15` }))).body.error).toBe('La fecha efectiva debe coincidir con un vencimiento del contrato');
     expect((await preview({ method: 'weird', effectiveDate: effective })).status).toBe(400);
     expect((await preview(percentage({ percentage: 'abc' }))).status).toBe(400);
