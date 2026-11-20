@@ -14,6 +14,7 @@
 - "Medio de pago reutilizable" pasa a llamarse **Medio de pago** y es una lista fija: Transferencia, Efectivo, Débito, Crédito (solo gastos) y Cheque (gastos e ingresos). Los valores antiguos se conservan al editar.
 - Inicio muestra la insignia "Pendiente de confirmación" y el Nº de cheque en las cuotas con cheque.
 - Todas las ventanas (modales) se cierran solo con la **X** o con sus propios botones: hacer clic fuera de la ventana o presionar Escape ya no la cierra.
+- Logs: el título queda centrado sobre el registro de acciones.
 - Cobros de alquiler sin clasificación guardada: se completa la clasificación A/B según el contrato, para que el gráfico A vs B coincida con la ficha del alquiler.
 - Los avisos usan la anticipación de Configuración > Avisos; el formulario de obligaciones ya no pide "Aviso" y "Avisar con anticipación" se reemplaza por la anticipación por tipo.
 - El formulario de transacción ya no crea planes de tarjeta; los planes existentes siguen en Inicio y Avisos.

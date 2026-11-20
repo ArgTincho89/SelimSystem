@@ -82,7 +82,7 @@ const LogsPage = {
     content.style.paddingBottom = '';
     content.innerHTML = '';
 
-    content.appendChild(create('div', { className: 'page-header' }, [
+    content.appendChild(create('div', { className: 'page-header logs-header' }, [
       create('button', { className: 'btn btn-ghost btn-sm', type: 'button', textContent: '← Perfil', onClick: () => Router.navigate('/profile') }),
       create('h2', { className: 'page-title', textContent: 'Logs' })
     ]));

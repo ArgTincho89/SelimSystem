@@ -2091,3 +2091,12 @@ body:not(.desktop-mode) .home-stats .stat-value-multi .stat-currency-amount:not(
   }
   .logs-field-search { grid-column: auto; }
 }
+
+/* Logs: back button on the left, title centered over the log list. */
+.logs-header {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: var(--space-sm);
+}
+.logs-header > .btn { justify-self: start; }
+.logs-header > .page-title { grid-column: 2; text-align: center; margin: 0; }
