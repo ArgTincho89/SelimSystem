@@ -32,7 +32,8 @@ describe('Evolutivo 3 S6 sub-accounts UI contract', () => {
     expect(read('js/components/transactionForm.js')).toContain('accountTreeOptions(activeAccounts)');
     expect(read('js/pages/obligations.js')).toContain('accountTreeOptions(group)');
     expect(read('js/pages/assets.js').match(/accountTreeOptions\(/g).length).toBe(1);
-    expect(read('js/pages/rentalPeriods.js').match(/accountTreeOptions\(/g).length).toBe(2);
+    // Month collection, contract collection and (evolutivo-13) the tenant titular account select.
+    expect(read('js/pages/rentalPeriods.js').match(/accountTreeOptions\(/g).length).toBe(3);
     expect(read('js/pages/settings.js')).toContain('accountTreeOptions(activeAccounts)');
   });
 

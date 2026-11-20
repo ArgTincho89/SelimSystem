@@ -330,6 +330,32 @@ const RentalPeriods = {
     return lines.some(line => Math.round((Number(line.amount) || 0) * 100) < Math.round((Number(line.remaining) || 0) * 100));
   },
 
+  // Pure: first tenant of `tenantIds` that is also a titular (role owner), or null (evolutivo-13 "gasto espejo").
+  titularTenant(tenantIds, owners) {
+    for (const id of tenantIds || []) {
+      const owner = (owners || []).find(item => item.id === id);
+      if (owner && (owner.roles || ['owner']).includes('owner')) return owner;
+    }
+    return null;
+  },
+
+  // "Cuenta del inquilino (titular)": the tenant titular's active accounts in the line currency (primary first,
+  // preselected) plus the note about its mirror expense. Hidden (no select) when the tenant is not a titular.
+  tenantAccountField(titular, accounts, currency, suffix, withCredit) {
+    const box = create('div', { style: { display: titular ? 'grid' : 'none', gap: '4px' }, dataset: { tenantAccountBox: 'true' } });
+    if (!titular) return { box, select: null, sync: () => {} };
+    const own = accounts.filter(item => item.activo && item.ownerId === titular.id && item.currency === currency);
+    const select = this.select([['', own.length ? 'Seleccionar cuenta' : `Sin cuentas en ${currency}`], ...accountTreeOptions(own).map(({ account: item, label }) => [item.id, label])]);
+    select.setAttribute('aria-label', `Cuenta del inquilino (titular)${suffix ? ` (${suffix})` : ''}`);
+    select.value = (own.find(item => item.primary) || own[0])?.id || '';
+    const note = create('small', { className: 'text-muted', dataset: { mirrorNote: 'true' } });
+    const sync = () => { note.textContent = `Se registrará el gasto del inquilino ${titular.name}${withCredit() ? ' con su crédito fiscal' : ''}.`; };
+    sync();
+    box.append(create('label', { className: 'form-group', style: { display: 'grid', gap: '4px', margin: 0 } }, [create('span', { textContent: `Cuenta del inquilino (titular) (${currency})` }), select]), note);
+    if (!own.length) box.appendChild(create('small', { className: 'text-danger', dataset: { tenantAccountMissing: 'true' }, textContent: `${titular.name} no tiene una cuenta activa en ${currency}: creala antes de registrar el cobro.` }));
+    return { box, select, sync };
+  },
+
   // Pure: "Cheque" (any case or accent) is the method that defers the collection.
   isChequeMethod(value) {
     return String(value || '').normalize('NFD').replace(/[̀-ͯ]/g, '').trim().toLowerCase() === 'cheque';
@@ -360,6 +386,8 @@ const RentalPeriods = {
       const month = (months || []).find(item => item.key === monthKey);
       const open = month ? month.parts.filter(part => part.remainingMinor > 0) : [];
       if (!open.length) { showToast('Ese mes ya no tiene saldo pendiente de cobro', 'error'); return; }
+      // A titular tenant also gets the expense of what it pays: the tenants are resolved only when the month has them.
+      const owners = open.some(part => (part.tenantIds || []).length) ? await API.owners.list().catch(() => []) : [];
       const body = create('div', { style: { maxHeight: '65vh', overflowY: 'auto', display: 'grid', gap: '10px' } });
       body.appendChild(create('p', { textContent: `Mes ${month.date}: cada modalidad se registra como un ingreso propio en su cuenta. El mes figura como cobrado cuando se cobran todas sus modalidades.` }));
       if (month.status === 'partially_collected') body.appendChild(create('p', { className: 'text-muted', dataset: { partialNotice: 'true' }, textContent: `Parcialmente cancelado: saldo pendiente ${(month.totals || []).filter(row => row.remainingMinor > 0).map(row => formatearMonedaConCodigo(row.remainingAmount, row.currencyCode)).join(' + ')}.` }));
@@ -378,9 +406,11 @@ const RentalPeriods = {
         kind.value = part.modality === 'locacion' ? 'A' : 'B';
         kind.setAttribute('aria-label', `Clasificación ${label}`);
         const iva = create('small', { className: 'text-muted', dataset: { rentLineIva: 'true' } });
+        const tenantAccount = this.tenantAccountField(this.titularTenant(part.tenantIds, owners), accounts, currency, label, () => kind.value === 'A' && part.ivaPercent > 0);
         const sync = () => {
           const value = MoneyInput.value(amount);
           iva.textContent = kind.value === 'A' && part.ivaPercent > 0 ? `IVA ${part.ivaPercent}% incluido${value > 0 ? `: ${formatearMonedaConCodigo(ivaOf(value, part.ivaPercent), currency)}` : ''}` : '';
+          tenantAccount.sync();
         };
         kind.addEventListener('change', sync);
         ['input', 'change', 'blur'].forEach(name => amount.addEventListener(name, sync));
@@ -408,9 +438,9 @@ const RentalPeriods = {
         body.appendChild(create('fieldset', { className: 'card', style: { padding: '10px', display: 'grid', gap: '6px' }, dataset: { rentLine: part.modality || 'alquiler' } }, [
           create('legend', { textContent: `${label} · ${pending}` }),
           field(`Importe (${currency})`, amount), field('Clasificación', kind), iva,
-          field('Fecha de cobro', date), field('Medio de cobro', method), chequeBox, field(`Cuenta de destino (${currency})`, account)
+          field('Fecha de cobro', date), field('Medio de cobro', method), chequeBox, field(`Cuenta de destino (${currency})`, account), tenantAccount.box
         ]));
-        return { part, label, amount, kind, date, method, days, account };
+        return { part, label, amount, kind, date, method, days, account, tenantAccount: tenantAccount.select };
       });
       const attachment = DocumentViewer.fileField({ label: 'Comprobante de pago (opcional)', multiple: true });
       body.appendChild(attachment.element);
@@ -426,6 +456,8 @@ const RentalPeriods = {
         if (!chosen.length) return showError('Ingresá el importe a cobrar');
         const missing = chosen.find(line => !line.account.value);
         if (missing) return showError(`${missing.label}: seleccioná la cuenta de destino`);
+        const noTenantAccount = chosen.find(line => line.tenantAccount && !line.tenantAccount.value);
+        if (noTenantAccount) return showError(`${noTenantAccount.label}: seleccioná la cuenta del inquilino (titular); si no tiene una en ${noTenantAccount.part.currencyCode}, creala primero`);
         const noDays = chosen.find(line => this.isChequeMethod(line.method.value) && !(Number.isInteger(Number(line.days.value)) && Number(line.days.value) >= 1 && Number(line.days.value) <= 365));
         if (noDays) return showError(`${noDays.label}: indicá en cuántos días se cobra el cheque (entre 1 y 365)`);
         const attachmentError = attachment.error();
@@ -441,7 +473,8 @@ const RentalPeriods = {
           return {
             occurrenceId: line.part.occurrenceId, amount: MoneyInput.value(line.amount), accountId: line.account.value, date: line.date.value || today,
             clasificacion: line.kind.value, method: methodText, ...(known ? { paymentMethodId: known.id } : {}),
-            ...(this.isChequeMethod(methodText) ? { chequeDays: Number(line.days.value) } : {})
+            ...(this.isChequeMethod(methodText) ? { chequeDays: Number(line.days.value) } : {}),
+            ...(line.tenantAccount ? { tenantAccountId: line.tenantAccount.value } : {})
           };
         });
         submit.disabled = true;
@@ -493,6 +526,10 @@ const RentalPeriods = {
       const classification = this.select([['', 'Sin clasificar'], ['A', ivaPercent > 0 ? `A (IVA ${ivaPercent}%)` : 'A'], ['B', 'B']]);
       classification.value = ivaPercent > 0 ? 'A' : '';
       body.append(create('label', { className: 'form-group' }, [create('span', { textContent: 'Clasificación' }), classification]));
+      const tenants = fullContract.tenants || [];
+      const tenantAccount = this.tenantAccountField(this.titularTenant(tenants.map(item => item.id), tenants), accounts, currency, '', () => classification.value === 'A' && ivaPercent > 0);
+      classification.addEventListener('change', tenantAccount.sync);
+      body.append(tenantAccount.box);
       const attachment = DocumentViewer.fileField({ label: 'Comprobante de pago (opcional)', multiple: true });
       body.append(attachment.element);
       const footer = create('div', {}, [create('button', { className: 'btn btn-primary', type: 'button', textContent: 'Registrar cobro', onClick: async () => {
@@ -501,6 +538,7 @@ const RentalPeriods = {
         if (!(totalValue > 0)) return showToast('Ingresá el importe recibido', 'error');
         const allocations = amountInputs.filter(item => item.checkbox.checked).map(item => ({ occurrenceId: item.occurrence.id, amount: MoneyInput.value(item.amount) }));
         if (!allocations.length) return showToast('Selecciona al menos un período para asignar', 'error');
+        if (tenantAccount.select && !tenantAccount.select.value) return showToast(`Seleccioná la cuenta del inquilino (titular); si no tiene una en ${currency}, creala primero`, 'error');
         const attachmentError = attachment.error();
         if (attachmentError) return showToast(attachmentError, 'error');
         const selected = amountInputs.filter(item => item.checkbox.checked).map(item => ({ amount: MoneyInput.value(item.amount) || 0, remaining: item.occurrence.remainingAmount }));
@@ -510,6 +548,7 @@ const RentalPeriods = {
             amount: totalValue, accountId: account.value, date: date.value,
             method: method.value.trim(), allocations,
             ...(classification.value ? { clasificacion: classification.value } : {}),
+            ...(tenantAccount.select ? { tenantAccountId: tenantAccount.select.value } : {}),
             idempotencyKey
           });
           const transactionId = result?.transactionId || result?.transaction?.id;

@@ -14,6 +14,9 @@ const router = express.Router();
 
 router.use(requireAuth);
 
+// A mirror expense (rent paid by a titular tenant) follows its rent collection: it is changed or removed from there.
+const MIRROR_LOCKED = 'Este gasto es el espejo de un cobro de alquiler: para corregirlo o eliminarlo, deshacé el cobro desde el alquiler';
+
 // "Factura a nombre de" of an expense with IVA. Empty means the owner of the expense account.
 function expenseVatHolderFields(db, userId, ivaHolderId) {
   if (ivaHolderId === undefined || ivaHolderId === null || ivaHolderId === '') return { fields: { ivaHolderId: null, ivaHolderName: null } };
@@ -340,6 +343,7 @@ router.put('/:id', (req, res) => {
   }
   if (transaction.obligationOccurrenceId) return res.status(409).json({ error: 'Los pagos vinculados a obligaciones son inmutables; usá "Revertir pago" para anularlos y registrá uno nuevo si hace falta' });
   if (transaction.rentCollectionId) return res.status(409).json({ error: 'Para corregir un cobro de alquiler, eliminá la transacción: el período vuelve a quedar pendiente de cobro' });
+  if (transaction.mirrorRentCollectionId) return res.status(409).json({ error: MIRROR_LOCKED });
 
   const updates = {};
   const paymentMethodId = req.body.paymentMethodId !== undefined ? (req.body.paymentMethodId || null) : transaction.paymentMethodId || null;
@@ -540,6 +544,7 @@ router.delete('/:id', (req, res) => {
   }
 
   if (transaction.obligationOccurrenceId) return res.status(409).json({ error: 'Los pagos vinculados a obligaciones no se pueden eliminar; usá "Revertir pago" en la obligación' });
+  if (transaction.mirrorRentCollectionId) return res.status(409).json({ error: MIRROR_LOCKED });
   if (transaction.rentCollectionId) {
     const result = rentals.reverseCollection(db, userId, transaction.rentCollectionId, req.app.locals.documentStorage);
     if (result.error) return res.status(result.status || 409).json({ error: result.error });

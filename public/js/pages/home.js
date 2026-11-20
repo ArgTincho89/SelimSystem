@@ -975,10 +975,17 @@ const HomePage = {
       onClick: () => Modal.hide()
     }));
     // "Ver": read-only detail of the whole rent collection (every modality), stacked on top of this dialog.
+    // A mirror expense (rent paid by a titular tenant) is read-only: it shows its rent collection and follows its undo.
+    const mirrorOf = tx.mirrorRentCollectionId || null;
     if (tx.rentCollectionId) {
       footer.appendChild(create('button', {
         className: 'btn btn-secondary', type: 'button', textContent: 'Ver', dataset: { viewRentCollection: tx.rentCollectionId },
         onClick: () => AssetsPage.showCollectionView(tx.rentCollectionId, { stacked: true })
+      }));
+    } else if (mirrorOf) {
+      footer.appendChild(create('button', {
+        className: 'btn btn-secondary', type: 'button', textContent: 'Ver', dataset: { viewRentCollection: mirrorOf },
+        onClick: () => AssetsPage.showCollectionView(mirrorOf, { stacked: true })
       }));
     }
     if (tx.isRecurringInstance && tx.occurrenceStatus !== 'posted' && tx.occurrenceStatus !== 'skipped' && tx.fecha <= getToday()) {
@@ -1007,27 +1014,28 @@ const HomePage = {
         onClick: () => UndoDialog.open({ type: 'transaction.confirmation', transactionId: tx.id }, { onDone: async () => { Modal.hide(); await this.render({ month: this.currentMonth }); } })
       }));
     }
-    footer.appendChild(create('button', {
-      className: 'btn btn-primary',
-      textContent: 'Editar',
-      onClick: () => {
-        Modal.hide();
-        TransactionForm.show(() => this.render({ month: this.currentMonth }), tx);
-      }
-    }));
+    if (!mirrorOf) {
+      footer.appendChild(create('button', {
+        className: 'btn btn-primary',
+        textContent: 'Editar',
+        onClick: () => {
+          Modal.hide();
+          TransactionForm.show(() => this.render({ month: this.currentMonth }), tx);
+        }
+      }));
+    }
     if (tx.obligationOccurrenceId && tx.obligationId) {
       footer.appendChild(create('button', {
         className: 'btn btn-secondary', type: 'button', textContent: 'Revertir pago', dataset: { revertPayment: tx.id },
         onClick: () => ObligationsPage.revertPayment({ obligationId: tx.obligationId, occurrenceId: tx.obligationOccurrenceId, transactionId: tx.id }, async () => { Modal.hide(); await this.render({ month: this.currentMonth }); })
       }));
     }
-    footer.appendChild(create('button', {
+    const deleteButton = create('button', {
       className: 'btn btn-danger',
       textContent: tx.isRecurringInstance ? 'Omitir ocurrencia' : tx.rentCollectionId ? 'Deshacer cobro' : 'Eliminar',
       disabled: tx.isRecurringInstance && tx.occurrenceStatus === 'posted'
-    }));
-
-    const deleteButton = footer.lastChild;
+    });
+    if (!mirrorOf) footer.appendChild(deleteButton);
     let rentDeleteArmed = false;
     on(deleteButton, 'click', async () => {
       if (tx.rentCollectionId && !rentDeleteArmed) {
@@ -1067,6 +1075,10 @@ const HomePage = {
     if (this.chequeLabel(tx)) details.appendChild(create('p', { className: 'transaction-installment-info', textContent: this.chequeLabel(tx) }));
     if (tx.status === 'pending') details.appendChild(create('p', { className: 'account-status-note', textContent: 'Pendiente de confirmación: no cuenta en los totales hasta confirmar la imputación.' }));
     if (tx.rentCollectionId) details.appendChild(create('p', { textContent: 'Cobro de alquiler: si lo deshacés, el período vuelve a quedar pendiente de cobro.', style: { color: 'var(--text-secondary)', fontSize: 'var(--font-xs)' } }));
+    if (mirrorOf) {
+      details.appendChild(create('p', { dataset: { mirrorExpense: 'true' } }, [create('strong', { textContent: 'Gasto espejo del cobro de alquiler' })]));
+      details.appendChild(create('p', { textContent: 'Se registró con el cobro del alquiler y no se edita acá: si deshacés el cobro, este gasto también se elimina.', style: { color: 'var(--text-secondary)', fontSize: 'var(--font-xs)' } }));
+    }
     const amountDetail = create('p', {
       textContent: `${tx.tipo === 'expense' ? '-' : '+'}${formatearMoneda(tx.monto, tx.currencyCode || 'EUR')}`,
       style: { fontSize: 'var(--font-xl)', fontWeight: '700', color: `var(--${tx.tipo === 'expense' ? 'expense' : tx.tipo === 'income' ? 'income' : 'refund'}-color)` }
