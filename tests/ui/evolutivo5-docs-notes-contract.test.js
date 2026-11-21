@@ -14,7 +14,7 @@ describe('Evolutivo 5 documents and notes UI contract', () => {
       ...api
     };
     fullApi.documents = { ...fullApi.documents, ...api.documents };
-    const { WealthRecords, context } = loadBrowser(['js/utils/wealth-records.js'], ['WealthRecords'], { API: fullApi, ConfirmDialog, Modal: { push: jest.fn(), hide: jest.fn() } });
+    const { WealthRecords, context } = loadBrowser(['js/utils/format.js', 'js/utils/wealth-records.js'], ['WealthRecords'], { API: fullApi, ConfirmDialog, Modal: { push: jest.fn(), hide: jest.fn() } });
     return { WealthRecords, ConfirmDialog, API: fullApi, context };
   };
   const byData = (root, key, value) => root.find(element => element.dataset && element.dataset[key] === value);
@@ -49,13 +49,13 @@ describe('Evolutivo 5 documents and notes UI contract', () => {
       expect(WealthRecords.filterDocuments(documents, {})).toHaveLength(3);
     });
 
-    it('sorts notes by date and words the heading as "dd/mm/aaaa · Título"', () => {
+    it('sorts notes by date and words the heading as "dd-mm-aaaa · Título"', () => {
       const { WealthRecords } = setup();
       const notes = [{ date: '2026-11-01', content: 'a' }, { date: '2026-11-20', content: 'b' }];
       expect(WealthRecords.sortNotes(notes, 'desc').map(item => item.date)).toEqual(['2026-11-20', '2026-11-01']);
       expect(WealthRecords.sortNotes(notes, 'asc').map(item => item.date)).toEqual(['2026-11-01', '2026-11-20']);
-      expect(WealthRecords.noteHeading({ date: '2026-11-16', title: 'Título de la nota' })).toBe('16/11/2026 · Título de la nota');
-      expect(WealthRecords.noteHeading({ date: '2026-11-16' })).toBe('16/11/2026');
+      expect(WealthRecords.noteHeading({ date: '2026-11-16', title: 'Título de la nota' })).toBe('16-11-2026 · Título de la nota');
+      expect(WealthRecords.noteHeading({ date: '2026-11-16' })).toBe('16-11-2026');
     });
   });
 
@@ -77,7 +77,7 @@ describe('Evolutivo 5 documents and notes UI contract', () => {
       const load = jest.fn().mockResolvedValue(documents);
       const root = new FakeElement('div');
       await WealthRecords.renderDocuments(root, { load, upload: jest.fn() });
-      expect(root.textContent).toContain('Cargado el 16/11/2026 por Martin');
+      expect(root.textContent).toContain('Cargado el 16-11-2026 por Martin');
       expect(byData(root, 'documentId', 'd2').textContent).not.toContain(' por ');
       ConfirmDialog.open.mockResolvedValueOnce({ confirmed: false });
       byData(root, 'deleteDocument', 'd1').click();
@@ -101,8 +101,8 @@ describe('Evolutivo 5 documents and notes UI contract', () => {
       const { WealthRecords } = setup();
       const root = new FakeElement('div');
       await WealthRecords.renderNotes(root, { load: async () => notes, create: jest.fn() });
-      expect(root.textContent).toContain('01/11/2026 · Visita');
-      expect(root.textContent).toContain('20/11/2026');
+      expect(root.textContent).toContain('01-11-2026 · Visita');
+      expect(root.textContent).toContain('20-11-2026');
       const ids = () => root.findAll(element => element.dataset && element.dataset.noteId).map(element => element.dataset.noteId);
       expect(ids()).toEqual(['n2', 'n1']);
       expect(byData(root, 'editNote', 'n1')).toBeTruthy();

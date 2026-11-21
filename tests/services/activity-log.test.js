@@ -23,16 +23,16 @@ describe('activity-log service', () => {
     const full = { title: 'Impuesto Municipal', assetName: 'Casa Centro', amount: 15000, currencyCode: 'ARS', dueDate: '2026-11-10' };
 
     it('builds the full descriptive label', () => {
-      expect(activityLog.describe(resolve(), full)).toBe('Impuesto Municipal de la propiedad Casa Centro, por un monto de ARS 15.000, con vencimiento 10/11/2026');
+      expect(activityLog.describe(resolve(), full)).toBe('Impuesto Municipal de la propiedad Casa Centro, por un monto de ARS 15.000, con vencimiento 10-11-2026');
       expect(activityLog.buildMessage({ route: resolve(), label: activityLog.describe(resolve(), full), outcome: 'success' }))
-        .toBe('Resolviste un vencimiento de la obligación Impuesto Municipal de la propiedad Casa Centro, por un monto de ARS 15.000, con vencimiento 10/11/2026');
+        .toBe('Resolviste un vencimiento de la obligación Impuesto Municipal de la propiedad Casa Centro, por un monto de ARS 15.000, con vencimiento 10-11-2026');
     });
 
     it('drops the fragments whose facts are missing', () => {
       const label = activityLog.describe(resolve(), { title: 'Expensas', amount: undefined, currencyCode: 'ARS', dueDate: null, assetName: '' });
       expect(label).toBe('Expensas');
       expect(label).not.toMatch(/undefined|null|\[\]/);
-      expect(activityLog.describe(resolve(), { ...full, amount: null })).toBe('Impuesto Municipal de la propiedad Casa Centro, con vencimiento 10/11/2026');
+      expect(activityLog.describe(resolve(), { ...full, amount: null })).toBe('Impuesto Municipal de la propiedad Casa Centro, con vencimiento 10-11-2026');
     });
 
     it('prints the installment only when it is provided and valid', () => {

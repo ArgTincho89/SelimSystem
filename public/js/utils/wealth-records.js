@@ -5,12 +5,6 @@ const WealthRecords = {
   ACCEPT: '.pdf,.png,.jpg,.jpeg,.webp,.txt',
   TYPE_OPTIONS: [['', 'Todos los tipos'], ['pdf', 'PDF'], ['image', 'Imagen'], ['text', 'Texto']],
 
-  // 2026-11-16 -> 16/11/2026
-  dmy(value) {
-    const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(value || ''));
-    return match ? `${match[3]}/${match[2]}/${match[1]}` : '';
-  },
-
   typeOf(documentRecord) {
     const type = String(documentRecord.contentType || '').split(';')[0];
     if (type === 'application/pdf') return 'pdf';
@@ -36,7 +30,7 @@ const WealthRecords = {
   },
 
   noteHeading(note) {
-    return [this.dmy(note.date), note.title].filter(Boolean).join(' · ');
+    return [formatDate(note.date), note.title].filter(Boolean).join(' · ');
   },
 
   field(label, control) {
@@ -124,7 +118,7 @@ const WealthRecords = {
   documentRow(documentRecord, onChanged) {
     const meta = [
       this.typeOf(documentRecord).toUpperCase(), `${(documentRecord.size / 1024).toFixed(1)} KB`,
-      `Cargado el ${this.dmy(documentRecord.uploadedAt)}${documentRecord.uploadedByName ? ` por ${documentRecord.uploadedByName}` : ''}`
+      `Cargado el ${formatDate(documentRecord.uploadedAt)}${documentRecord.uploadedByName ? ` por ${documentRecord.uploadedByName}` : ''}`
     ].filter(Boolean).join(' · ');
     const details = create('div', {}, [
       create('strong', { textContent: documentRecord.title }),

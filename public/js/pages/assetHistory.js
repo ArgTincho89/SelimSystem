@@ -97,10 +97,6 @@ const AssetHistory = {
     return value === null || value === undefined || !currencyCode ? '—' : formatearMonedaConCodigo(value, currencyCode);
   },
 
-  formatDate(date) {
-    return date ? date.split('-').reverse().join('/') : '';
-  },
-
   renderTable(rows, ctx) {
     const head = ['Fecha', 'Concepto', 'Tipo', 'Responsable', 'Proveedor / inquilino', 'Esperado', 'Ejecutado', 'Saldo', 'Estado', 'Acción'];
     const table = create('table', { className: 'asset-history-table' }, [
@@ -122,7 +118,7 @@ const AssetHistory = {
       onClick: event => { event.stopPropagation(); this.showDetail(row, ctx); } });
     const cell = (label, content) => create('td', { dataset: { label } }, [typeof content === 'string' ? document.createTextNode(content) : content].filter(Boolean));
     return create('tr', { className: 'asset-history-row', dataset: { historyRow: row.id, kind: row.kind }, onClick: () => this.showDetail(row, ctx) }, [
-      cell('Fecha', this.formatDate(row.date)),
+      cell('Fecha', formatDate(row.date)),
       concept,
       cell('Tipo', row.typeLabel),
       cell('Responsable', this.RESPONSIBILITY_LABELS[row.responsibility] || '—'),
@@ -149,7 +145,7 @@ const AssetHistory = {
       panel.appendChild(create('div', { className: 'label-value' }, [create('strong', { textContent: `${label}:` }), typeof value === 'string' ? create('span', { textContent: value }) : value]));
     };
     line('Tipo de registro', row.typeLabel);
-    line('Fecha', this.formatDate(row.date));
+    line('Fecha', formatDate(row.date));
     line('Concepto', row.concept);
     line('Bien', ctx.asset.name);
     line('Responsable', this.RESPONSIBILITY_LABELS[row.responsibility]);
@@ -166,17 +162,17 @@ const AssetHistory = {
     panel.appendChild(create('strong', { textContent: row.kind === 'rent' ? 'Cobros registrados' : 'Pagos registrados' }));
     if (!row.payments.length) panel.appendChild(create('span', { className: 'text-muted', textContent: row.kind === 'rent' ? 'Sin cobros registrados.' : 'Sin pagos registrados.' }));
     row.payments.forEach(payment => {
-      const parts = [`${this.formatDate(payment.date)} · ${this.amountText(payment.amount, payment.currencyCode || row.currencyCode)}`,
+      const parts = [`${formatDate(payment.date)} · ${this.amountText(payment.amount, payment.currencyCode || row.currencyCode)}`,
         payment.accountName ? `Cuenta: ${payment.accountName}` : '', payment.paymentMethod ? `Medio: ${payment.paymentMethod}` : '',
         payment.title ? `Título: ${payment.title}` : '', payment.notes ? `Notas: ${payment.notes}` : ''].filter(Boolean);
       panel.appendChild(create('div', { className: 'text-muted', textContent: parts.join(' · ') }));
     });
-    if (row.resolution) panel.appendChild(create('div', { className: 'text-muted', textContent: `Resuelto el ${this.formatDate(row.resolution.resolvedAt)} por ${this.amountText(row.resolution.amount, row.currencyCode)}${row.resolution.notes ? ` · ${row.resolution.notes}` : ''}` }));
+    if (row.resolution) panel.appendChild(create('div', { className: 'text-muted', textContent: `Resuelto el ${formatDate(row.resolution.resolvedAt)} por ${this.amountText(row.resolution.amount, row.currencyCode)}${row.resolution.notes ? ` · ${row.resolution.notes}` : ''}` }));
     (row.voidedResolutions || []).forEach(voided => panel.appendChild(create('div', { className: 'text-muted', dataset: { voidedResolution: voided.id },
-      textContent: `Resolución anulada${voided.voidedAt ? ` el ${this.formatDate(String(voided.voidedAt).slice(0, 10))}` : ''}${voided.voidReason ? ` · Motivo: ${voided.voidReason}` : ''}` })));
+      textContent: `Resolución anulada${voided.voidedAt ? ` el ${formatDate(voided.voidedAt)}` : ''}${voided.voidReason ? ` · Motivo: ${voided.voidReason}` : ''}` })));
     if (row.reversals.length) {
       panel.appendChild(create('strong', { textContent: row.kind === 'obligation' ? 'Pagos revertidos' : 'Cobros revertidos' }));
-      row.reversals.forEach(reversal => panel.appendChild(create('div', { className: 'text-muted', textContent: `Revertido: ${reversal.date || reversal.reversedAt ? this.formatDate(reversal.date || String(reversal.reversedAt).slice(0, 10)) : ''} ${reversal.amount !== undefined ? this.amountText(reversal.amount, reversal.currencyCode || row.currencyCode) : ''}${reversal.reason ? ` · Motivo: ${reversal.reason}` : ''}`.trim() })));
+      row.reversals.forEach(reversal => panel.appendChild(create('div', { className: 'text-muted', textContent: `Revertido: ${reversal.date || reversal.reversedAt ? formatDate(reversal.date || reversal.reversedAt) : ''} ${reversal.amount !== undefined ? this.amountText(reversal.amount, reversal.currencyCode || row.currencyCode) : ''}${reversal.reason ? ` · Motivo: ${reversal.reason}` : ''}`.trim() })));
     }
     panel.appendChild(create('strong', { textContent: 'Comprobantes' }));
     if (!row.documents.length) panel.appendChild(create('span', { className: 'text-muted', textContent: 'Sin comprobantes adjuntos.' }));
@@ -185,7 +181,7 @@ const AssetHistory = {
     ])));
     panel.appendChild(create('strong', { textContent: 'Notas' }));
     if (!row.notes.length) panel.appendChild(create('span', { className: 'text-muted', textContent: 'Sin notas.' }));
-    row.notes.forEach(note => panel.appendChild(create('div', { className: 'text-muted', textContent: `${this.formatDate(note.date)}${note.title ? ` · ${note.title}` : ''} · ${note.content}` })));
+    row.notes.forEach(note => panel.appendChild(create('div', { className: 'text-muted', textContent: `${formatDate(note.date)}${note.title ? ` · ${note.title}` : ''} · ${note.content}` })));
     const slot = create('div', { className: 'asset-history-actions', dataset: { actionsSlot: 'true' }, style: { display: 'flex', gap: '8px', flexWrap: 'wrap' } });
     this.buildActions(row, ctx).forEach(button => slot.appendChild(button));
     panel.appendChild(slot);

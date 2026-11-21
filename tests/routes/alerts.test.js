@@ -96,7 +96,7 @@ describe('Unified alerts API', () => {
     expect(new Set(list.map(item => item.id)).size).toBe(list.length);
     const due = forObligation(list, obligation)[0];
     expect(due.type).toBe('obligation_due');
-    expect(due.message).toMatch(/^Electricidad de Departamento Palermo vence el \d+ de \w+\. Importe estimado: \$85\.000\. Faltan 4 días\.$/);
+    expect(due.message).toMatch(/^Electricidad de Departamento Palermo vence el \d{2}-\d{2}-\d{4}\. Importe estimado: \$85\.000\. Faltan 4 días\.$/);
     expect(due.daysUntil).toBe(4);
   });
 
@@ -232,7 +232,7 @@ describe('Unified alerts API', () => {
     const list = (await alerts('?type=card_installment_due')).filter(item => item.planId === created.body.id);
     expect(list).toHaveLength(1);
     expect(list[0]).toMatchObject({ occurrenceId: first.id, installmentNumber: 1, date: day(5), status: 'scheduled' });
-    expect(list[0].message).toMatch(/^En 5 días vence\. Cuota 1 de 12 de Televisor, comprado el \d+ de \w+\. Importe: €100\.$/);
+    expect(list[0].message).toMatch(/^En 5 días vence\. Cuota 1 de 12 de Televisor, comprado el \d{2}-\d{2}-\d{4}\. Importe: €100\.$/);
     expect((await agent.post(`/api/installments/plans/${created.body.id}/cancel`).send({})).status).toBe(200);
     expect((await alerts('?type=card_installment_due')).filter(item => item.planId === created.body.id)).toHaveLength(0);
   });

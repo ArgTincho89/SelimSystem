@@ -7,8 +7,8 @@ const read = file => fs.readFileSync(path.join(__dirname, '../../public', file),
 function loadFormatter(timezone) {
   const context = { localStorage: { getItem: () => timezone }, Intl, Date, Object, Set, Map, String, Array, Number };
   vm.createContext(context);
-  vm.runInContext(`${read('js/utils/format.js')}\nthis.api = { formatLogDateTime };`, context);
-  return context.api.formatLogDateTime;
+  vm.runInContext(`${read('js/utils/format.js')}\nthis.api = { formatDateTime };`, context);
+  return context.api.formatDateTime;
 }
 
 describe('Evolutivo 3 S5 LOGS UI contract (moved to the Logs screen in evolutivo-4)', () => {
@@ -30,7 +30,7 @@ describe('Evolutivo 3 S5 LOGS UI contract (moved to the Logs screen in evolutivo
   it('has the empty state, pagination and no raw outcome codes', () => {
     expect(logs).toContain('Todavía no hay acciones registradas');
     expect(logs).toContain('API.activityLogs.list');
-    expect(logs).toContain('formatLogDateTime(item.timestamp)');
+    expect(logs).toContain('formatDateTime(item.timestamp)');
     expect(logs).toContain('No se completó');
     expect(logs).not.toMatch(/textContent: item\.(outcome|statusCode)/);
   });
@@ -40,10 +40,10 @@ describe('Evolutivo 3 S5 LOGS UI contract (moved to the Logs screen in evolutivo
     expect(read('js/api.js')).toContain('/activity-logs');
   });
 
-  it('formats dd/mm/aaaa hh:mm in the configured timezone', () => {
-    expect(loadFormatter('Europe/Madrid')('2026-11-09T13:35:00.000Z')).toBe('09/11/2026 14:35');
-    expect(loadFormatter('America/Argentina/Buenos_Aires')('2026-11-09T13:35:00.000Z')).toBe('09/11/2026 10:35');
-    expect(loadFormatter('UTC')('2026-11-09T00:05:00.000Z')).toBe('09/11/2026 00:05');
+  it('formats dd-mm-aaaa hh:mm in the configured timezone', () => {
+    expect(loadFormatter('Europe/Madrid')('2026-11-09T13:35:00.000Z')).toBe('09-11-2026 14:35');
+    expect(loadFormatter('America/Argentina/Buenos_Aires')('2026-11-09T13:35:00.000Z')).toBe('09-11-2026 10:35');
+    expect(loadFormatter('UTC')('2026-11-09T00:05:00.000Z')).toBe('09-11-2026 00:05');
     expect(loadFormatter('UTC')('not a date')).toBe('');
   });
 

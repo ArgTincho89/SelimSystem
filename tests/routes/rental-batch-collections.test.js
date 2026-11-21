@@ -18,7 +18,7 @@ describe('Rental batch: overlaps, early end, schedule and per-modality collectio
       const overlapping = await f.declare([f.modality('mutuo', { startDate: '2025-06-01', endDate: '2026-05-31' })]);
       expect(overlapping.status).toBe(409);
       expect(overlapping.body.error).toContain('Primero declará la finalización de ese alquiler');
-      expect(overlapping.body.error).toContain('del 01/01/2025 al 31/12/2025');
+      expect(overlapping.body.error).toContain('del 01-01-2025 al 31-12-2025');
       expect(overlapping.body.conflict).toMatchObject({ declarationId: first.id, startDate: '2025-01-01', endDate: '2025-12-31', active: true });
       // A non-overlapping rental may be declared while the other one is in force.
       const next = await f.declare([f.modality('locacion', { startDate: '2026-01-01', endDate: null })]);

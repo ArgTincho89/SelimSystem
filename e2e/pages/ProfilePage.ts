@@ -78,7 +78,7 @@ export class ProfilePage extends BasePage {
   async expectLogEntry(message: string): Promise<void> {
     const entry = this.page.locator('#logs-list .log-row').filter({ hasText: message }).first();
     await expect(entry).toBeVisible();
-    await expect(entry.locator('.log-date')).toContainText(/\d{2}\/\d{2}\/\d{4} \d{2}:\d{2}/);
+    await expect(entry.locator('.log-date')).toContainText(/\d{2}-\d{2}-\d{4} \d{2}:\d{2}/);
   }
 
   async changePassword(currentPassword: string, newPassword: string): Promise<void> {

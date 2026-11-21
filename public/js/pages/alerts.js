@@ -103,7 +103,7 @@ const AlertsPage = {
     const card = create('article', { className: 'card', dataset: { alertId: alert.id }, style: { display: 'grid', gap: '8px', borderLeft: `4px solid ${overdue ? 'var(--danger)' : 'var(--accent)'}` } }, [
       create('div', { style: { display: 'flex', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap' } }, [
         create('strong', { textContent: alert.type === 'rent_due' && modalityLabel(alert.modality) ? `${alert.title} · ${modalityLabel(alert.modality)}` : alert.title }),
-        create('span', { className: overdue ? 'text-danger' : 'text-muted', textContent: overdue ? `Vencido · ${alert.date}` : alert.date })
+        create('span', { className: overdue ? 'text-danger' : 'text-muted', textContent: overdue ? `Vencido · ${formatDate(alert.date)}` : formatDate(alert.date) })
       ]),
       create('div', { textContent: alert.message || alert.title })
     ]);
@@ -196,7 +196,7 @@ const AlertsPage = {
     const { confirmed } = await ConfirmDialog.open({
       title: 'Marcar cheque como cobrado', confirmLabel: 'Marcar como cobrado',
       message: 'El ingreso ya está registrado en la fecha de cobro del cheque. Solo se marca el cheque como cobrado y el aviso deja de mostrarse.',
-      details: [['Bien', alert.assetName], ['Inquilino', (alert.tenantNames || []).join(', ')], ['Período', alert.period ? formatMonthLabel(alert.period) : ''], ['Importe', formatearMonedaConCodigo(alert.amount, alert.currencyCode)], ['Fecha de cobro', alert.date]]
+      details: [['Bien', alert.assetName], ['Inquilino', (alert.tenantNames || []).join(', ')], ['Período', alert.period ? formatMonthLabel(alert.period) : ''], ['Importe', formatearMonedaConCodigo(alert.amount, alert.currencyCode)], ['Fecha de cobro', formatDate(alert.date)]]
     });
     if (!confirmed) return;
     await API.rentals.markChequeCashed(alert.groupId || alert.collectionId);
@@ -209,7 +209,7 @@ const AlertsPage = {
     const { confirmed } = await ConfirmDialog.open({
       title: 'Confirmar imputación', confirmLabel: 'Confirmar imputación',
       message: 'La cuota pasa a contar en los totales del mes de su vencimiento y el aviso deja de mostrarse.',
-      details: [['Movimiento', alert.title], ['Nº cheque', alert.chequeNumber || ''], ['Importe', formatearMonedaConCodigo(alert.amount, alert.currencyCode)], ['Vencimiento', alert.date]]
+      details: [['Movimiento', alert.title], ['Nº cheque', alert.chequeNumber || ''], ['Importe', formatearMonedaConCodigo(alert.amount, alert.currencyCode)], ['Vencimiento', formatDate(alert.date)]]
     });
     if (!confirmed) return;
     await API.transactions.confirm(alert.transactionId);

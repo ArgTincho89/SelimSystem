@@ -198,12 +198,6 @@ const TransactionForm = {
   PAYMENT_HINT: 'Se registrará como pago de este vencimiento',
   EDIT_PAYMENT_HINT: 'Para registrar el pago de un movimiento existente usá Registrar pago',
 
-  // "2026-03-05" -> "05/03/2026".
-  dueDateLabel(date) {
-    const [year, month, day] = String(date || '').split('-');
-    return day ? `${day}/${month}/${year}` : String(date || '');
-  },
-
   // [value, label] options of "Bien". "Obligaciones sin bien" only for expenses and when such obligations exist.
   attributionAssetOptions(assets = [], obligations = [], type = 'expense') {
     const options = [['', 'Sin atribución'], ...assets.map(asset => [asset.id, asset.name])];
@@ -227,7 +221,7 @@ const TransactionForm = {
           if ((occurrence.status === 'cancelled' || pending <= 0) && value !== keep) return;
           options.push({
             value, disabled: isEdit && value !== keep, dueDate: true,
-            label: `Vencimiento · ${item.title} · ${TransactionForm.dueDateLabel(occurrence.date)} · pendiente ${formatearMoneda(pending, occurrence.currencyCode || item.currencyCode || 'ARS')}`
+            label: `Vencimiento · ${item.title} · ${formatDate(occurrence.date)} · pendiente ${formatearMoneda(pending, occurrence.currencyCode || item.currencyCode || 'ARS')}`
           });
         });
       });
@@ -235,7 +229,7 @@ const TransactionForm = {
     if (type === 'income' && !noAsset) {
       rentals.filter(item => item.assetId === assetId).forEach(item => {
         options.push({ value: `contract:${item.id}`, label: `Contrato · ${item.tenants?.map(tenant => tenant.name).join(', ') || item.asset?.name || 'Alquiler'}`, disabled: false });
-        (item.occurrences || []).forEach(occurrence => options.push({ value: `rentOccurrence:${item.id}:${occurrence.id}`, label: `Período de alquiler · ${TransactionForm.dueDateLabel(occurrence.date)}`, disabled: false }));
+        (item.occurrences || []).forEach(occurrence => options.push({ value: `rentOccurrence:${item.id}:${occurrence.id}`, label: `Período de alquiler · ${formatDate(occurrence.date)}`, disabled: false }));
       });
     }
     return options;
@@ -488,9 +482,9 @@ const TransactionForm = {
     refundSourceSelect.appendChild(create('option', { value: '', textContent: 'Sin vincular a un gasto' }));
     transactions.filter(item => item.tipo === 'expense').forEach(item => {
       const option = create('option', { value: item.id });
-      const label = `${item.titulo} · ${item.fecha} · ${formatearMoneda(item.monto, item.currencyCode || 'EUR')}`;
+      const label = `${item.titulo} · ${formatDate(item.fecha)} · ${formatearMoneda(item.monto, item.currencyCode || 'EUR')}`;
       option.dataset.publicValue = label;
-      option.textContent = localStorage.getItem('pate_hide_home_stats') === 'true' ? `${item.titulo} · ${item.fecha} · ••••••` : label;
+      option.textContent = localStorage.getItem('pate_hide_home_stats') === 'true' ? `${item.titulo} · ${formatDate(item.fecha)} · ••••••` : label;
       refundSourceSelect.appendChild(option);
     });
     refundSourceSelect.value = transaction?.refundSourceId || '';

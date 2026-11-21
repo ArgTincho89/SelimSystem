@@ -14,10 +14,6 @@ const RentalPeriods = {
     return control;
   },
 
-  shortDate(date) {
-    return date ? date.split('-').reverse().join('/') : '';
-  },
-
   money(amount, currencyCode) {
     return formatearMonedaConCodigo(amount, currencyCode);
   },
@@ -92,7 +88,7 @@ const RentalPeriods = {
       expand: row => this.detail(row, ctx),
       columns: [
         { key: 'period', label: 'Período', render: row => create('strong', { textContent: formatMonthLabel(row.period) }) },
-        { key: 'dueDate', label: 'Vencimiento', render: row => this.shortDate(row.dueDate) },
+        { key: 'dueDate', label: 'Vencimiento', render: row => formatDate(row.dueDate) },
         ...this.MODALITIES.map(kind => ({ key: kind, label: modalityLabel(kind), render: row => this.modalityCell(row, kind) })),
         { key: 'obligations', label: 'Obligaciones', render: row => this.obligationsCell(row, ctx) },
         { key: 'total', label: 'Total', render: row => this.periodTotals(row, row.visibleParts, row.visibleObligations).map(item => this.money(item.amount, item.currencyCode)).join(' + ') || '—' },
@@ -180,10 +176,10 @@ const RentalPeriods = {
     ];
   },
 
-  // "Cheque a 30 días · se cobra el 17/12/2026 · pendiente de cobro" for a collection paid with a cheque.
+  // "Cheque a 30 días · se cobra el 17-12-2026 · pendiente de cobro" for a collection paid with a cheque.
   chequeText(cheque) {
     if (!cheque) return '';
-    return `Cheque a ${cheque.days} días · se cobra el ${this.shortDate(cheque.dueDate)} · ${cheque.cashedAt ? 'cobrado' : 'pendiente de cobro'}`;
+    return `Cheque a ${cheque.days} días · se cobra el ${formatDate(cheque.dueDate)} · ${cheque.cashedAt ? 'cobrado' : 'pendiente de cobro'}`;
   },
 
   // Owner and tenant obligations of the month, kept apart, each with its own direct action.
@@ -262,21 +258,21 @@ const RentalPeriods = {
     const section = (title, children) => { const box = create('section', { dataset: { detailSection: title } }, [create('strong', { textContent: title })]); children.forEach(child => box.appendChild(child)); root.appendChild(box); return box; };
     const text = value => create('div', { className: 'text-muted', textContent: value });
     const pending = period.state === 'partial' ? this.pendingText(period.totals || []) : '';
-    section('Período', [text(`${formatMonthLabel(period.period)} · vence el ${this.shortDate(period.dueDate)} · `), this.rentBadge(period.state), ...(pending ? [text(`Saldo pendiente: ${pending}`)] : [])]);
+    section('Período', [text(`${formatMonthLabel(period.period)} · vence el ${formatDate(period.dueDate)} · `), this.rentBadge(period.state), ...(pending ? [text(`Saldo pendiente: ${pending}`)] : [])]);
     section('Modalidades y montos', parts.map(part => create('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap' } }, [
       create('span', { textContent: `${part.modalityLabel}: ${this.money(part.expected, part.currencyCode)} · ${part.classification}${part.collected ? ` · cobrado ${this.money(part.collected, part.currencyCode)}` : ''}${part.state === 'partial' && part.remaining > 0 ? ` · pendiente ${this.money(part.remaining, part.currencyCode)}` : ''}` }), this.rentBadge(part.state)
     ])));
     section('Obligaciones', obligations.length ? obligations.map(item => create('div', { style: { display: 'grid', gap: '2px' } }, [this.obligationLine(item, ctx),
-      ...(item.payments || []).map(payment => text(`Pago ${this.shortDate(payment.date)} · ${this.money(payment.amount, item.currencyCode)}${payment.accountName ? ` · ${payment.accountName}` : ''}`)),
+      ...(item.payments || []).map(payment => text(`Pago ${formatDate(payment.date)} · ${this.money(payment.amount, item.currencyCode)}${payment.accountName ? ` · ${payment.accountName}` : ''}`)),
       ...(item.reversals || []).map(reversal => text(`Pago revertido${reversal.reason ? ` · ${reversal.reason}` : ''}`)),
-      ...(item.resolution ? [text(`Resuelto el ${this.shortDate(item.resolution.resolvedAt)} · ${this.money(item.resolution.amount, item.currencyCode)}`)] : [])
+      ...(item.resolution ? [text(`Resuelto el ${formatDate(item.resolution.resolvedAt)} · ${this.money(item.resolution.amount, item.currencyCode)}`)] : [])
     ])) : [text('No hay obligaciones en este período.')]);
-    section('Cobros registrados', period.collections.length ? period.collections.map(item => text(`${this.shortDate(item.date)} · ${this.money(item.amount, item.currencyCode)}${item.modality ? ` · ${modalityLabel(item.modality)}` : ''}${item.accountName ? ` · ${item.accountName}` : ''}${item.paymentMethod ? ` · ${item.paymentMethod}` : ''}${item.cheque ? ` · ${this.chequeText(item.cheque)}` : ''}`)) : [text('Sin cobros registrados.')]);
-    if (period.unapplied.length) section('Saldo sin aplicar', period.unapplied.map(item => text(`Cobro del ${this.shortDate(item.date)} con ${this.money(item.amount, item.currencyCode)} sin aplicar a un período.`)));
+    section('Cobros registrados', period.collections.length ? period.collections.map(item => text(`${formatDate(item.date)} · ${this.money(item.amount, item.currencyCode)}${item.modality ? ` · ${modalityLabel(item.modality)}` : ''}${item.accountName ? ` · ${item.accountName}` : ''}${item.paymentMethod ? ` · ${item.paymentMethod}` : ''}${item.cheque ? ` · ${this.chequeText(item.cheque)}` : ''}`)) : [text('Sin cobros registrados.')]);
+    if (period.unapplied.length) section('Saldo sin aplicar', period.unapplied.map(item => text(`Cobro del ${formatDate(item.date)} con ${this.money(item.amount, item.currencyCode)} sin aplicar a un período.`)));
     const documents = [...period.documents, ...obligations.flatMap(item => item.documents || [])];
     section('Comprobantes', [DocumentViewer.list(documents, { empty: 'Sin comprobantes.' })]);
     const notes = [...period.notes, ...obligations.flatMap(item => item.notes || [])];
-    section('Notas', notes.length ? notes.map(note => text(`${this.shortDate(note.date)} · ${note.content}`)) : [text('Sin notas.')]);
+    section('Notas', notes.length ? notes.map(note => text(`${formatDate(note.date)} · ${note.content}`)) : [text('Sin notas.')]);
     return root;
   },
 
@@ -304,12 +300,12 @@ const RentalPeriods = {
       const card = create('section', { className: 'card', style: { padding: '8px' }, dataset: { collectionLine: line.modality || 'sin-asignar' } });
       card.appendChild(create('strong', { textContent: line.unapplied ? 'Sin asignar a un período' : (modalityLabel(line.modality) || 'Alquiler') }));
       [
-        ['Fecha de cobro', line.date],
+        ['Fecha de cobro', formatDate(line.date)],
         ['Importe', money(line.amount, line.currencyCode)],
         ...(line.ivaAmount ? [['IVA', `${money(line.ivaAmount, line.currencyCode)} (${line.ivaPercent}% incluido)`], ['Neto', money(line.netAmount, line.currencyCode)]] : []),
         ['Clasificación', line.clasificacion || 'Sin clasificar'],
         ['Medio de cobro', line.method || 'No indicado'],
-        ...(line.cheque ? [['Recibido el', this.shortDate(line.receivedDate)], ['Cheque', this.chequeText(line.cheque)]] : []),
+        ...(line.cheque ? [['Recibido el', formatDate(line.receivedDate)], ['Cheque', this.chequeText(line.cheque)]] : []),
         ['Cuenta de destino', line.accountName || 'Sin cuenta']
       ].forEach(([label, value]) => card.appendChild(create('p', { style: { margin: '2px 0' }, textContent: `${label}: ${value}` })));
       body.appendChild(card);
@@ -389,7 +385,7 @@ const RentalPeriods = {
       // A titular tenant also gets the expense of what it pays: the tenants are resolved only when the month has them.
       const owners = open.some(part => (part.tenantIds || []).length) ? await API.owners.list().catch(() => []) : [];
       const body = create('div', { style: { maxHeight: '65vh', overflowY: 'auto', display: 'grid', gap: '10px' } });
-      body.appendChild(create('p', { textContent: `Mes ${month.date}: cada modalidad se registra como un ingreso propio en su cuenta. El mes figura como cobrado cuando se cobran todas sus modalidades.` }));
+      body.appendChild(create('p', { textContent: `Mes ${formatDate(month.date)}: cada modalidad se registra como un ingreso propio en su cuenta. El mes figura como cobrado cuando se cobran todas sus modalidades.` }));
       if (month.status === 'partially_collected') body.appendChild(create('p', { className: 'text-muted', dataset: { partialNotice: 'true' }, textContent: `Parcialmente cancelado: saldo pendiente ${(month.totals || []).filter(row => row.remainingMinor > 0).map(row => formatearMonedaConCodigo(row.remainingAmount, row.currencyCode)).join(' + ')}.` }));
       const methodList = create('datalist', { id: `rent-methods-${month.date}` });
       [...new Set(['Transferencia', 'Efectivo', 'Cheque', ...paymentMethods.map(item => item.name)])].forEach(name => methodList.appendChild(create('option', { value: name })));
@@ -425,7 +421,7 @@ const RentalPeriods = {
           const cheque = this.isChequeMethod(method.value);
           chequeBox.style.display = cheque ? 'grid' : 'none';
           const due = cheque ? this.chequeDueDate(date.value || today, Number(days.value)) : '';
-          chequeDue.textContent = due && Number(days.value) > 0 ? `Se cobra el ${this.shortDate(due)}: el ingreso se registra en esa fecha.` : 'Indicá en cuántos días se cobra el cheque.';
+          chequeDue.textContent = due && Number(days.value) > 0 ? `Se cobra el ${formatDate(due)}: el ingreso se registra en esa fecha.` : 'Indicá en cuántos días se cobra el cheque.';
         };
         ['input', 'change'].forEach(name => { method.addEventListener(name, syncCheque); days.addEventListener(name, syncCheque); date.addEventListener(name, syncCheque); });
         syncCheque();
@@ -490,7 +486,7 @@ const RentalPeriods = {
           if (onDone) await onDone();
         } catch (error) { submit.disabled = false; showError(error.message); }
       });
-      Modal.push(`Registrar cobro · mes ${month.date}`, body, { footer: create('div', {}, [submit]) });
+      Modal.push(`Registrar cobro · mes ${formatDate(month.date)}`, body, { footer: create('div', {}, [submit]) });
     } catch (error) { showToast(`No se pudo abrir el cobro: ${error.message}`, 'error'); }
   },
 
@@ -506,9 +502,9 @@ const RentalPeriods = {
       const amountInputs = [];
       open.forEach(occurrence => {
         const checkbox = create('input', { type: 'checkbox', checked: occurrence.id === selectedOccurrenceId });
-        const amount = MoneyInput.create({ currency, value: occurrence.id === selectedOccurrenceId ? occurrence.remainingAmount : null, ariaLabel: `Importe ${occurrence.date}` });
+        const amount = MoneyInput.create({ currency, value: occurrence.id === selectedOccurrenceId ? occurrence.remainingAmount : null, ariaLabel: `Importe ${formatDate(occurrence.date)}` });
         rows.appendChild(create('label', { className: 'card', style: { padding: '8px', display: 'grid', gridTemplateColumns: 'auto 1fr minmax(90px, 150px)', gap: '8px', alignItems: 'center' } }, [
-          checkbox, create('span', { textContent: `${occurrence.date} · pendiente ${occurrence.remainingAmount} ${currency}` }), amount
+          checkbox, create('span', { textContent: `${formatDate(occurrence.date)} · pendiente ${occurrence.remainingAmount} ${currency}` }), amount
         ]));
         amountInputs.push({ occurrence, checkbox, amount });
       });
@@ -740,7 +736,7 @@ const MonthlySheet = {
     const box = create('div', { className: 'sheet-detail', style: { display: 'grid', gap: '4px', padding: '6px 0' } });
     if (row.counterpart) box.appendChild(create('div', { textContent: `${row.responsibility === 'tenant' ? 'Inquilino' : 'Proveedor'}: ${row.counterpart}` }));
     (row.parts || []).forEach(part => box.appendChild(create('div', { className: 'text-muted', textContent: `${part.modalityLabel || modalityLabel(part.modality)}: ${AssetHistory.amountText(part.amount, part.currencyCode)} · ${row.kind === 'rent' ? rentStatusLabel(part.state) : statusLabel(part.state)}` })));
-    (row.payments || []).forEach(payment => box.appendChild(create('div', { className: 'text-muted', textContent: `${AssetHistory.formatDate(payment.date)} · ${AssetHistory.amountText(payment.amount, payment.currencyCode || row.currencyCode)}${payment.accountName ? ` · ${payment.accountName}` : ''}` })));
+    (row.payments || []).forEach(payment => box.appendChild(create('div', { className: 'text-muted', textContent: `${formatDate(payment.date)} · ${AssetHistory.amountText(payment.amount, payment.currencyCode || row.currencyCode)}${payment.accountName ? ` · ${payment.accountName}` : ''}` })));
     (row.reversals || []).forEach(reversal => box.appendChild(create('div', { className: 'text-muted', textContent: `Revertido${reversal.reason ? `: ${reversal.reason}` : ''}` })));
     box.appendChild(create('button', { className: 'btn btn-ghost btn-sm', type: 'button', textContent: 'Ver detalle completo', 'aria-label': `Ver detalle completo de ${row.concept}`, onClick: () => AssetHistory.showDetail(row, ctx) }));
     return box;

@@ -70,7 +70,7 @@ const LogsPage = {
       }));
     }
     return create('div', { className: 'log-row' }, [
-      create('div', { className: 'log-date text-muted', textContent: formatLogDateTime(item.timestamp) }),
+      create('div', { className: 'log-date text-muted', textContent: formatDateTime(item.timestamp) }),
       description
     ]);
   },

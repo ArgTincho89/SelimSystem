@@ -8,7 +8,7 @@ describe('Evolutivo 10 alerts: cheque/credit installments and lead-time configur
   let today;
   let categoryId;
   const day = offset => addDaysDateOnly(today, offset);
-  const ddmmyyyy = date => `${date.slice(8, 10)}/${date.slice(5, 7)}/${date.slice(0, 4)}`;
+  const ddmmyyyy = date => `${date.slice(8, 10)}-${date.slice(5, 7)}-${date.slice(0, 4)}`;
   const alerts = async (query = '') => (await f.agent.get(`/api/alerts${query}`)).body;
 
   beforeAll(async () => {

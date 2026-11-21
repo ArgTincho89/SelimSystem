@@ -2,6 +2,7 @@ const ledger = require('./account-ledger');
 const rentals = require('./rentals');
 const obligations = require('./obligations');
 const alerts = require('./alerts');
+const { formatDisplayDate } = require('../utils/date-format');
 
 const CONTRACT_TYPE_BY_KIND = { galpon: 'industrial', lote: 'other' };
 const TOUCHED = ['rentalDeclarations', 'rentalContracts', 'rentOccurrences', 'assets', 'obligations', 'obligationOccurrences', 'documents'];
@@ -9,10 +10,6 @@ const COLLECTED_OUT_OF_RANGE = 'Hay períodos cobrados fuera del nuevo rango; an
 
 const fail = (error, status = 400) => ({ error, status });
 const OPEN_END = '9999-12-31';
-
-function displayDate(date) {
-  return date ? date.split('-').reverse().join('/') : '';
-}
 
 function overlaps(aStart, aEnd, bStart, bEnd) {
   return aStart <= (bEnd || OPEN_END) && bStart <= (aEnd || OPEN_END);
@@ -33,7 +30,7 @@ function findOverlap(db, userId, assetId, declarationId, entries) {
     const startDate = siblings.map(item => item.startDate).sort()[0];
     const endDate = siblings.some(item => !item.endDate) ? null : siblings.map(item => item.endDate).sort().pop();
     const active = siblings.some(isActive);
-    const range = `del ${displayDate(startDate)} ${endDate ? `al ${displayDate(endDate)}` : 'sin fecha de finalización'}`;
+    const range = `del ${formatDisplayDate(startDate)} ${endDate ? `al ${formatDisplayDate(endDate)}` : 'sin fecha de finalización'}`;
     const error = active
       ? `Las fechas se superponen con el alquiler vigente de este inmueble (${range}). Primero declará la finalización de ese alquiler para liberar esas fechas.`
       : `Las fechas se superponen con un alquiler finalizado de este inmueble (${range}). Elegí fechas posteriores a su finalización.`;

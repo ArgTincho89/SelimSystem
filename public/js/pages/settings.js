@@ -159,7 +159,7 @@ const SettingsPage = {
         const sentText = formatearMoneda(ledgerAmount(transfer.sentMinor, transfer.fromCurrency), transfer.fromCurrency);
         const receivedText = formatearMoneda(ledgerAmount(transfer.receivedMinor, transfer.toCurrency), transfer.toCurrency);
         const debitText = formatearMoneda(ledgerAmount(transfer.sentMinor + (transfer.feeMinor || 0), transfer.fromCurrency), transfer.fromCurrency);
-        const details = `${sentText} → ${receivedText} · Débito total ${debitText} · Tasa efectiva: ${receivedText} por ${sentText} · ${transfer.fecha} · ${transfer.status === 'posted' ? 'Contabilizada' : 'Programada'}`;
+        const details = `${sentText} → ${receivedText} · Débito total ${debitText} · Tasa efectiva: ${receivedText} por ${sentText} · ${formatDate(transfer.fecha)} · ${transfer.status === 'posted' ? 'Contabilizada' : 'Programada'}`;
         const detail = create('p', { className: 'transfer-details sensitive-value' });
         this.setSensitive(detail, details);
         info.appendChild(detail);
@@ -172,9 +172,9 @@ const SettingsPage = {
           const lineage = allocation.lineage?.length ? allocation.lineage : [{ originalIncomeId: allocation.originalIncomeId }];
           const sources = lineage.map(part => transactions.find(tx => tx.id === part.originalIncomeId)).filter(Boolean);
           if (!sources.length) return;
-          const original = sources.map(source => `${source.titulo} (${source.fecha})`).join(', ');
+          const original = sources.map(source => `${source.titulo} (${formatDate(source.fecha)})`).join(', ');
           const normalization = create('p', { className: 'account-status-note sensitive-value' });
-          this.setSensitive(normalization, `Normaliza ${original}: ${formatearMoneda(ledgerAmount(allocation.receivedMinor, transfer.toCurrency), transfer.toCurrency)} · ejecución ${transfer.postedAt || transfer.fecha}`);
+          this.setSensitive(normalization, `Normaliza ${original}: ${formatearMoneda(ledgerAmount(allocation.receivedMinor, transfer.toCurrency), transfer.toCurrency)} · ejecución ${formatDate(transfer.postedAt || transfer.fecha)}`);
           info.appendChild(normalization);
         });
         row.appendChild(info);
@@ -343,13 +343,13 @@ const SettingsPage = {
       const info = create('div', { className: 'account-alert-details' });
       info.appendChild(create('strong', { textContent: account?.nombre || 'Cuenta archivada' }));
       if (alert.status === 'covered') info.appendChild(create('p', { className: 'account-status-note', textContent: 'Cubierto por una transferencia planificada; el saldo actual no cambia.' }));
-      info.appendChild(create('p', { textContent: `${alert.title} · ${alert.date}` }));
+      info.appendChild(create('p', { textContent: `${alert.title} · ${formatDate(alert.date)}` }));
       const needed = create('p', { className: 'sensitive-value' });
       this.setSensitive(needed, `Necesitás ${formatearMoneda(ledgerAmount(alert.neededMinor, alert.currency), alert.currency)}`);
       info.appendChild(needed);
       if (alert.plannedTransfer) {
         const coverage = create('p', { className: 'account-status-note sensitive-value' });
-        const planned = alert.coverageTransfers.map(item => `${item.title} · ${item.date} · ${formatearMoneda(ledgerAmount(item.amountMinor, alert.currency), alert.currency)}`).join('; ');
+        const planned = alert.coverageTransfers.map(item => `${item.title} · ${formatDate(item.date)} · ${formatearMoneda(ledgerAmount(item.amountMinor, alert.currency), alert.currency)}`).join('; ');
         this.setSensitive(coverage, `${alert.status === 'covered' ? 'Cobertura planificada' : 'Cobertura parcial'}: ${planned}. El saldo actual no cambia.`);
         info.appendChild(coverage);
       }
@@ -366,7 +366,7 @@ const SettingsPage = {
       row.appendChild(min);
       const nextPayment = create('p', { className: 'account-status-note sensitive-value' });
       this.setSensitive(nextPayment, forecast.nextPayment
-        ? `Próximo pago: ${forecast.nextPayment.title} · ${forecast.nextPayment.date} · ${formatearMoneda(ledgerAmount(forecast.nextPayment.amountMinor, account.currency), account.currency)}`
+        ? `Próximo pago: ${forecast.nextPayment.title} · ${formatDate(forecast.nextPayment.date)} · ${formatearMoneda(ledgerAmount(forecast.nextPayment.amountMinor, account.currency), account.currency)}`
         : 'No hay pagos programados en el horizonte.');
       row.appendChild(nextPayment);
       panel.appendChild(row);
@@ -387,7 +387,7 @@ const SettingsPage = {
         const amount = transaction.isTransfer
           ? `${formatearMoneda(transaction.monto, transaction.fromCurrency)} → ${formatearMoneda(transaction.receivedAmount, transaction.toCurrency)}`
           : formatearMoneda(transaction.monto, transaction.currencyCode || account.currency);
-        this.setSensitive(row, `${transaction.fecha} · ${transaction.titulo} · ${amount}`);
+        this.setSensitive(row, `${formatDate(transaction.fecha)} · ${transaction.titulo} · ${amount}`);
         body.appendChild(row);
       });
       const forecast = await API.accounts.forecast(account.id);
@@ -565,7 +565,7 @@ const SettingsPage = {
         checkbox.checked = checkedIds.has(item.id) || selected.has(item.id);
         checkbox.dataset.movementId = item.id;
         label.appendChild(checkbox);
-        label.appendChild(document.createTextNode(`${item.date} · ${item.title} · `));
+        label.appendChild(document.createTextNode(`${formatDate(item.date)} · ${item.title} · `));
         const movementAmount = create('span');
         this.setSensitive(movementAmount, formatearMoneda(item.amount, item.currency));
         label.appendChild(movementAmount);
@@ -652,11 +652,11 @@ const SettingsPage = {
     const allocationRows = create('div', { className: 'settings-card-actions' });
     const incomeSources = transactions.filter(tx => tx.tipo === 'income').map(tx => ({
       id: tx.id, sourceType: 'income', accountId: tx.accountId, currency: tx.currencyCode || 'EUR',
-      label: `${tx.titulo} · ${tx.fecha} · ${formatearMoneda(tx.monto, tx.currencyCode || 'EUR')}`
+      label: `${tx.titulo} · ${formatDate(tx.fecha)} · ${formatearMoneda(tx.monto, tx.currencyCode || 'EUR')}`
     }));
     const transferSources = transfers.filter(item => item.status === 'posted' && item.normalizationAllocations?.length).map(item => ({
       id: item.id, sourceType: 'transfer', accountId: item.toAccountId, currency: item.toCurrency,
-      label: `Conversión · ${item.fecha} · ${formatearMoneda(ledgerAmount(item.receivedMinor, item.toCurrency), item.toCurrency)}`
+      label: `Conversión · ${formatDate(item.fecha)} · ${formatearMoneda(ledgerAmount(item.receivedMinor, item.toCurrency), item.toCurrency)}`
     }));
     const allSources = [...incomeSources, ...transferSources];
     const addAllocationRow = allocation => {

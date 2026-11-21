@@ -35,7 +35,7 @@ describe('Evolutivo 14 two-step attribution: helpers', () => {
     const expense = TransactionForm.attributionDetailOptions({ assetId: 'a1', type: 'expense', obligations, rentals });
     expect(values(expense)).toEqual(['', 'obligation:o1', 'obligationOccurrence:o1:c1']);
     expect(expense[0].label).toBe('Solo el bien');
-    expect(expense[2].label).toMatch(/^Vencimiento · Tasa municipal · 05\/03\/2026 · pendiente .*100/);
+    expect(expense[2].label).toMatch(/^Vencimiento · Tasa municipal · 05-03-2026 · pendiente .*100/);
     expect(expense[2]).toMatchObject({ disabled: false, dueDate: true });
     expect(values(TransactionForm.attributionDetailOptions({ assetId: 'a2', type: 'expense', obligations, rentals }))).toEqual(['', 'obligation:o2', 'obligationOccurrence:o2:c4']);
     const unassigned = TransactionForm.attributionDetailOptions({ assetId: TransactionForm.NO_ASSET, type: 'expense', obligations, rentals });
@@ -43,7 +43,7 @@ describe('Evolutivo 14 two-step attribution: helpers', () => {
     expect(unassigned[0].label).toBe('Elegí una obligación');
     const income = TransactionForm.attributionDetailOptions({ assetId: 'a1', type: 'income', obligations, rentals });
     expect(values(income)).toEqual(['', 'contract:r1', 'rentOccurrence:r1:p1']);
-    expect(income.map(option => option.label)).toEqual(['Solo el bien', 'Contrato · Ana', 'Período de alquiler · 01/03/2026']);
+    expect(income.map(option => option.label)).toEqual(['Solo el bien', 'Contrato · Ana', 'Período de alquiler · 01-03-2026']);
     expect(values(TransactionForm.attributionDetailOptions({ assetId: 'a1', type: 'refund', obligations, rentals }))).toEqual(['']);
   });
 

@@ -26,7 +26,7 @@ describe('Evolutivo 6 logs screen: filter panel and undo', () => {
     const content = new FakeElement('div');
     const navbar = new FakeElement('nav');
     const { LogsPage, context } = loadBrowser(['js/pages/logs.js'], ['LogsPage'], {
-      API, UndoDialog, Router: { navigate: jest.fn() }, showToast: jest.fn(), formatLogDateTime: value => value, localStorage: { getItem: () => 'UTC' }
+      API, UndoDialog, Router: { navigate: jest.fn() }, showToast: jest.fn(), formatDateTime: value => value, localStorage: { getItem: () => 'UTC' }
     });
     context.document.registry['#page-content'] = content;
     context.document.registry['#navbar'] = navbar;

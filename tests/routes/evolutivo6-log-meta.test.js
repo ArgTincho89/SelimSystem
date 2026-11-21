@@ -56,7 +56,7 @@ describe('Evolutivo 6 log enrichment: descriptive messages and write-time metada
     expect(paid.status).toBe(201);
     const [d, m, y] = [occurrence.date.slice(8), occurrence.date.slice(5, 7), occurrence.date.slice(0, 4)];
     const entry = latest();
-    expect(entry.message).toBe(`Registraste un pago de la obligación Impuesto Municipal de la propiedad Casa Centro, por un monto de ARS 15.000, con vencimiento ${d}/${m}/${y}`);
+    expect(entry.message).toBe(`Registraste un pago de la obligación Impuesto Municipal de la propiedad Casa Centro, por un monto de ARS 15.000, con vencimiento ${d}-${m}-${y}`);
     expect(entry).toMatchObject({ assetId, ownerIds: [ownerId], tenantIds: [], categoryId });
     expect(entry.undo).toEqual({ type: 'obligation.payment', obligationId: obligation.id, occurrenceId: occurrence.id, transactionId: paid.body.transaction.id });
   });
@@ -66,7 +66,7 @@ describe('Evolutivo 6 log enrichment: descriptive messages and write-time metada
     const resolved = await resolve(obligation, occurrence);
     expect(resolved.status).toBe(201);
     const entry = latest();
-    expect(entry.message).toMatch(/^Resolviste un vencimiento de la obligación Impuesto Municipal de la propiedad Casa Centro, por un monto de ARS 15\.000, con vencimiento \d{2}\/\d{2}\/\d{4}$/);
+    expect(entry.message).toMatch(/^Resolviste un vencimiento de la obligación Impuesto Municipal de la propiedad Casa Centro, por un monto de ARS 15\.000, con vencimiento \d{2}-\d{2}-\d{4}$/);
     expect(entry).toMatchObject({ assetId, ownerIds: [ownerId], tenantIds: [tenantId], categoryId });
     expect(entry.undo).toEqual({ type: 'obligation.resolution', obligationId: obligation.id, occurrenceId: occurrence.id, resolutionId: resolved.body.resolution.id });
   });
@@ -89,7 +89,7 @@ describe('Evolutivo 6 log enrichment: descriptive messages and write-time metada
     const reverted = await agent.post(`${base(obligation, occurrence)}/payments/${paid.body.transaction.id}/revert`).send({ reason: 'Error' });
     expect(reverted.status).toBe(200);
     const entry = latest();
-    expect(entry.message).toMatch(/^Revertiste un pago de la obligación Impuesto Municipal de la propiedad Casa Centro, por un monto de ARS 15\.000, con vencimiento \d{2}\/\d{2}\/\d{4}, motivo: Error$/);
+    expect(entry.message).toMatch(/^Revertiste un pago de la obligación Impuesto Municipal de la propiedad Casa Centro, por un monto de ARS 15\.000, con vencimiento \d{2}-\d{2}-\d{4}, motivo: Error$/);
     expect(entry.undo).toBeNull();
     expect(entry.assetId).toBe(assetId);
   });

@@ -1,6 +1,6 @@
 # SelimSystem — Documento funcional
 
-**Versión del producto:** 1.20.0
+**Versión del producto:** 1.21.0
 **Entorno productivo:** https://selimsystem.fly.dev
 **Fecha del documento:** 20/11/2026
 
@@ -199,7 +199,7 @@ Permite ir a meses anteriores y **futuros** (para ver lo programado). Al tocar e
 
 ### 5.5 Transacciones del mes
 
-- Agrupadas por día, con ícono y color según el tipo: gasto 💸, ingreso 💰, reembolso ↩️, transferencia ↔️.
+- Agrupadas por día (encabezado con el día de la semana y la fecha, por ejemplo "jueves, 20-11-2026"), con ícono y color según el tipo: gasto 💸, ingreso 💰, reembolso ↩️, transferencia ↔️.
 - Debajo del título se ve la categoría (gastos), "Ingreso (A/B/Mixto)", "Reembolso" o, en transferencias, el estado ("Contabilizada" o "Programada") y las cuentas.
 - **Filtrar / Filtro**: tipo (Gasto, Ingreso, Reembolso, Transferencia o conversión), cuenta, categoría (con subcategorías), clasificación (Fijo / Variable), texto, monto mínimo y máximo, y rango de fechas. Para filtrar por monto hay que elegir una cuenta (una sola moneda). Con filtros activos el botón muestra "Filtrando". **Limpiar** los quita.
 - **Cuotas programadas (no incluidas en los totales):** si existen compras en cuotas, se listan las cuotas que vencen en el mes; al pulsar una se puede **Contabilizar cuota** (la convierte en gasto real) o **Cancelar cuota**.
@@ -254,7 +254,7 @@ La ventana siempre se abre desde arriba, con el selector de tipo (Gasto, Ingreso
 - **Medio de pago** (opcional): lista fija con **Transferencia**, **Efectivo**, **Débito**, **Crédito** y **Cheque**. **Crédito** solo se ofrece en gastos; **Cheque**, en gastos e ingresos (no en reembolsos). Al editar un movimiento antiguo con un medio escrito a mano, ese valor se conserva como opción adicional.
 - **Atribución del movimiento:** permite indicar a qué bien corresponde el importe (una o varias líneas, con opción "Asignación completa"). Cada línea tiene:
   - **Bien**: solo los bienes, más **Sin atribución** y, en gastos, **Obligaciones sin bien** (para llegar a las obligaciones que no están vinculadas a ningún bien).
-  - **Obligación o período (opcional)**: aparece al elegir un bien y lista solo lo que pertenece a ese bien. En gastos: sus obligaciones y sus vencimientos pendientes ("Vencimiento · <título> · dd/mm/aaaa · pendiente $X"); en ingresos: sus contratos de alquiler y sus períodos. Elegir solo el bien alcanza para el análisis económico.
+  - **Obligación o período (opcional)**: aparece al elegir un bien y lista solo lo que pertenece a ese bien. En gastos: sus obligaciones y sus vencimientos pendientes ("Vencimiento · <título> · dd-mm-aaaa · pendiente $X"); en ingresos: sus contratos de alquiler y sus períodos. Elegir solo el bien alcanza para el análisis económico.
   - **Importe** y **Quitar**. En el celular los campos se apilan.
 
   La atribución es descriptiva: **no crea movimientos ni cambia los totales** y alimenta el análisis económico del bien. **Excepción:** en un **gasto nuevo**, elegir un **vencimiento** registra el gasto como **pago de ese vencimiento** (debajo aparece "Se registrará como pago de este vencimiento"; ver 11.5, segunda forma de pago). Al **editar** un movimiento existente, los vencimientos son solo informativos y se indica "Para registrar el pago de un movimiento existente usá Registrar pago". Al editar se precargan el bien y el detalle guardados.
@@ -327,8 +327,8 @@ La ventana siempre se abre desde arriba, con el selector de tipo (Gasto, Ingreso
 | **Comprobantes pendientes de inquilinos** | La parte del inquilino no tiene resolución registrada. | Resolver, Adjuntar comprobante, Ver obligación |
 | **Alquileres pendientes de cobro** | Mes de alquiler sin cobrar (vencido o dentro de los días de aviso de Configuración > Avisos, por defecto 5). | Registrar cobro, Ver bien |
 | **Cheques por cobrar** | Cobro de alquiler con medio **Cheque** no marcado como cobrado, cuya fecha de cobro llega dentro de la anticipación configurada (por defecto 7 días) o ya pasó. Indica bien, inquilino, período e importe. | Marcar como cobrado, Ver cobro, Ver bien |
-| **Cuotas con cheque por confirmar** | Cuota con cheque pendiente de confirmación que vence dentro de la anticipación (por defecto 7 días) o ya venció. Mensaje: "Cheque Nº 12345 — cuota 2/3 de «Título» vence el dd/mm/aaaa — pendiente de confirmar". Gastos: a cargo del titular; ingresos atribuidos a un bien con alquiler activo: a cargo del inquilino. | Confirmar imputación, Ver movimiento |
-| **Próximas cuotas de crédito** | Cuota de una compra con crédito cuya fecha llega en los próximos días (por defecto 5). Mensaje: "Ingresará el cobro de la cuota Nº x/N del gasto «Título» realizado el dd/mm/aaaa ($monto)". A cargo del titular. | Ver movimiento |
+| **Cuotas con cheque por confirmar** | Cuota con cheque pendiente de confirmación que vence dentro de la anticipación (por defecto 7 días) o ya venció. Mensaje: "Cheque Nº 12345 — cuota 2/3 de «Título» vence el dd-mm-aaaa — pendiente de confirmar". Gastos: a cargo del titular; ingresos atribuidos a un bien con alquiler activo: a cargo del inquilino. | Confirmar imputación, Ver movimiento |
+| **Próximas cuotas de crédito** | Cuota de una compra con crédito cuya fecha llega en los próximos días (por defecto 5). Mensaje: "Ingresará el cobro de la cuota Nº x/N del gasto «Título» realizado el dd-mm-aaaa ($monto)". A cargo del titular. | Ver movimiento |
 | **Cuotas de tarjeta** | Cuota programada vencida o dentro de sus días de aviso (por defecto 5). | Contabilizar cuota, Ver transacciones |
 | **Contratos por vencer** | Contrato de alquiler que vence dentro de la anticipación configurada (por defecto 30 días). | Ver bien |
 | **Ajustes de alquiler** | Ajuste de alquiler dentro de la anticipación configurada (por defecto 30 días). | Ver bien |
@@ -499,7 +499,7 @@ Desde la tarjeta de un contrato también existe **Registrar cobro** multi-perío
 
 ### 10.5 Ventana del alquiler ("Ver alquiler")
 
-Se abre desde la tarjeta de alquiler de la ficha (y desde los avisos de alquiler). Es una ventana ancha con un **encabezado fijo** y cinco pestañas (en el celular ocupa toda la pantalla y las pestañas se desplazan horizontalmente).
+Se abre desde la tarjeta de alquiler de la ficha (y desde los avisos de alquiler). Es una ventana ancha (conserva su ancho de 1430 px; ver 14.10) con un **encabezado fijo** y cinco pestañas (en el celular ocupa toda la pantalla y las pestañas se desplazan horizontalmente).
 
 - **Encabezado:** estado del alquiler (Activo, Por vencer, Por comenzar o Finalizado, con texto e ícono), inquilinos, vigencia, monto mensual vigente por moneda, próximo cobro, próximo vencimiento y las acciones **Editar alquiler**, **Actualizar alquiler** y **Finalizar alquiler**.
 - **Resumen:** una tarjeta por modalidad (estado, vigencia, monto original y vigente, clasificación, IVA, ajuste y próximo ajuste), el progreso de cobros (esperados, cobrados, parciales, vencidos, pendientes y cancelados) y las alertas del alquiler con su acción; las alertas de alquiler vencido se muestran en rojo y negrita.
@@ -535,7 +535,7 @@ Para corregir un cobro mal registrado (cuenta, clasificación o importe equivoca
 ### 10.8 Documentos y notas del alquiler
 
 - **Documentos:** lista los documentos del alquiler, de sus contratos y de sus períodos, con fecha de carga y, si existe, quién los cargó. Se pueden cargar (a todo el alquiler o a una modalidad), **Ver**, **Descargar** y **Eliminar** (con confirmación; se borra el archivo y se quita de las resoluciones que lo listaban). Filtros por nombre, tipo y fecha. Vacío: "No hay documentos cargados." con la acción de cargar.
-- **Notas:** con fecha, título opcional (hasta 120 caracteres) y texto, por ejemplo "16/11/2026 · Título de la nota". Se pueden crear, **Editar** y **Eliminar** (con confirmación), filtrar por rango de fechas y ordenar por fecha. Sin resultados: "No hay notas en este rango de fechas.".
+- **Notas:** con fecha, título opcional (hasta 120 caracteres) y texto, por ejemplo "16-11-2026 · Título de la nota". Se pueden crear, **Editar** y **Eliminar** (con confirmación), filtrar por rango de fechas y ordenar por fecha. Sin resultados: "No hay notas en este rango de fechas.".
 
 ---
 
@@ -752,7 +752,7 @@ Sección con el contenido descrito en el capítulo 8 (alta, edición, subcategor
 **Propósito:** consultar en lenguaje claro todo lo que hizo la persona usuaria.
 
 - Por defecto se muestra **todo**, de lo más nuevo a lo más antiguo.
-- Cada renglón tiene a la **izquierda la fecha y hora** y a la derecha la **descripción** de la acción (por ejemplo, "Creaste la subcuenta X de Y"; las acciones sobre obligaciones y cobros incluyen el bien, el importe, el vencimiento y, cuando existe, la cuota y el motivo). Si una acción falló, se agrega "· No se completó".
+- Cada renglón tiene a la **izquierda la fecha y hora** ("dd-mm-aaaa hh:mm", por ejemplo "20-11-2026 14:35") y a la derecha la **descripción** de la acción (por ejemplo, "Creaste la subcuenta X de Y"; las acciones sobre obligaciones y cobros incluyen el bien, el importe, el vencimiento y, cuando existe, la cuota y el motivo). Si una acción falló, se agrega "· No se completó".
 - **Buscar:** filtra por palabras, sin distinguir mayúsculas ni acentos.
 - **Desde / Hasta:** rango de días opcional ("Desde" no puede ser posterior a "Hasta").
 - **Filtros:** una sola barra compacta (en una fila en pantallas anchas) reúne **Buscar**, **Desde**, **Hasta** y los filtros por **Bien**, **Titular**, **Inquilino** y **Categoría** (se combinan, y el filtro se aplica en el servidor antes de paginar); **Limpiar filtros** los quita junto con la búsqueda y las fechas. Sin resultados se muestra un mensaje de lista vacía. Las entradas anteriores a 1.15.0 no tienen estos datos y no aparecen al filtrar.
@@ -822,6 +822,11 @@ Los botones y formularios que guardan datos se bloquean mientras la acción est�
 ### 14.9 Formato de importes
 
 Los campos de dinero muestran formato monetario local (por ejemplo, "211.392,00") y respetan los decimales de cada moneda.
+
+### 14.10 Formato de fechas y ancho de las ventanas
+
+- **Fechas:** toda fecha que muestra la aplicación se lee como **DD-MM-AAAA**, con guiones (por ejemplo, "20-11-2026"): listados, detalles, historiales, avisos, Logs (con la hora: "20-11-2026 14:35"), comprobantes, períodos de alquiler, obligaciones, ventanas de confirmación y los mensajes que arma el servidor (avisos, errores y descripciones de los Logs). Los meses sin día se siguen mostrando por su nombre (por ejemplo, "Noviembre 2026"). Los campos para elegir una fecha usan el selector del navegador, que muestra el formato del dispositivo. Los datos se siguen guardando como AAAA-MM-DD.
+- **Ventanas:** las ventanas emergentes son un 15% más anchas que en la versión 1.20 (en total, 1,495 veces el ancho base; la ventana estándar pasa de 572 px a 658 px), siempre limitadas al ancho de la pantalla, por lo que en el celular no cambian. La excepción es la ventana del alquiler (**Ver alquiler**, ver 10.5), que conserva su tamaño (1430 px); las ventanas que se abren encima de ella sí se ensanchan.
 
 ---
 

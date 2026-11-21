@@ -1,7 +1,8 @@
 // Dialogs. `show` replaces every open dialog; `push` opens a dialog on top of the current one (the
 // dialogs below keep their state); `hide` closes the top dialog only. `options.onClose` runs when its
 // dialog is closed or replaced. `options.layout: 'panel'` keeps `options.header` (an element) fixed above a
-// scrolling body; with `options.fullscreenOnMobile` the dialog fills the screen on phones.
+// scrolling body; with `options.fullscreenOnMobile` the dialog fills the screen on phones. `options.widthScale`
+// replaces the global width factor for one dialog (only "Ver alquiler" uses it, to keep its size).
 const Modal = {
   previousFocus: null,
   layers: [],
@@ -17,12 +18,14 @@ const Modal = {
     this.open(title, content, options);
   },
 
-  // Every dialog is 30% wider than its requested width (default 440px → 572px); still capped by the
-  // viewport through `width: 100%`. Non-pixel widths (e.g. '90vw') are used as given.
-  WIDTH_SCALE: 1.3,
-  scaledWidth(width) {
+  // Every dialog is 49.5% wider than its requested width (30% and then 15% more: 1.3 × 1.15; default 440px → 658px);
+  // still capped by the viewport through `width: 100%`. Non-pixel widths (e.g. '90vw') are used as given. A dialog
+  // may pass its own factor (`options.widthScale`, e.g. 1.3 for "Ver alquiler": 1100px → 1430px).
+  WIDTH_SCALE: 1.495,
+  scaledWidth(width, scale = this.WIDTH_SCALE) {
+    const factor = Number.isFinite(scale) && scale > 0 ? scale : this.WIDTH_SCALE;
     const match = /^(\d+(?:\.\d+)?)px$/.exec(String(width || '440px').trim());
-    return match ? `${Math.round(Number(match[1]) * this.WIDTH_SCALE)}px` : width;
+    return match ? `${Math.round(Number(match[1]) * factor)}px` : width;
   },
 
   open(title, content, options) {
@@ -50,8 +53,8 @@ const Modal = {
       'aria-labelledby': titleId,
       tabindex: '-1',
       style: panel
-        ? { width: '100%', maxWidth: this.scaledWidth(options.width), maxHeight: '92vh', overflowY: 'hidden', display: 'flex', flexDirection: 'column' }
-        : { width: '100%', maxWidth: this.scaledWidth(options.width), maxHeight: '90vh', overflowY: 'auto' }
+        ? { width: '100%', maxWidth: this.scaledWidth(options.width, options.widthScale), maxHeight: '92vh', overflowY: 'hidden', display: 'flex', flexDirection: 'column' }
+        : { width: '100%', maxWidth: this.scaledWidth(options.width, options.widthScale), maxHeight: '90vh', overflowY: 'auto' }
     });
 
     // A dialog opened on top of another one gets a top-left "Atrás" button that returns to the dialog below.

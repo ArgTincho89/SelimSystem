@@ -6,6 +6,7 @@ const installments = require('./credit-card-installments');
 const rentCollections = require('./rent-collections');
 const alertConfig = require('./alert-config');
 const { isPendingTransaction } = require('../utils/transaction-status');
+const { formatDisplayDate } = require('../utils/date-format');
 
 const ALERT_TYPES = [
   'obligation_due', 'obligation_overdue', 'partial_payment', 'tenant_obligation_pending', 'rent_due',
@@ -23,10 +24,6 @@ const DEFAULT_LIMIT = 200;
 const MONTHS = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
 const SYMBOLS = { ARS: '$', EUR: '€', USD: 'US$' };
 
-function longDate(date) {
-  return `${Number(date.slice(8, 10))} de ${MONTHS[Number(date.slice(5, 7)) - 1]}`;
-}
-
 function monthName(period) {
   return MONTHS[Number(period.slice(5, 7)) - 1];
 }
@@ -39,10 +36,6 @@ function money(amount, currencyCode) {
 
 function plural(count, one, many) {
   return `${count} ${count === 1 ? one : many}`;
-}
-
-function shortDate(date) {
-  return `${date.slice(8, 10)}/${date.slice(5, 7)}/${date.slice(0, 4)}`;
 }
 
 function countdown(daysAway) {
@@ -139,19 +132,19 @@ function build(db, userId, today, filters) {
           push({
             ...common(occurrence), id: `partial:${obligation.id}:${occurrence.date}`, type: 'partial_payment', date: occurrence.date, status: overdue ? 'overdue' : 'partial',
             amount: occurrence.remainingAmount,
-            message: `${occurrence.title}${where}: pago parcial. Pagado ${money(occurrence.totalPaid, occurrence.currencyCode)}, pendiente ${amountText}. ${overdue ? `Venció el ${longDate(occurrence.date)}.` : `Vence el ${longDate(occurrence.date)}. ${countdown(daysAway)}`}`
+            message: `${occurrence.title}${where}: pago parcial. Pagado ${money(occurrence.totalPaid, occurrence.currencyCode)}, pendiente ${amountText}. ${overdue ? `Venció el ${formatDisplayDate(occurrence.date)}.` : `Vence el ${formatDisplayDate(occurrence.date)}. ${countdown(daysAway)}`}`
           }, holders);
         } else if (overdue) {
           push({
             ...common(occurrence), id: `overdue:${obligation.id}:${occurrence.date}`, type: 'obligation_overdue', date: occurrence.date, status: 'overdue',
             amount: occurrence.remainingAmount,
-            message: `${occurrence.title}${where} venció el ${longDate(occurrence.date)}. Importe pendiente: ${amountText}. Hace ${plural(-daysAway, 'día', 'días')}.`
+            message: `${occurrence.title}${where} venció el ${formatDisplayDate(occurrence.date)}. Importe pendiente: ${amountText}. Hace ${plural(-daysAway, 'día', 'días')}.`
           }, holders);
         } else {
           push({
             ...common(occurrence), id: `due:${obligation.id}:${occurrence.date}`, type: 'obligation_due', date: occurrence.date, status: occurrence.status,
             amount: occurrence.remainingAmount,
-            message: `${occurrence.title}${where} vence el ${longDate(occurrence.date)}. Importe estimado: ${amountText}. ${countdown(daysAway)}`
+            message: `${occurrence.title}${where} vence el ${formatDisplayDate(occurrence.date)}. Importe estimado: ${amountText}. ${countdown(daysAway)}`
           }, holders);
         }
       }
@@ -162,7 +155,7 @@ function build(db, userId, today, filters) {
         push({
           ...common(occurrence), reminderLeadDays: tenantLead, id: `tenant:${obligation.id}:${occurrence.date}`, type: 'tenant_obligation_pending', date: occurrence.date,
           status: overdue ? 'overdue' : 'pending', tenantEntityId: tenantId, amount: occurrence.tenantRemainingAmount,
-          message: `${who} debe enviar el comprobante de pago de ${occurrence.title}${where}. ${overdue ? 'Venció' : 'Vence'} el ${longDate(occurrence.date)}.`
+          message: `${who} debe enviar el comprobante de pago de ${occurrence.title}${where}. ${overdue ? 'Venció' : 'Vence'} el ${formatDisplayDate(occurrence.date)}.`
         }, holders);
       }
     });
@@ -194,13 +187,13 @@ function build(db, userId, today, filters) {
       const split = (alert.parts || []).length > 1
         ? `Importe pendiente: ${(alert.totals || []).filter(item => item.remainingAmount > 0).map(item => money(item.remainingAmount, item.currencyCode)).join(' + ')} (${open.map(part => `${RENT_MODALITY[part.modality] || 'Alquiler'} ${money(part.remainingAmount, part.currencyCode)}`).join(', ')}).`
         : `Importe esperado: ${money(alert.amount, alert.currencyCode)}.`;
-      alert.message = `Falta cobrar el alquiler de ${monthName(alert.period)}${asset ? ` del ${asset}` : ''}. ${split} ${overdue ? `Venció el ${longDate(alert.date)}.` : countdown(daysAway)}`;
+      alert.message = `Falta cobrar el alquiler de ${monthName(alert.period)}${asset ? ` del ${asset}` : ''}. ${split} ${overdue ? `Venció el ${formatDisplayDate(alert.date)}.` : countdown(daysAway)}`;
     } else if (alert.type === 'contract_expiry') {
       alert.title = `Vence el contrato${asset ? ` · ${asset}` : ''}`;
-      alert.message = `El contrato de alquiler${asset ? ` del ${asset}` : ''} vence el ${longDate(alert.date)}. ${countdown(daysAway)}`;
+      alert.message = `El contrato de alquiler${asset ? ` del ${asset}` : ''} vence el ${formatDisplayDate(alert.date)}. ${countdown(daysAway)}`;
     } else {
       alert.title = `Ajuste de alquiler${asset ? ` · ${asset}` : ''}`;
-      alert.message = `El ${longDate(alert.date)} se aplica un ajuste de alquiler${asset ? ` en ${asset}` : ''}. Nuevo importe: ${money(alert.amount, alert.currencyCode)}. ${countdown(daysAway)}`;
+      alert.message = `El ${formatDisplayDate(alert.date)} se aplica un ajuste de alquiler${asset ? ` en ${asset}` : ''}. Nuevo importe: ${money(alert.amount, alert.currencyCode)}. ${countdown(daysAway)}`;
     }
     push({ ...alert, tenantEntityId: tenant }, tenantIds);
   });
@@ -214,8 +207,8 @@ function build(db, userId, today, filters) {
     const modality = item.modality && RENT_MODALITY[item.modality] ? ` (${RENT_MODALITY[item.modality]})` : '';
     const daysAway = dateOnlyDaysBetween(today, item.date);
     const when = item.overdue
-      ? `debía cobrarse el ${longDate(item.date)}. Marcalo como cobrado cuando se acredite.`
-      : `se cobra el ${longDate(item.date)}. ${daysAway === 0 ? 'Es hoy.' : countdown(daysAway)}`;
+      ? `debía cobrarse el ${formatDisplayDate(item.date)}. Marcalo como cobrado cuando se acredite.`
+      : `se cobra el ${formatDisplayDate(item.date)}. ${daysAway === 0 ? 'Es hoy.' : countdown(daysAway)}`;
     push({
       id: `cheque:${item.collectionId}`, type: 'cheque_due', date: item.date, status: item.overdue ? 'overdue' : 'pending',
       title: `Cheque a cobrar${asset ? ` · ${asset}` : ''}`,
@@ -234,11 +227,11 @@ function build(db, userId, today, filters) {
     const overdue = occurrence.dueDate < today;
     const daysAway = dateOnlyDaysBetween(today, occurrence.dueDate);
     const amount = ledger.fromMinorUnits(occurrence.amountMinor, occurrence.currencyCode);
-    const when = overdue ? `La cuota venció el ${longDate(occurrence.dueDate)}.` : daysAway === 0 ? 'Vence hoy.' : `En ${plural(daysAway, 'día', 'días')} vence.`;
+    const when = overdue ? `La cuota venció el ${formatDisplayDate(occurrence.dueDate)}.` : daysAway === 0 ? 'Vence hoy.' : `En ${plural(daysAway, 'día', 'días')} vence.`;
     push({
       id: `installment:${occurrence.id}`, type: 'card_installment_due', date: occurrence.dueDate, status: overdue ? 'overdue' : 'scheduled',
       title: `Cuota ${occurrence.installmentNumber} de ${plan.installmentsCount} · ${plan.title}`,
-      message: `${when} Cuota ${occurrence.installmentNumber} de ${plan.installmentsCount} de ${plan.title}, comprado el ${longDate(plan.purchaseDate)}. Importe: ${money(amount, occurrence.currencyCode)}.`,
+      message: `${when} Cuota ${occurrence.installmentNumber} de ${plan.installmentsCount} de ${plan.title}, comprado el ${formatDisplayDate(plan.purchaseDate)}. Importe: ${money(amount, occurrence.currencyCode)}.`,
       assetId: plan.assetId || null, planId: plan.id, occurrenceId: occurrence.id, installmentNumber: occurrence.installmentNumber,
       amount, currencyCode: occurrence.currencyCode, reminderLeadDays: lead
     }, [db.findById('accounts', plan.accountId, userId)?.ownerId]);
@@ -252,7 +245,7 @@ function build(db, userId, today, filters) {
       push({
         id: `forecast:${alert.id}`, type: 'account_forecast', date: alert.date, status: alert.status,
         title: `Saldo insuficiente · ${account.nombre}`,
-        message: `La cuenta ${account.nombre} no alcanza para ${alert.title} el ${longDate(alert.date)}. Faltan ${money(amount, account.currency)}${alert.status === 'covered' ? ', cubiertos por una transferencia planificada' : ''}.`,
+        message: `La cuenta ${account.nombre} no alcanza para ${alert.title} el ${formatDisplayDate(alert.date)}. Faltan ${money(amount, account.currency)}${alert.status === 'covered' ? ', cubiertos por una transferencia planificada' : ''}.`,
         assetId: null, accountId: account.id, amount, currencyCode: account.currency
       }, [account.ownerId]);
     });
@@ -286,7 +279,7 @@ function transactionInstallmentAlerts(db, userId, today, leadDaysFor, contracts)
       alerts.push({
         id: `txcheque:${tx.id}`, type: 'transaction_cheque_due', date: tx.fecha, status: overdue ? 'overdue' : 'pending', responsibility,
         title: `Cheque cuota ${number}/${total} · ${title}`,
-        message: `${prefix} ${number}/${total} de «${title}» ${overdue ? 'venció' : 'vence'} el ${shortDate(tx.fecha)} — pendiente de confirmar (${amountText}).`,
+        message: `${prefix} ${number}/${total} de «${title}» ${overdue ? 'venció' : 'vence'} el ${formatDisplayDate(tx.fecha)} — pendiente de confirmar (${amountText}).`,
         assetId, accountId: tx.accountId || null, transactionId: tx.id, chequeGroupId: tx.chequeGroupId || null, chequeNumber: chequeNumber || null,
         installmentNumber: number, installmentsCount: total, transactionType: tx.tipo, amount: tx.monto, currencyCode,
         reminderLeadDays: lead, tenantEntityId: responsibility === 'tenant' ? contract.tenantIds[0] : null,
@@ -301,7 +294,7 @@ function transactionInstallmentAlerts(db, userId, today, leadDaysFor, contracts)
       alerts.push({
         id: `txcredit:${tx.id}`, type: 'credit_installment_upcoming', date: tx.fecha, status: 'scheduled', responsibility: 'owner',
         title: `Cuota ${number}/${total} · ${title}`,
-        message: `Ingresará el cobro de la cuota Nº ${number}/${total} del gasto «${title}» realizado el ${shortDate(purchaseDate || tx.fecha)} (${amountText}).`,
+        message: `Ingresará el cobro de la cuota Nº ${number}/${total} del gasto «${title}» realizado el ${formatDisplayDate(purchaseDate || tx.fecha)} (${amountText}).`,
         assetId, accountId: tx.accountId || null, transactionId: tx.id, creditGroupId: tx.creditGroupId || null,
         installmentNumber: number, installmentsCount: total, amount: tx.monto, currencyCode,
         reminderLeadDays: lead, holders: [account?.ownerId]
