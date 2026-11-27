@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.22.0] - 2026-11-27
+
+### Added
+- **Ayuda: asistente guiado** en el menú. Abre una ventana flotante tipo chat (sin cambiar de pantalla) con un árbol de ayuda fijo, sin inteligencia artificial: 8 temas principales (Transacciones; Cuentas, saldos y transferencias; Bienes; Alquileres, inquilinos y cobros; Obligaciones, vencimientos y pagos; Avisos; Configuración; Perfil, Logs, deshacer y acceso) que llevan a más de 170 instrucciones paso a paso con los nombres exactos de botones, pestañas y campos, y una pista "Si algo no cierra".
+- Se responde con el número de la opción (escrito o tocando el botón): **9** vuelve al paso anterior y **0** al menú principal. Cada mensaje muestra su hora (hh:mm).
+- **Minimizar** (también con Escape) deja una burbuja **Ayuda** que conserva la conversación; **Cerrar** la guarda en el historial si hubo respuestas y la próxima apertura empieza de cero. El tamaño se cambia arrastrando la esquina superior izquierda y se recuerda; en el celular ocupa toda la pantalla.
+- **Historial de conversaciones** en el panel izquierdo, guardado **en el servidor por cuenta** (visible desde cualquier dispositivo, hasta 100 por cuenta): fecha y hora dd-mm-aaaa hh:mm y tema, vista en solo lectura ("Conversación del dd-mm-aaaa hh:mm — solo lectura") y botones para volver a la conversación actual o empezar una nueva. Sin conexión, la conversación queda "Pendiente de guardar" y se envía al volver a abrir la Ayuda. No se registra en Logs.
+
 ## [1.21.0] - 2026-11-20
 
 ### Changed
