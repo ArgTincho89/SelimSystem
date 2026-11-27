@@ -307,6 +307,13 @@ const API = {
       return API.get(`/activity-logs${serialized ? `?${serialized}` : ''}`);
     }
   },
+
+  // Saved conversations of the "Ayuda" assistant (per account, newest first).
+  helpChats: {
+    list() { return API.get('/help-chats'); },
+    save(chat) { return API.post('/help-chats', chat); },
+    delete(id) { return API.delete(`/help-chats/${encodeURIComponent(id)}`); }
+  },
   rentals: {
     list(filters = {}) {
       const query = new URLSearchParams(Object.entries(filters).filter(([, value]) => value !== '' && value != null));

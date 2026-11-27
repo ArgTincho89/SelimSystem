@@ -157,6 +157,7 @@ const ProfilePage = {
     });
     on(logoutBtn, 'click', async () => {
       try {
+        if (typeof HelpAssistant !== 'undefined') await HelpAssistant.closeBeforeLogout();
         await API.auth.logout();
         App.user = null;
         Router.navigate('/login');
