@@ -107,7 +107,9 @@ const ROUTES = [
 
 const SECTIONS = { auth: 'tu perfil', categories: 'tus categorías', transactions: 'tus transacciones', accounts: 'tus cuentas', transfers: 'tus transferencias', goals: 'tus metas', assets: 'tus bienes', owners: 'tus personas y entidades', documents: 'tus documentos', notes: 'tus notas', obligations: 'tus obligaciones', rentals: 'tus alquileres', finance: 'tus finanzas', installments: 'tus cuotas', alerts: 'tus avisos' };
 
-const SKIPPED = [/^POST \/auth\/(register|login|logout|forgot-password|reset-password)$/, /^DELETE \/auth\/account$/];
+const SKIPPED = [/^POST \/auth\/(register|login|logout|forgot-password|reset-password)$/, /^DELETE \/auth\/account$/,
+  // Help-assistant transcripts are support history, not user actions on their data.
+  /^(POST|DELETE) \/help-chats(\/[^/]+)?$/];
 
 function assetNameOf(db, userId, assetId) {
   return assetId ? db.findById('assets', assetId, userId)?.name || '' : '';

@@ -1,6 +1,6 @@
 # SelimSystem — Documento funcional
 
-**Versión del producto:** 1.21.0
+**Versión del producto:** 1.22.0
 **Entorno productivo:** https://selimsystem.fly.dev
 **Fecha del documento:** 20/11/2026
 
@@ -79,6 +79,7 @@ Visible en todas las pantallas una vez iniciada la sesión:
 | **Obligaciones** | Obligaciones | Impuestos, servicios y otros compromisos con sus vencimientos y pagos. |
 | **Perfil** | Perfil | Foto, datos de la cuenta, Logs, acciones de cuenta y cierre de sesión. |
 | **Configuración** | Configuración | Cuentas, Avisos de saldo, Titular, Inquilino, Proveedor y Categorías. Muestra un indicador cuando hay avisos de saldo o de alquiler. |
+| **Ayuda** | (ventana flotante) | No cambia de pantalla: abre el asistente guiado sobre la pantalla actual (ver 13.3). |
 
 ### 3.2 Árbol de pantallas y ventanas
 
@@ -759,6 +760,17 @@ Sección con el contenido descrito en el capítulo 8 (alta, edición, subcategor
 - **Deshacer desde Logs:** los pagos, resoluciones y cobros de alquiler registrados ofrecen **Deshacer**, que pide el mismo **Motivo** obligatorio.
 - Botón **← Perfil** para volver.
 - Se registran todas las acciones de escritura (altas, ediciones, bajas, cobros, pagos, deshacer...). Se guardan solo el tipo de acción, la referencia y el mensaje, nunca contraseñas ni contenidos. Las entradas se conservan **12 meses**.
+
+### 13.3 Ayuda (asistente guiado)
+
+**Propósito:** resolver dudas de uso sin salir de la pantalla. Es un árbol de ayuda fijo (sin inteligencia artificial ni consultas externas) que se recorre con números, de lo general a lo particular, hasta llegar a instrucciones paso a paso con los nombres exactos de botones, pestañas y campos, y una pista "Si algo no cierra".
+
+- Se abre con **Ayuda** en el menú. Es una ventana flotante tipo chat: mensajes del asistente a la izquierda y de la persona a la derecha, cada uno con su hora (hh:mm).
+- **Menú principal** con 8 temas: Transacciones; Cuentas, saldos y transferencias; Bienes; Alquileres, inquilinos y cobros; Obligaciones, vencimientos y pagos; Avisos; Configuración; Perfil, Logs, deshacer y acceso.
+- Se responde escribiendo el número y pulsando **Enviar**, o tocando el botón de la opción. **9** (o "atrás") vuelve al paso anterior y **0** (o "menú") al menú principal; ambas opciones figuran en cada lista. Si se escribe algo que no es una opción, el asistente lo indica con amabilidad y repite los números disponibles.
+- **—** (Minimizar) reduce la ventana a una burbuja **Ayuda** sin perder la conversación; la tecla Escape también minimiza. **✕** (Cerrar) guarda la conversación en el historial si hubo al menos una respuesta, y la próxima vez que se abre **Ayuda** empieza una conversación nueva. **+** inicia una conversación nueva.
+- **Tamaño:** se cambia arrastrando la esquina superior izquierda (o con las flechas del teclado sobre ella), entre 320 × 360 px y el tamaño de la pantalla; se recuerda en el dispositivo. En el celular ocupa toda la pantalla.
+- **Historial** (panel izquierdo, botón **Historial**): las conversaciones guardadas, de la más nueva a la más antigua, con fecha y hora (dd-mm-aaaa hh:mm) y el tema más específico al que se llegó. Se guardan **en el servidor, por cuenta**: se ven desde cualquier navegador o dispositivo (hasta 100 por cuenta; al superarlo se descarta la más antigua). Al elegir una se muestra en solo lectura con el aviso "Conversación del dd-mm-aaaa hh:mm — solo lectura" y los botones **Volver a la conversación actual** y **Nueva conversación**. Si no hay conexión, se indica en el panel y la conversación se guarda cuando vuelva la conexión ("Pendiente de guardar"). Las conversaciones de ayuda no se registran en Logs.
 
 ---
 

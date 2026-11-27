@@ -1273,3 +1273,448 @@ a[aria-busy="true"] {
   background: #fff;
   transform-origin: 0 0;
 }
+
+/* ==========================================================================
+   Help assistant ("Ayuda") - floating, non-modal chat window (evolutivo-16)
+   Anchored bottom-right; size from --help-width / --help-height (set by the
+   resize handle). Uses only theme tokens, so dark and light modes both work.
+   ========================================================================== */
+.help-window {
+  position: fixed;
+  right: var(--space-md);
+  bottom: calc(var(--navbar-height) + var(--safe-bottom) + var(--space-md));
+  width: var(--help-width, 460px);
+  height: var(--help-height, 600px);
+  max-width: calc(100vw - 2 * var(--space-md));
+  max-height: calc(100dvh - var(--navbar-height) - var(--safe-bottom) - 2 * var(--space-md));
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+  z-index: 170;
+}
+
+.help-window[hidden],
+.help-bubble[hidden],
+.help-readonly-banner[hidden] {
+  display: none;
+}
+
+body.desktop-mode .help-window {
+  bottom: var(--space-lg);
+  right: var(--space-lg);
+  max-width: calc(100vw - var(--desktop-nav-width) - 2 * var(--space-lg));
+  max-height: calc(100dvh - 2 * var(--space-lg));
+}
+
+.help-window.help-resizing {
+  user-select: none;
+}
+
+.help-resize-handle {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 18px;
+  height: 18px;
+  cursor: nwse-resize;
+  z-index: 2;
+  touch-action: none;
+  background: linear-gradient(135deg, var(--text-muted) 0 2px, transparent 2px 5px, var(--text-muted) 5px 7px, transparent 7px);
+  opacity: 0.6;
+  border-top-left-radius: var(--radius-lg);
+}
+
+.help-resize-handle:focus-visible {
+  outline: 2px solid var(--accent);
+  opacity: 1;
+}
+
+.help-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-sm) var(--space-sm) var(--space-lg);
+  background: var(--bg-card);
+  border-bottom: 1px solid var(--border);
+}
+
+.help-header-title {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-width: 0;
+  line-height: 1.2;
+}
+
+.help-header-subtitle {
+  font-size: var(--font-xs);
+  color: var(--text-secondary);
+}
+
+.help-header-actions {
+  display: flex;
+  gap: var(--space-xs);
+}
+
+.help-icon-btn {
+  min-width: 36px;
+  min-height: 36px;
+  padding: 0 var(--space-sm);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-primary);
+  font-size: var(--font-sm);
+  cursor: pointer;
+}
+
+.help-icon-btn:hover,
+.help-icon-btn:focus-visible {
+  background: var(--bg-hover);
+  border-color: var(--border);
+}
+
+.help-history-toggle[aria-expanded="true"] {
+  background: var(--accent-light);
+  color: var(--accent);
+}
+
+.help-body {
+  position: relative;
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.help-history {
+  display: none;
+  flex-direction: column;
+  gap: var(--space-sm);
+  width: 200px;
+  flex: 0 0 200px;
+  padding: var(--space-sm);
+  border-right: 1px solid var(--border);
+  background: var(--bg-primary);
+  overflow-y: auto;
+}
+
+.help-history-open .help-history {
+  display: flex;
+}
+
+/* Narrow window: the history panel overlays the chat instead of taking a column. */
+.help-window:not(.help-wide) .help-history {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: min(260px, 85%);
+  z-index: 3;
+  box-shadow: var(--shadow-lg);
+}
+
+.help-history-title {
+  margin: 0;
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+}
+
+.help-history-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-xs);
+}
+
+.help-history-item {
+  width: 100%;
+  display: grid;
+  gap: 2px;
+  padding: var(--space-sm);
+  text-align: left;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.help-history-item:hover,
+.help-history-item:focus-visible,
+.help-history-item.active {
+  border-color: var(--accent);
+}
+
+.help-history-item.active {
+  background: var(--accent-light);
+}
+
+.help-history-date,
+.help-history-pending {
+  font-size: var(--font-xs);
+  color: var(--text-secondary);
+}
+
+.help-history-pending {
+  color: var(--due-soon);
+}
+
+.help-history-name {
+  font-size: var(--font-sm);
+  overflow-wrap: anywhere;
+}
+
+.help-history-empty,
+.help-history-notice {
+  font-size: var(--font-xs);
+  color: var(--text-muted);
+  padding: var(--space-xs);
+}
+
+.help-history-notice {
+  color: var(--text-secondary);
+  border-left: 3px solid var(--due-soon);
+}
+
+.help-chat {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.help-readonly-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+  background: var(--accent-light);
+  border-bottom: 1px solid var(--accent);
+}
+
+.help-readonly-text {
+  margin: 0;
+  flex: 1 1 100%;
+  font-size: var(--font-sm);
+  font-weight: 600;
+}
+
+.help-readonly-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+}
+
+.help-messages {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: var(--space-md);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  background: var(--bg-primary);
+}
+
+.help-msg-row {
+  display: flex;
+}
+
+.help-msg-row-user {
+  justify-content: flex-end;
+}
+
+.help-msg {
+  position: relative;
+  max-width: 88%;
+  padding: var(--space-sm) var(--space-md) var(--space-lg);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  font-size: var(--font-sm);
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.help-msg-bot {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-top-left-radius: 2px;
+}
+
+.help-msg-user {
+  background: var(--accent-light);
+  border: 1px solid var(--accent);
+  border-top-right-radius: 2px;
+}
+
+.help-msg-text,
+.help-msg-title,
+.help-tip {
+  margin: 0 0 var(--space-xs);
+}
+
+.help-msg-title {
+  font-weight: 700;
+}
+
+.help-msg-plain {
+  white-space: pre-line;
+}
+
+.help-msg-hint {
+  color: var(--text-secondary);
+}
+
+.help-steps {
+  margin: 0 0 var(--space-sm);
+  padding-left: 1.3em;
+  display: grid;
+  gap: var(--space-xs);
+}
+
+.help-tip {
+  padding: var(--space-xs) var(--space-sm);
+  border-left: 3px solid var(--due-soon);
+  background: var(--bg-secondary);
+  border-radius: var(--radius-sm);
+}
+
+.help-msg-time {
+  position: absolute;
+  right: var(--space-sm);
+  bottom: var(--space-xs);
+  font-size: var(--font-xs);
+  color: var(--text-muted);
+}
+
+.help-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+  margin-top: var(--space-xs);
+}
+
+.help-option {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  min-height: 36px;
+  max-width: 100%;
+  padding: var(--space-xs) var(--space-sm);
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-size: var(--font-sm);
+  text-align: left;
+  cursor: pointer;
+}
+
+.help-option:hover:not(:disabled),
+.help-option:focus-visible {
+  background: var(--accent-light);
+}
+
+.help-option:disabled {
+  cursor: default;
+  opacity: 0.55;
+  border-color: var(--border);
+}
+
+.help-option-nav {
+  border-style: dashed;
+}
+
+.help-option-key {
+  flex: 0 0 auto;
+  min-width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--bg-primary);
+  font-weight: 700;
+  font-size: var(--font-xs);
+}
+
+.help-input-bar {
+  display: flex;
+  gap: var(--space-sm);
+  padding: var(--space-sm);
+  border-top: 1px solid var(--border);
+  background: var(--bg-secondary);
+}
+
+.help-input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.help-bubble {
+  position: fixed;
+  right: var(--space-md);
+  bottom: calc(var(--navbar-height) + var(--safe-bottom) + var(--space-md));
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+  min-height: var(--touch-min);
+  padding: var(--space-sm) var(--space-md);
+  border: none;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--bg-primary);
+  font-weight: 700;
+  box-shadow: var(--shadow-lg);
+  cursor: pointer;
+  z-index: 170;
+}
+
+body.desktop-mode .help-bubble {
+  bottom: var(--space-lg);
+  right: var(--space-lg);
+}
+
+.help-bubble-icon {
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--bg-primary);
+  color: var(--accent);
+}
+
+/* Phones: the window takes the whole screen (no resize, no horizontal scroll). */
+@media (max-width: 640px) {
+  .help-window,
+  body.desktop-mode .help-window {
+    inset: 0;
+    width: 100%;
+    height: 100dvh;
+    max-width: 100%;
+    max-height: 100dvh;
+    border-radius: 0;
+    border: none;
+    padding-bottom: var(--safe-bottom);
+  }
+
+  .help-resize-handle {
+    display: none;
+  }
+
+  .help-header {
+    padding-left: var(--space-sm);
+  }
+
+  .help-msg {
+    max-width: 94%;
+  }
+}
