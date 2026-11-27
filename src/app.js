@@ -29,6 +29,7 @@ const financeRoutes = require('./routes/finance');
 const installmentRoutes = require('./routes/installments');
 const alertRoutes = require('./routes/alerts');
 const activityLogRoutes = require('./routes/activity-logs');
+const helpChatRoutes = require('./routes/help-chats');
 const activityLogMiddleware = require('./middleware/activity-log');
 
 function createApp(options = {}) {
@@ -45,6 +46,8 @@ function createApp(options = {}) {
 
   app.use(helmet({ contentSecurityPolicy: false, crossOriginEmbedderPolicy: false }));
   app.use(cors({ origin: config.appUrl, credentials: true }));
+  // Help-chat transcripts can exceed the default 100 kB body limit; this parser runs first for that path only.
+  app.use('/api/help-chats', express.json({ limit: '2mb' }));
   app.use(express.json());
   app.use(express.urlencoded({ extended: true }));
   const sessionStore = options.sessionStore || new (require('./services/durable-session-store'))(path.join(dataDir, 'sessions.json'));
@@ -83,6 +86,7 @@ function createApp(options = {}) {
   app.use('/api/installments', installmentRoutes);
   app.use('/api/alerts', alertRoutes);
   app.use('/api/activity-logs', activityLogRoutes);
+  app.use('/api/help-chats', helpChatRoutes);
 
   app.get('/health', (req, res) => res.status(200).json({ status: 'ok' }));
   app.get('/version.json', (req, res) => res.json({ version }));
